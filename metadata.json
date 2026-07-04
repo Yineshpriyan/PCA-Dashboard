@@ -1,0 +1,6 @@
+{
+  "name": "PCA - Student Management System",
+  "description": "A comprehensive student management system with role-based access for admins and super admins.",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}

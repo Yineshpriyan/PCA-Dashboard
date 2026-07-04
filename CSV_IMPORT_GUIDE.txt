@@ -1,0 +1,140 @@
+================================================================================
+                    CALL TASK IMPORT CSV / EXCEL FORMAT GUIDE
+================================================================================
+
+This guide outlines how to prepare your CSV or Excel file for a successful 
+import into the Call Task Management system. The importer automatically reads 
+your headers, matches them to the system attributes, validates data values, 
+and filters out duplicate records dynamically using the PCA ID field.
+
+--------------------------------------------------------------------------------
+1. MANDATORY FIELDS (Must be present in the file)
+--------------------------------------------------------------------------------
+
+The system requires at least a Name and a Phone number to map and save records:
+
+- Name (e.g., John Doe)
+  * System Header: name
+  * Match Aliases: name, full name, fullname, student name, std_name, student_name
+  * Format: Regular text.
+
+- Phone (e.g., 0771234567 or +94771234567)
+  * System Header: phone
+  * Match Aliases: phone, mobile, contact, phone_number, phone number, tele, telephone, phn
+  * Format: Can contain spaces, dashes, or parentheses; the system will automatically 
+    clean and normalize it to digit-only characters.
+
+--------------------------------------------------------------------------------
+2. IDENTIFIERS & DEDUPLICATION (The PCA ID field)
+--------------------------------------------------------------------------------
+
+- PCA ID (e.g., PCA-0004)
+  * System Header: pcaid
+  * Match Aliases: pcaid, pca id, id, student id, student_id, pca_id
+  * Format: Text. It is auto-capitalized by the importer (e.g., "pca-0004" -> "PCA-0004").
+  * IMPORTANT DEDUPLICATION RULE:
+    If "Automatically Prevent Duplicates" is checked during import:
+    - The importer queries existing call tasks in the database and looks up PCA IDs.
+    - Any imported record with a PCA ID that matches an existing record will be 
+      skipped dynamically to prevent duplicates.
+    - If a record has no PCA ID, it won't be blocked by this check unless you 
+      have another record with the exact same PCA ID inside the imported file itself.
+
+--------------------------------------------------------------------------------
+3. OPTIONAL FIELDS & VALUE CONSTRAINTS
+--------------------------------------------------------------------------------
+
+To make full use of the call task database, you can include columns matching 
+the following attributes:
+
+- Stream (e.g., Biological Science or Physical Science)
+  * Match Aliases: stream, subject stream, field, stream_type
+  * Special rule: The system automatically matches values like "bio" or "biology" 
+    to "Biological Science" and values like "math", "physics", or "physical" 
+    to "Physical Science". Other values defaults to "Non Stream".
+
+- Lead Status
+  * Match Aliases: status, lead_status, lead status, leadstage
+  * Allowed values (Strictly constrained! unrecognized inputs default to 'Not Sure'):
+    - 'Not Sure'   (Matches: "not sure", "notsure", "not_sure")
+    - 'Joined'     (Matches: "joined", "join")
+    - 'Not Join'   (Matches: "not join", "not_join", "notjoined", "not joined")
+    - 'Free'       (Matches: "free")
+
+- Call Statuses (1st, 2nd, 3rd Calls)
+  * Match Aliases: 
+    - First Call:  first_call_status, 1st call status, first call status, first_call
+    - Second Call: second_call_status, 2nd call status, second call status, second_call
+    - Third Call:  third_call_status, 3rd call status, third call status, third_call
+  * Allowed values (Strictly constrained! unrecognized inputs default to 'Pending'):
+    - 'Pending'    (Matches: "pending")
+    - 'No Answer'  (Matches: "no answer", "no_answer", "noanswer")
+    - 'Completed'  (Matches: "completed", "complete", "done")
+
+- Call Dates (1st, 2nd, 3rd Calls)
+  * Match Aliases:
+    - First Call:  first_call_date, 1st call date, first call date
+    - Second Call: second_call_date, 2nd call date, second call date
+    - Third Call:  third_call_date, 3rd call date, third call date
+  * Expected Format: YYYY-MM-DD (e.g., 2026-06-02).
+  * System converts common representations, but standard ISO style is highly recommended.
+
+- District
+  * Match Aliases: district, city, town
+  * Rule: Automatically standardizes and matches Sri Lankan district names.
+
+- Class Code / Class Type
+  * Match Aliases: class, class_type, asked_class_type, classes, subject, class types
+  * Rule: Auto-matches and tags existing class types defined in "Management Items". 
+
+- Package / Package Type
+  * Match Aliases: package, package_type, asked_package_type, packages, package types
+  * Rule: Auto-matches and tags existing package structures in the items menu.
+
+- Proper Batch / Joined Batch
+  * Match Aliases: proper_batch/joined_batch, proper/joined
+  * Format: Simple text.
+
+- Email
+  * Match Aliases: mail, email, email_address, gmail, emailaddress
+  * Format: Standard email address format.
+
+- Address
+  * Match Aliases: address, home_address, location, addr
+  * Format: Regular text.
+
+- Notes / Remark
+  * Match Aliases: note, notes, remark, remarks, description
+  * Format: Regular text.
+
+--------------------------------------------------------------------------------
+4. EXAMPLE EXCEL/CSV HEADER STRUCTURE
+--------------------------------------------------------------------------------
+
+Below is an illustration of a perfect CSV column layout:
+
+| pcaid    | name       | phone       | district | stream  | status   | note                        |
+|----------|------------|-------------|----------|---------|----------|-----------------------------|
+| PCA-0001 | Alice Sen  | 0771112223  | Colombo  | Biology | Joined   | Enquired class schedules     |
+| PCA-0002 | Bob Silva  | +9477444555 | Kandy    | Math    | Not Sure | Wants free seminar details  |
+| PCA-0003 | Charlie De | 0719876543  | Galle    | Other   | Free     | Joined via website referral |
+
+--------------------------------------------------------------------------------
+5. TROUBLESHOOTING TIPS
+--------------------------------------------------------------------------------
+
+1. "Could not map Name and Phone columns automatically..."
+   * Cause: Your CSV layout doesn't contain standard headers for Name or Phone numbers.
+   * Solution: Ensure you change your files' headers or add synonyms that match 
+     the auto-map list (e.g. rename headers to "Name" and "Phone" or "Full Name" and "Mobile").
+
+2. Duplicate records slipped through?
+   * Solution: Ensure the "Automatically Prevent Duplicates" toggle is checked. 
+     Also verify that correct "PCAID" values are present under a matched column.
+     Duplicates are validated purely using "PCA ID" comparison.
+
+3. Dates got imported incorrectly?
+   * Solution: Save your Excel/Google Sheet using "YYYY-MM-DD" style dates to avoid 
+     timezone or region misinterpretations.
+
+================================================================================

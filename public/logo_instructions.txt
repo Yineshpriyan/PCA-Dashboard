@@ -1,0 +1,2 @@
+Please place your image file (e.g. logo.png) in this "public" folder. Note: Name the file "logo.png" so it matches the image path "/logo.png" in the code.
+Any file placed in this folder will be served at the root of the website (e.g. http://localhost:3000/logo.png).

@@ -1,0 +1,160 @@
+@import "tailwindcss";
+
+@variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --color-teal-50: #f3fbfe;
+  --color-teal-100: #e1f5fe;
+  --color-teal-200: #b3e5fc;
+  --color-teal-300: #4adcff;
+  --color-teal-400: #00b2fe;
+  --color-teal-500: #00a1e4;
+  --color-teal-600: #1b70c8;
+  --color-teal-700: #1d1b63;
+  --color-teal-800: #121045;
+  --color-teal-900: #09082b;
+  --color-teal-950: #05041a;
+}
+
+@layer base {
+  /* Override Sonner success toast green color to match primary theme */
+  [data-sonner-toast][data-type="success"] {
+    background-color: #1b70c8 !important;
+    color: #ffffff !important;
+    border-color: #1a60ab !important;
+  }
+  
+  [data-sonner-toast][data-type="success"] [data-icon] {
+    color: #ffffff !important;
+  }
+
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  ::-webkit-scrollbar-track {
+    background: #f9fafb;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #d1d5db;
+    border-radius: 10px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #1b70c8;
+  }
+}
+
+/* ==========================================
+   SYSTEM-WIDE DARK MODE FORM & FILTER STYLES
+   ========================================== */
+.dark input[type="text"],
+.dark input[type="password"],
+.dark input[type="email"],
+.dark input[type="number"],
+.dark input[type="tel"],
+.dark input[type="date"],
+.dark input[type="search"],
+.dark input:not([type]),
+.dark select,
+.dark textarea {
+  background-color: #111827 !important; /* gray-900 */
+  color: #ffffff !important;             /* text-white */
+  border-color: #374151 !important;       /* gray-700 */
+}
+
+/* Custom calendar/date indicators */
+.dark input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(1) !important;
+}
+
+/* Ensure placeholder text is highly legible */
+.dark input::placeholder,
+.dark textarea::placeholder {
+  color: #9cb3c5 !important;
+}
+
+/* Dropdown selections and options */
+.dark select option {
+  background-color: #111827 !important;
+  color: #ffffff !important;
+}
+
+/* Input focus ring and border states */
+.dark input:focus,
+.dark select:focus,
+.dark textarea:focus {
+  border-color: #14b8a6 !important; /* teal-500 */
+  box-shadow: 0 0 0 2px rgba(20, 184, 166, 0.25) !important;
+}
+
+/* Checkbox accents */
+.dark input[type="checkbox"] {
+  accent-color: #14b8a6 !important;
+}
+
+/* Form block dark-mode adjustments */
+.dark form,
+.dark .form-box,
+.dark .filter-box {
+  background-color: #111827 !important; /* bg-gray-950/deep gray */
+  color: #ffffff !important;
+  border-color: #374151 !important;
+}
+
+/* Ensure label readability */
+.dark form label,
+.dark .form-box label,
+.dark .filter-box label {
+  color: #e5e7eb !important; /* text-gray-200 */
+}
+
+/* Page, Card & Container dark aesthetic overrides */
+.dark .bg-white {
+  background-color: #111827 !important; /* Deep gray-900 */
+  color: #f3f4f6 !important;             /* Bright text */
+}
+
+/* Section/body gray background */
+.dark .bg-gray-50 {
+  background-color: #030712 !important; /* Slate-950 canvas background */
+}
+
+/* Border & Divider overrides in dark mode */
+.dark .border-gray-50,
+.dark .border-gray-100,
+.dark .border-gray-200,
+.dark .divide-gray-50,
+.dark .divide-gray-100,
+.dark .divide-gray-200 {
+  border-color: #1f2937 !important;     /* Gray-800 border style */
+}
+
+/* Text color contrast enhancements across dark UI components */
+.dark .text-gray-900 {
+  color: #f3f4f6 !important; /* gray-100 */
+}
+.dark .text-gray-800 {
+  color: #e5e7eb !important; /* gray-200 */
+}
+.dark .text-gray-700 {
+  color: #d1d5db !important; /* gray-300 */
+}
+.dark .text-gray-600 {
+  color: #9ca3af !important; /* gray-400 */
+}
+.dark .text-gray-500 {
+  color: #9cb3c5 !important; /* slate or gray-400/500 */
+}
+.dark .text-gray-400 {
+  color: #9cb3c5 !important; 
+}
+.dark h1,
+.dark h2,
+.dark h3,
+.dark h4,
+.dark h5,
+.dark h6 {
+  color: #f3f4f6 !important; /* High contrast headers */
+}
+
+
