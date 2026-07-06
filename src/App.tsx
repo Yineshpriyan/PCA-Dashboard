@@ -15,6 +15,7 @@ import { CallTaskForm, CallTaskDisplay } from './pages/CallTaskManagement';
 import { StudentForm, StudentExplorer } from './pages/StudentManagement';
 import { FreeClassForm } from './pages/FreeClassManagement';
 import RegisterStudents from './pages/RegisterStudents';
+import RegisterIndividualStudent from './pages/RegisterIndividualStudent';
 import { FixingView, ItemsView, SignupView, AdminsView } from './pages/SuperAdminDashboard';
 import TransactionHistory from './pages/TransactionHistory';
 import { supabase } from './lib/supabase';
@@ -133,6 +134,13 @@ function Root() {
         <ProtectedRoute allowedRoles={['admin', 'super_admin']}>
           <Shell>
             <RegisterStudents />
+          </Shell>
+        </ProtectedRoute>
+      } />
+      <Route path="/admin/zoom-register-individual" element={
+        <ProtectedRoute allowedRoles={['admin', 'super_admin']}>
+          <Shell>
+            <RegisterIndividualStudent />
           </Shell>
         </ProtectedRoute>
       } />
