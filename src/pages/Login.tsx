@@ -77,11 +77,7 @@ export default function Login() {
         details: `Logged into the PCA Portal`
       });
       
-      if (userData.admin_type === 'super_admin') {
-        navigate('/super-admin');
-      } else {
-        navigate('/admin');
-      }
+      navigate('/admin/home');
     } catch (err: any) {
       toast.error(err.message || 'An error occurred during login');
       console.error(err);

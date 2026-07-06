@@ -17,7 +17,8 @@ import {
   History,
   Sun,
   Moon,
-  Video
+  Video,
+  Home
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { logTransaction } from '../lib/transactions';
@@ -41,6 +42,12 @@ interface NavSection {
 }
 
 const navSections: NavSection[] = [
+  {
+    title: 'Overview',
+    items: [
+      { label: 'Home', path: '/admin/home', icon: <Home size={18} />, roles: ['admin', 'super_admin'] },
+    ]
+  },
   {
     title: 'Tokens & Issues',
     items: [

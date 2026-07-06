@@ -16,6 +16,7 @@ import { StudentForm, StudentExplorer } from './pages/StudentManagement';
 import { FreeClassForm } from './pages/FreeClassManagement';
 import RegisterStudents from './pages/RegisterStudents';
 import RegisterIndividualStudent from './pages/RegisterIndividualStudent';
+import Home from './pages/Home';
 import { FixingView, ItemsView, SignupView, AdminsView } from './pages/SuperAdminDashboard';
 import TransactionHistory from './pages/TransactionHistory';
 import { supabase } from './lib/supabase';
@@ -71,13 +72,20 @@ function Root() {
 
   return (
     <Routes>
-      <Route path="/login" element={!user ? <Login /> : <Navigate to={user.admin_type === 'super_admin' ? '/super-admin' : '/admin'} />} />
+      <Route path="/login" element={!user ? <Login /> : <Navigate to="/admin/home" />} />
       
       {/* Admin Routes */}
       <Route path="/admin" element={
         <ProtectedRoute allowedRoles={['admin', 'super_admin']}>
           <Shell>
-            <Navigate to="/admin/new" replace />
+            <Navigate to="/admin/home" replace />
+          </Shell>
+        </ProtectedRoute>
+      } />
+      <Route path="/admin/home" element={
+        <ProtectedRoute allowedRoles={['admin', 'super_admin']}>
+          <Shell>
+            <Home />
           </Shell>
         </ProtectedRoute>
       } />
