@@ -2325,8 +2325,10 @@ export function StudentExplorer() {
     const matchesDistrict = !filters.district || s.district === filters.district;
     const matchesProperBatch = !filters.properBatch || (s.proper_batch && s.proper_batch.toLowerCase().includes(filters.properBatch.toLowerCase()));
     const matchesJoinedBatch = !filters.joinedBatch || (s.joined_batch && s.joined_batch.toLowerCase().includes(filters.joinedBatch.toLowerCase()));
-    const matchesClasses = filters.classes.length === 0 || (s.asked_class_type && filters.classes.some(c => s.asked_class_type.toLowerCase().includes(c.toLowerCase())));
-    const matchesPackages = filters.packages.length === 0 || (s.asked_package_type && filters.packages.some(p => s.asked_package_type.toLowerCase().includes(p.toLowerCase())));
+    const matchesClasses = filters.classes.length === 0 || 
+      (s.asked_class_type ? filters.classes.some(c => s.asked_class_type.toLowerCase().includes(c.toLowerCase())) : false);
+    const matchesPackages = filters.packages.length === 0 || 
+      (s.asked_package_type ? filters.packages.some(p => s.asked_package_type.toLowerCase().includes(p.toLowerCase())) : false);
     
     // Date Range Logic
     const studentDate = s.created_at ? new Date(s.created_at).setHours(0,0,0,0) : null;
