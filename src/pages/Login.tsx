@@ -96,7 +96,7 @@ export default function Login() {
         <div className="text-center mb-10 flex flex-col items-center">
           {!logoFailed ? (
             <img 
-              src="/logo.png" 
+              src="/Logo.png" 
               alt="Physics Cube Academy" 
               className="max-h-[170px] w-auto mb-4 object-contain"
               onError={() => setLogoFailed(true)}
