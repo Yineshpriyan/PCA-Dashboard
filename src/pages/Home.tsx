@@ -87,12 +87,14 @@ export default function Home() {
         // 1. Get total students count
         const { count: studentCount, error: studentErr } = await supabase
           .from("student")
-          .select("*", { count: "exact", head: true });
+          .select("*", { count: "exact", head: true })
+          .is("deleted_at", null);
 
         // 2. Get payments data to calculate total income and group by month
         const { data: payments, error: paymentErr } = await supabase
           .from("payment")
-          .select("payment, paid_date, type");
+          .select("payment, paid_date, type")
+          .is("deleted_at", null);
 
         // 3. Get unresolved issue tokens count
         const { count: issueCount, error: issueErr } = await supabase
@@ -103,7 +105,8 @@ export default function Home() {
         // 4. Get student details for stream distribution (light query for streams and batches)
         const { data: studentDetails } = await supabase
           .from("student")
-          .select("stream, created_at, joined_batch, district");
+          .select("stream, created_at, joined_batch, district")
+          .is("deleted_at", null);
 
         if (studentErr) console.warn("Error fetching students:", studentErr.message);
         if (paymentErr) console.warn("Error fetching payments:", paymentErr.message);

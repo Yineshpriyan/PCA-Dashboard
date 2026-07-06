@@ -164,6 +164,7 @@ export function CallTaskForm({ editData, onComplete }: { editData?: CallTask; on
       .from('student')
       .select('*')
       .or(`pcaid.eq.${query.toUpperCase()},phone.eq.${query}`)
+      .is('deleted_at', null)
       .maybeSingle();
 
     if (studentData) {
@@ -176,6 +177,7 @@ export function CallTaskForm({ editData, onComplete }: { editData?: CallTask; on
       .from('calltask')
       .select('*')
       .or(`pcaid.eq.${query.toUpperCase()},phone.eq.${query}`)
+      .is('deleted_at', null)
       .maybeSingle();
 
     if (callData) {
@@ -1000,6 +1002,7 @@ export function CallTaskDisplay() {
       .from('student')
       .select('*')
       .or(`pcaid.eq.${query.toUpperCase()},phone.eq.${query}`)
+      .is('deleted_at', null)
       .maybeSingle();
 
     if (studentData) {
@@ -1012,6 +1015,7 @@ export function CallTaskDisplay() {
       .from('calltask')
       .select('*')
       .or(`pcaid.eq.${query.toUpperCase()},phone.eq.${query}`)
+      .is('deleted_at', null)
       .maybeSingle();
 
     if (callData) {
@@ -1031,7 +1035,7 @@ export function CallTaskDisplay() {
   const fetchTasks = async () => {
     if (!user) return;
     
-    let query = supabase.from('calltask').select('*');
+    let query = supabase.from('calltask').select('*').is('deleted_at', null);
     
     // Only filter by admin if the user is NOT a super_admin
     if (user.admin_type !== 'super_admin') {
@@ -1084,26 +1088,32 @@ export function CallTaskDisplay() {
     try {
       setDeletingId(task.id);
       
-      // 1. Delete associated registered records conditionally
+      const deletedAt = new Date().toISOString();
+
+      // 1. Soft-delete associated registered records conditionally
       if (task.phone) {
-        // Delete from student and payments
+        // Find active student records
         const { data: studentRecords } = await supabase
           .from('student')
           .select('pcaid')
-          .eq('phone', task.phone);
+          .eq('phone', task.phone)
+          .is('deleted_at', null);
 
         if (studentRecords && studentRecords.length > 0) {
           for (const record of studentRecords) {
-            await supabase.from('payment').delete().eq('pcaid', record.pcaid);
-            await supabase.from('student').delete().eq('pcaid', record.pcaid);
+            // Soft-deleting the student cascades to payments & installments via DB triggers
+            await supabase
+              .from('student')
+              .update({ deleted_at: deletedAt })
+              .eq('pcaid', record.pcaid);
           }
         }
       }
 
-      // 2. Delete the call task itself
+      // 2. Soft-delete the call task itself
       const { error: taskError } = await supabase
         .from('calltask')
-        .delete()
+        .update({ deleted_at: deletedAt })
         .eq('id', task.id);
       
       if (taskError) throw taskError;
@@ -1114,10 +1124,10 @@ export function CallTaskDisplay() {
         action_type: 'DELETE',
         entity_type: 'calltask',
         entity_id: task.pcaid || task.phone || task.id,
-        details: `Deleted call task for ${task.name} and synced student/payment table structures`
+        details: `Soft-deleted call task for ${task.name} and synced student/payment table structures`
       });
 
-      toast.success('Task and associated student records deleted');
+      toast.success('Task and associated student records soft-deleted');
       setTasks(prev => prev.filter(t => t.id !== task.id));
     } catch (error) {
       toast.error('Failed to delete task or related records');
@@ -1131,19 +1141,25 @@ export function CallTaskDisplay() {
     try {
       setLoading(true);
       
-      // 1. Find student by phone
+      const deletedAt = new Date().toISOString();
+
+      // 1. Find active student by phone
       const { data: studentRecords, error: studentError } = await supabase
         .from('student')
         .select('pcaid')
-        .eq('phone', task.phone);
+        .eq('phone', task.phone)
+        .is('deleted_at', null);
       
       if (studentError) throw studentError;
 
       if (studentRecords && studentRecords.length > 0) {
         for (const record of studentRecords) {
           const pcaid = record.pcaid;
-          await supabase.from('payment').delete().eq('pcaid', pcaid);
-          await supabase.from('student').delete().eq('pcaid', pcaid);
+          // Soft-deleting student automatically soft-deletes payments/installments via DB triggers
+          await supabase
+            .from('student')
+            .update({ deleted_at: deletedAt })
+            .eq('pcaid', pcaid);
         }
       }
 
@@ -1155,7 +1171,7 @@ export function CallTaskDisplay() {
       
       if (updateTaskError) throw updateTaskError;
 
-      toast.success('Successfully undone join status');
+      toast.success('Successfully undone join status (records soft-deleted)');
       
       // Fast sync: update local state
       setTasks(prev => prev.map(t => 
@@ -1301,7 +1317,8 @@ export function CallTaskDisplay() {
       // 1. Fetch existing PCA IDs in calltask
       const { data: existingTasks, error: fetchErr } = await supabase
         .from('calltask')
-        .select('pcaid');
+        .select('pcaid')
+        .is('deleted_at', null);
 
       if (fetchErr) throw fetchErr;
 

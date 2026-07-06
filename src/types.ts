@@ -56,6 +56,7 @@ export interface CallTask {
   status: LeadStatus;
   stream?: string;
   created_at: string;
+  deleted_at?: string | null;
 }
 
 export interface FreeClassStudent {
@@ -93,6 +94,7 @@ export interface Student {
   created_at: string;
   batch_type?: string;
   gender?: string;
+  deleted_at?: string | null;
 }
 
 export interface Payment {
@@ -108,6 +110,7 @@ export interface Payment {
   expired_date: string;
   total_amount?: number;
   installments?: any[];
+  deleted_at?: string | null;
 }
 
 export interface IssueType {

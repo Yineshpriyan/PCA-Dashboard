@@ -19,6 +19,7 @@ import RegisterIndividualStudent from './pages/RegisterIndividualStudent';
 import Home from './pages/Home';
 import { FixingView, ItemsView, SignupView, AdminsView } from './pages/SuperAdminDashboard';
 import TransactionHistory from './pages/TransactionHistory';
+import RecycleBin from './pages/RecycleBin';
 import { supabase } from './lib/supabase';
 
 function SeedCheck() {
@@ -156,6 +157,13 @@ function Root() {
         <ProtectedRoute allowedRoles={['super_admin']}>
           <Shell>
             <TransactionHistory />
+          </Shell>
+        </ProtectedRoute>
+      } />
+      <Route path="/admin/recycle-bin" element={
+        <ProtectedRoute allowedRoles={['admin', 'super_admin']}>
+          <Shell>
+            <RecycleBin />
           </Shell>
         </ProtectedRoute>
       } />

@@ -83,7 +83,7 @@ const calculateExpiry = (activationDate: string, durationLabel: string) => {
 };
 
 const mapDbPaymentToUI = (p: any): Payment => {
-  const installments = p.installment || p.installments || [];
+  const installments = (p.installment || p.installments || []).filter((inst: any) => !inst.deleted_at);
   if (installments.length > 0) {
     const totalPaid = installments.reduce((sum: number, inst: any) => sum + Number(inst.paid_amount || 0), 0);
     const sorted = [...installments].sort((a, b) => new Date(a.paid_date).getTime() - new Date(b.paid_date).getTime());
@@ -376,7 +376,8 @@ export function StudentForm() {
     const { data } = await supabase
       .from('payment')
       .select('*, installment(*)')
-      .eq('pcaid', pcaid);
+      .eq('pcaid', pcaid)
+      .is('deleted_at', null);
     
     if (data) {
       const mapped = data.map(mapDbPaymentToUI);
@@ -411,6 +412,7 @@ export function StudentForm() {
       .from('student')
       .select('*')
       .or(`pcaid.eq.${query.toUpperCase()},phone.eq.${query}`)
+      .is('deleted_at', null)
       .maybeSingle();
 
     setVerificationStatus({
@@ -448,6 +450,7 @@ export function StudentForm() {
       .from('student')
       .select('pcaid')
       .eq('phone', phone)
+      .is('deleted_at', null)
       .maybeSingle();
     
     if (data) {
@@ -578,12 +581,12 @@ export function StudentForm() {
       try {
         const { error } = await supabase
           .from('installment')
-          .delete()
+          .update({ deleted_at: new Date().toISOString() })
           .eq('id', installmentId);
 
         if (error) throw error;
 
-        toast.success('Installment deleted');
+        toast.success('Installment soft-deleted');
         setDeletingFormInstallmentId(null);
         if (studentData.pcaid) {
           await fetchExistingPayments(studentData.pcaid);
@@ -867,7 +870,8 @@ export function StudentForm() {
           const { data, error } = await supabase
             .from('calltask')
             .select('id, pcaid, phone')
-            .eq('pcaid', p.toUpperCase().trim());
+            .eq('pcaid', p.toUpperCase().trim())
+            .is('deleted_at', null);
           if (!error && data) {
             data.forEach(item => calltaskMatchesMap.set(item.id, item));
           }
@@ -878,7 +882,8 @@ export function StudentForm() {
           const { data, error } = await supabase
             .from('calltask')
             .select('id, pcaid, phone')
-            .eq('phone', ph.trim());
+            .eq('phone', ph.trim())
+            .is('deleted_at', null);
           if (!error && data) {
             data.forEach(item => calltaskMatchesMap.set(item.id, item));
           }
@@ -904,16 +909,11 @@ export function StudentForm() {
         console.error('Error during CallTask sync wrapper execution:', syncErr);
       }
 
-      // 1.8 Delete removed Payments
+      // 1.8 Soft-delete removed Payments (which will cascade to installments via DB triggers)
       if (deletedPaymentIds.length > 0) {
-        await supabase
-          .from('installment')
-          .delete()
-          .in('payment_id', deletedPaymentIds);
-
         const { error: deletePaymentsError } = await supabase
           .from('payment')
-          .delete()
+          .update({ deleted_at: new Date().toISOString() })
           .in('id', deletedPaymentIds);
         if (deletePaymentsError) throw deletePaymentsError;
         
@@ -1997,6 +1997,7 @@ export function StudentExplorer() {
       .from('student')
       .select('*')
       .or(`pcaid.eq.${query.toUpperCase()},phone.eq.${query}`)
+      .is('deleted_at', null)
       .maybeSingle();
 
     setVerificationStatus({
@@ -2081,7 +2082,7 @@ export function StudentExplorer() {
   const fetchStudents = async () => {
     if (!user) return;
     setLoading(true);
-    let query = supabase.from('student').select('*');
+    let query = supabase.from('student').select('*').is('deleted_at', null);
     
     if (selectedAdmin) {
       query = query.eq('admin', selectedAdmin);
@@ -2103,32 +2104,11 @@ export function StudentExplorer() {
     try {
       setDeletingId(student.id);
       
-      // Get all payment IDs for this student first to clean up installment relationships
-      const { data: stPayments } = await supabase
-        .from('payment')
-        .select('id')
-        .eq('pcaid', student.pcaid);
-
-      if (stPayments && stPayments.length > 0) {
-        const payIds = stPayments.map(p => p.id);
-        await supabase
-          .from('installment')
-          .delete()
-          .in('payment_id', payIds);
-      }
-      
-      // 1. Delete associated records from the payment table (child table) first
-      const { error: paymentError } = await supabase
-        .from('payment')
-        .delete()
-        .eq('pcaid', student.pcaid);
-      
-      if (paymentError) throw paymentError;
-
-      // 2. Delete from parent student table
+      // Soft-delete from parent student table.
+      // Database triggers will automatically cascade to soft-delete payments and installments.
       const { error: studentError } = await supabase
         .from('student')
-        .delete()
+        .update({ deleted_at: new Date().toISOString() })
         .eq('pcaid', student.pcaid);
       
       if (studentError) throw studentError;
@@ -2139,16 +2119,16 @@ export function StudentExplorer() {
         action_type: 'DELETE',
         entity_type: 'student',
         entity_id: student.pcaid,
-        details: `Deleted student ${student.name} (${student.pcaid}) and all associated payment records`
+        details: `Soft-deleted student ${student.name} (${student.pcaid}). Cascaded payments and installments via DB triggers.`
       });
 
-      toast.success('Student and payment records deleted');
+      toast.success('Student and associated payment records soft-deleted');
       
       // Fast sync: Update local state immediately
       setStudents(prev => prev.filter(s => s.pcaid !== student.pcaid));
 
     } catch (error) {
-      toast.error('Failed to delete student records');
+      toast.error('Failed to soft-delete student records');
       console.error(error);
     } finally {
       setDeletingId(null);
@@ -2160,7 +2140,8 @@ export function StudentExplorer() {
     const { data, error } = await supabase
       .from('payment')
       .select('*, installment(*)')
-      .eq('pcaid', pcaid);
+      .eq('pcaid', pcaid)
+      .is('deleted_at', null);
     
     if (error) {
       toast.error('Failed to fetch payments');
@@ -2173,34 +2154,23 @@ export function StudentExplorer() {
   };
 
   const handleDeletePayment = async (paymentId: string) => {
-    const pmnt = studentPayments.find(p => p.id === paymentId);
-    if (pmnt && pmnt.installments && pmnt.installments.length > 0) {
-      toast.error("You can't delete the payment before delete the installments");
-      setDeletingPaymentId(null);
-      return;
-    }
-
-    await supabase
-      .from('installment')
-      .delete()
-      .eq('payment_id', paymentId);
-
+    // Soft-deleting the payment automatically cascades and soft-deletes associated installments via DB triggers
     const { error } = await supabase
       .from('payment')
-      .delete()
+      .update({ deleted_at: new Date().toISOString() })
       .eq('id', paymentId);
     
     if (error) {
       toast.error('Failed to delete payment');
     } else {
-      toast.success('Payment record deleted');
+      toast.success('Payment record soft-deleted');
       // Log payment deletion
       await logTransaction({
         admin_username: user?.username || 'system',
         action_type: 'DELETE',
         entity_type: 'payment',
         entity_id: paymentId,
-        details: `Deleted payment record ID: ${paymentId}`
+        details: `Soft-deleted payment record ID: ${paymentId}. Installments soft-deleted via DB trigger cascade.`
       });
       setStudentPayments(prev => prev.filter(p => p.id !== paymentId));
     }
@@ -2310,12 +2280,12 @@ export function StudentExplorer() {
     try {
       const { error } = await supabase
         .from('installment')
-        .delete()
+        .update({ deleted_at: new Date().toISOString() })
         .eq('id', installmentId);
 
       if (error) throw error;
 
-      toast.success('Installment deleted');
+      toast.success('Installment soft-deleted');
       setDeletingInstallmentId(null);
       await fetchStudentPayments(pcaid);
     } catch (err: any) {

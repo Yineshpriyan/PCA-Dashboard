@@ -18,7 +18,8 @@ import {
   Sun,
   Moon,
   Video,
-  Home
+  Home,
+  Trash2
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { logTransaction } from '../lib/transactions';
@@ -80,6 +81,7 @@ const navSections: NavSection[] = [
     title: 'System Audit',
     items: [
       { label: 'Transaction Log', path: '/admin/transactions', icon: <History size={18} />, roles: ['super_admin'] },
+      { label: 'Recycle Bin', path: '/admin/recycle-bin', icon: <Trash2 size={18} />, roles: ['admin', 'super_admin'] },
     ]
   },
   {
