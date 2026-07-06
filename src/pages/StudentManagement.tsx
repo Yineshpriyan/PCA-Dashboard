@@ -67,6 +67,7 @@ const DISTRICT_NUMBERS: Record<string, string> = {
 };
 
 const DURATIONS = [
+  { label: '0', value: 0 },
   { label: '1 week', value: 7 },
   { label: '2 weeks', value: 14 },
   { label: '1 month', value: 30 },
@@ -77,7 +78,8 @@ const DURATIONS = [
 
 const calculateExpiry = (activationDate: string, durationLabel: string) => {
   const date = new Date(activationDate);
-  const duration = DURATIONS.find(d => d.label === durationLabel)?.value || 30;
+  const found = DURATIONS.find(d => d.label === durationLabel);
+  const duration = found !== undefined ? found.value : 30;
   date.setDate(date.getDate() + duration);
   return date.toISOString().split('T')[0];
 };
@@ -350,6 +352,8 @@ export function StudentForm() {
   const [newFormInstActDate, setNewFormInstActDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [newFormInstDuration, setNewFormInstDuration] = useState<string>('1 month');
   const [deletingFormInstallmentId, setDeletingFormInstallmentId] = useState<string | null>(null);
+  const [editingFormInstallmentId, setEditingFormInstallmentId] = useState<string | null>(null);
+  const [editingFormInstallmentData, setEditingFormInstallmentData] = useState<any | null>(null);
   const [currentPayment, setCurrentPayment] = useState<Partial<Payment>>({
     type: 'class',
     payment: 0,
@@ -610,6 +614,84 @@ export function StudentForm() {
       setTempPayments(updated);
       setDeletingFormInstallmentId(null);
       toast.success('Installment removed locally');
+    }
+  };
+
+  const handleStartEditFormInstallment = (inst: any) => {
+    setEditingFormInstallmentId(inst.id);
+    setEditingFormInstallmentData({ ...inst });
+  };
+
+  const handleCancelEditFormInstallment = () => {
+    setEditingFormInstallmentId(null);
+    setEditingFormInstallmentData(null);
+  };
+
+  const handleUpdateFormInstallment = async (pId: string | undefined, idx: number) => {
+    if (!editingFormInstallmentData) return;
+    const paidAmt = Number(editingFormInstallmentData.paid_amount);
+    if (!editingFormInstallmentData.paid_amount || isNaN(paidAmt) || paidAmt <= 0) {
+      toast.error('Please enter a valid paid amount greater than zero');
+      return;
+    }
+
+    const expDate = calculateExpiry(editingFormInstallmentData.activation_date, editingFormInstallmentData.duration);
+    const isExistingPayment = pId && existingPaymentIds.has(pId);
+    const isRealInstallment = editingFormInstallmentId && !editingFormInstallmentId.startsWith('temp_inst_');
+
+    if (isExistingPayment && isRealInstallment) {
+      try {
+        const { error } = await supabase
+          .from('installment')
+          .update({
+            paid_amount: paidAmt,
+            paid_date: editingFormInstallmentData.paid_date,
+            activation_date: editingFormInstallmentData.activation_date,
+            duration: editingFormInstallmentData.duration,
+            expired_date: expDate
+          })
+          .eq('id', editingFormInstallmentId);
+
+        if (error) throw error;
+
+        toast.success('Installment updated successfully');
+        setEditingFormInstallmentId(null);
+        setEditingFormInstallmentData(null);
+        if (studentData.pcaid) {
+          await fetchExistingPayments(studentData.pcaid);
+        }
+      } catch (err: any) {
+        console.error(err);
+        toast.error(err.message || 'Failed to update installment');
+      }
+    } else {
+      const updated = [...tempPayments];
+      const targetPayment = updated[idx];
+      const updatedInstallments = (targetPayment.installments || []).map((inst: any) => {
+        if ((inst.id || inst.paid_date) === editingFormInstallmentId) {
+          return {
+            ...inst,
+            paid_amount: paidAmt,
+            paid_date: editingFormInstallmentData.paid_date,
+            activation_date: editingFormInstallmentData.activation_date,
+            duration: editingFormInstallmentData.duration,
+            expired_date: expDate
+          };
+        }
+        return inst;
+      });
+      const totalPaid = updatedInstallments.reduce((sum: number, inst: any) => sum + Number(inst.paid_amount || 0), 0);
+
+      updated[idx] = {
+        ...targetPayment,
+        payment: totalPaid,
+        installments: updatedInstallments
+      };
+
+      setTempPayments(updated);
+      setEditingFormInstallmentId(null);
+      setEditingFormInstallmentData(null);
+      toast.success('Installment updated locally');
     }
   };
 
@@ -1528,9 +1610,28 @@ export function StudentForm() {
               <div className="space-y-1">
                 {currentPayment.total_amount !== undefined && currentPayment.payment !== undefined && (
                   <div className="flex mb-1 justify-start">
-                    <span className="text-[10px] sm:text-xs font-black text-red-650 dark:text-red-400 bg-red-50 dark:bg-red-950/40 px-2 py-0.5 rounded border border-red-100 dark:border-red-900/20 select-none truncate">
-                      Pending: LKR {(currentPayment.total_amount - currentPayment.payment).toLocaleString()}
-                    </span>
+                    {(() => {
+                      const diff = currentPayment.total_amount - currentPayment.payment;
+                      if (diff > 0) {
+                        return (
+                          <span className="text-[10px] sm:text-xs font-black text-red-650 dark:text-red-400 bg-red-50 dark:bg-red-950/40 px-2 py-0.5 rounded border border-red-100 dark:border-red-900/20 select-none truncate">
+                            Balance to Pay: LKR {diff.toLocaleString()}
+                          </span>
+                        );
+                      } else if (diff < 0) {
+                        return (
+                          <span className="text-[10px] sm:text-xs font-black text-emerald-600 dark:text-emerald-450 bg-emerald-50 dark:bg-emerald-955/40 px-2 py-0.5 rounded border border-emerald-100 dark:border-emerald-900/20 select-none truncate">
+                            Overpaid: LKR {Math.abs(diff).toLocaleString()}
+                          </span>
+                        );
+                      } else {
+                        return (
+                          <span className="text-[10px] sm:text-xs font-black text-gray-500 bg-gray-50 px-2 py-0.5 rounded border border-gray-200 select-none truncate">
+                            Fully Paid
+                          </span>
+                        );
+                      }
+                    })()}
                   </div>
                 )}
                 <label className="text-xs font-bold text-teal-800 dark:text-slate-300 uppercase tracking-tighter block mb-1">Duration</label>
@@ -1640,11 +1741,31 @@ export function StudentForm() {
                         <td className="p-4 font-mono text-gray-650 dark:text-gray-300 font-bold">LKR {totalFeeObj?.toLocaleString()}</td>
                         <td className="p-4 font-mono text-teal-600 dark:text-teal-400 font-bold">LKR {p.payment?.toLocaleString()}</td>
                         <td className="p-4 font-mono">
-                          {balanceObj > 0 ? (
-                            <span className="text-red-500 font-bold">LKR {balanceObj.toLocaleString()}</span>
-                          ) : (
-                            <span className="text-gray-400">Rs. 0</span>
-                          )}
+                          {(() => {
+                            const diff = totalFeeObj - p.payment;
+                            if (diff > 0) {
+                              return (
+                                <div className="flex flex-col">
+                                  <span className="text-red-500 font-bold">Rs. {diff.toLocaleString()}</span>
+                                  <span className="text-[9px] font-black text-red-400 uppercase">Balance to Pay</span>
+                                </div>
+                              );
+                            } else if (diff < 0) {
+                              return (
+                                <div className="flex flex-col">
+                                  <span className="text-emerald-500 font-bold">Rs. {Math.abs(diff).toLocaleString()}</span>
+                                  <span className="text-[9px] font-black text-emerald-400 uppercase">Overpaid</span>
+                                </div>
+                              );
+                            } else {
+                              return (
+                                <div className="flex flex-col">
+                                  <span className="text-gray-400 font-semibold">Rs. 0</span>
+                                  <span className="text-[9px] font-black text-gray-400 uppercase">Fully Paid</span>
+                                </div>
+                              );
+                            }
+                          })()}
                         </td>
                       <td className="p-4 text-sm text-gray-500 dark:text-gray-400 font-medium">{p.duration}</td>
                       <td className="p-4 text-center">
@@ -1743,54 +1864,130 @@ export function StudentForm() {
                                 {p.installments && p.installments.length > 0 ? (
                                   <div className="space-y-1.5 max-w-4xl max-h-[220px] overflow-y-auto pr-1">
                                     {p.installments.map((inst, index) => (
-                                      <div key={inst.id || index} className="flex items-center justify-between bg-white dark:bg-gray-850 p-2.5 rounded-xl border border-gray-100 dark:border-gray-800 text-xs shadow-sm hover:shadow-md transition-all duration-150 animate-fade-in">
-                                        <div className="flex flex-wrap items-center gap-x-5 gap-y-1">
-                                          <span className="font-extrabold text-teal-700 bg-teal-50 dark:bg-teal-955/45 px-2 py-0.5 rounded-full text-[10px] uppercase font-mono">
-                                            Bill #{index + 1}
-                                          </span>
-                                          <div>
-                                            <span className="font-bold text-gray-450 mr-1 uppercase text-[9px]">Paid:</span>
-                                            <span className="font-mono font-black text-teal-650 dark:text-teal-400">Rs. {Number(inst.paid_amount || 0).toLocaleString()}</span>
-                                          </div>
-                                          <div>
-                                            <span className="font-bold text-gray-450 mr-1 uppercase text-[9px]">Date:</span>
-                                            <span className="font-bold text-gray-755 dark:text-gray-400">{formatDate(inst.paid_date)}</span>
-                                          </div>
-                                          <div>
-                                            <span className="font-bold text-gray-450 mr-1 uppercase text-[9px]">Duration / Package:</span>
-                                            <span className="font-medium text-gray-700 dark:text-gray-350">{formatDate(inst.activation_date)} to {formatDate(inst.expired_date)}</span>
-                                          </div>
-                                          <span className="text-[9px] font-black bg-teal-50 dark:bg-teal-955 px-1.5 py-0.5 rounded text-teal-600 dark:text-teal-400 uppercase tracking-wider">{inst.duration}</span>
-                                        </div>
-                                        
-                                        {/* Delete Installment */}
-                                        {deletingFormInstallmentId === inst.id ? (
-                                          <div className="flex items-center gap-1.5 shrink-0 bg-red-50 dark:bg-red-950/45 p-1 rounded-lg">
-                                            <span className="text-[9px] font-black text-red-600 dark:text-red-450 uppercase">Delete?</span>
-                                            <button 
-                                              type="button"
-                                              onClick={() => handleDeleteFormInstallment(inst.id, p.id, idx)}
-                                              className="px-2 py-0.5 bg-red-600 text-white text-[9px] font-black rounded uppercase hover:bg-red-705 transition-colors"
-                                            >
-                                              Confirm
-                                            </button>
-                                            <button 
-                                              type="button"
-                                              onClick={() => setDeletingFormInstallmentId(null)}
-                                              className="px-2 py-0.5 bg-gray-200 dark:bg-gray-850 text-gray-650 dark:text-gray-400 text-[9px] font-black rounded uppercase hover:bg-gray-300 dark:hover:bg-gray-750"
-                                            >
-                                              No
-                                            </button>
+                                      <div key={inst.id || index} className="flex flex-col md:flex-row md:items-center justify-between bg-white dark:bg-gray-855 p-3 rounded-xl border border-gray-100 dark:border-gray-800 text-xs shadow-sm hover:shadow-md gap-3 transition-all duration-150 animate-fade-in">
+                                        {editingFormInstallmentId === inst.id && editingFormInstallmentData ? (
+                                          <div className="w-full space-y-2">
+                                            <div className="flex items-center gap-1.5 border-b border-gray-150 pb-1 mb-1">
+                                              <span className="font-black text-teal-700 uppercase text-[10px]">Editing Installment #{index + 1}</span>
+                                            </div>
+                                            <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 items-end">
+                                              <div>
+                                                <label className="text-[9px] font-black text-gray-400 dark:text-gray-500 uppercase block mb-0.5">Paid Amount (Rs.)</label>
+                                                <input
+                                                  type="number"
+                                                  className="w-full text-xs font-bold text-teal-700 dark:text-teal-400 bg-white dark:bg-gray-800 border border-teal-100 dark:border-gray-700 rounded-md p-1 font-mono shadow-inner outline-none focus:ring-1 focus:ring-teal-500"
+                                                  value={editingFormInstallmentData.paid_amount || ''}
+                                                  onChange={(e) => setEditingFormInstallmentData({ ...editingFormInstallmentData, paid_amount: e.target.value })}
+                                                />
+                                              </div>
+                                              <div>
+                                                <label className="text-[9px] font-black text-gray-400 dark:text-gray-500 uppercase block mb-0.5">Paid Date</label>
+                                                <input
+                                                  type="date"
+                                                  className="w-full text-xs font-bold text-teal-700 dark:text-teal-400 bg-white dark:bg-gray-800 border border-teal-100 dark:border-gray-700 rounded-md p-1 font-mono shadow-inner outline-none focus:ring-1 focus:ring-teal-500"
+                                                  value={editingFormInstallmentData.paid_date ? new Date(editingFormInstallmentData.paid_date).toISOString().split('T')[0] : ''}
+                                                  onChange={(e) => setEditingFormInstallmentData({ ...editingFormInstallmentData, paid_date: e.target.value })}
+                                                />
+                                              </div>
+                                              <div>
+                                                <label className="text-[9px] font-black text-gray-400 dark:text-gray-500 uppercase block mb-0.5">Activation Date</label>
+                                                <input
+                                                  type="date"
+                                                  className="w-full text-xs font-bold text-teal-700 dark:text-teal-400 bg-white dark:bg-gray-800 border border-teal-100 dark:border-gray-700 rounded-md p-1 font-mono shadow-inner outline-none focus:ring-1 focus:ring-teal-500"
+                                                  value={editingFormInstallmentData.activation_date ? new Date(editingFormInstallmentData.activation_date).toISOString().split('T')[0] : ''}
+                                                  onChange={(e) => setEditingFormInstallmentData({ ...editingFormInstallmentData, activation_date: e.target.value })}
+                                                />
+                                              </div>
+                                              <div>
+                                                <label className="text-[9px] font-black text-gray-400 dark:text-gray-500 uppercase block mb-0.5">Duration</label>
+                                                <select
+                                                  className="w-full text-xs font-bold text-teal-700 dark:text-teal-400 bg-white dark:bg-gray-800 border border-teal-100 dark:border-gray-700 rounded-md p-1 font-sans outline-none focus:ring-1 focus:ring-teal-500"
+                                                  value={editingFormInstallmentData.duration}
+                                                  onChange={(e) => setEditingFormInstallmentData({ ...editingFormInstallmentData, duration: e.target.value })}
+                                                >
+                                                  {DURATIONS.map(d => <option key={d.label} value={d.label}>{d.label}</option>)}
+                                                </select>
+                                              </div>
+                                            </div>
+                                            <div className="flex justify-end gap-1.5 mt-2">
+                                              <button
+                                                type="button"
+                                                onClick={() => handleUpdateFormInstallment(p.id, idx)}
+                                                className="px-2.5 py-1 bg-emerald-600 text-white text-[10px] font-black rounded-lg uppercase hover:bg-emerald-700 transition-colors shadow-sm"
+                                              >
+                                                Save
+                                              </button>
+                                              <button
+                                                type="button"
+                                                onClick={handleCancelEditFormInstallment}
+                                                className="px-2.5 py-1 bg-gray-200 dark:bg-gray-800 text-gray-650 dark:text-gray-400 text-[10px] font-black rounded-lg uppercase hover:bg-gray-300 dark:hover:bg-gray-700 transition-colors"
+                                              >
+                                                Cancel
+                                              </button>
+                                            </div>
                                           </div>
                                         ) : (
-                                          <button 
-                                            type="button"
-                                            onClick={() => setDeletingFormInstallmentId(inst.id)}
-                                            className="p-1.5 text-gray-400 dark:text-gray-500 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20 rounded transition-colors"
-                                            title="Delete Installment"
-                                          >
-                                            <Trash2 size={12} />
-                                          </button>
+                                          <>
+                                            <div className="flex flex-wrap items-center gap-x-5 gap-y-1">
+                                              <span className="font-extrabold text-teal-700 bg-teal-50 dark:bg-teal-955/45 px-2 py-0.5 rounded-full text-[10px] uppercase font-mono">
+                                                Bill #{index + 1}
+                                              </span>
+                                              <div>
+                                                <span className="font-bold text-gray-450 mr-1 uppercase text-[9px]">Paid:</span>
+                                                <span className="font-mono font-black text-teal-650 dark:text-teal-400">Rs. {Number(inst.paid_amount || 0).toLocaleString()}</span>
+                                              </div>
+                                              <div>
+                                                <span className="font-bold text-gray-450 mr-1 uppercase text-[9px]">Date:</span>
+                                                <span className="font-bold text-gray-755 dark:text-gray-400">{formatDate(inst.paid_date)}</span>
+                                              </div>
+                                              <div>
+                                                <span className="font-bold text-gray-450 mr-1 uppercase text-[9px]">Duration / Package:</span>
+                                                <span className="font-medium text-gray-700 dark:text-gray-350">{formatDate(inst.activation_date)} to {formatDate(inst.expired_date)}</span>
+                                              </div>
+                                              <span className="text-[9px] font-black bg-teal-50 dark:bg-teal-955 px-1.5 py-0.5 rounded text-teal-600 dark:text-teal-400 uppercase tracking-wider">{inst.duration}</span>
+                                            </div>
+                                            
+                                            <div className="flex items-center gap-1 shrink-0">
+                                              <button
+                                                type="button"
+                                                onClick={() => handleStartEditFormInstallment(inst)}
+                                                className="p-1.5 text-gray-400 dark:text-gray-500 hover:text-teal-600 hover:bg-teal-50 dark:hover:bg-teal-950/20 rounded transition-colors"
+                                                title="Edit Installment"
+                                              >
+                                                <Edit size={12} />
+                                              </button>
+
+                                              {/* Delete Installment */}
+                                              {deletingFormInstallmentId === inst.id ? (
+                                                <div className="flex items-center gap-1.5 shrink-0 bg-red-50 dark:bg-red-950/45 p-1 rounded-lg">
+                                                  <span className="text-[9px] font-black text-red-600 dark:text-red-450 uppercase">Delete?</span>
+                                                  <button 
+                                                    type="button"
+                                                    onClick={() => handleDeleteFormInstallment(inst.id, p.id, idx)}
+                                                    className="px-2 py-0.5 bg-red-600 text-white text-[9px] font-black rounded uppercase hover:bg-red-705 transition-colors"
+                                                  >
+                                                    Confirm
+                                                  </button>
+                                                  <button 
+                                                    type="button"
+                                                    onClick={() => setDeletingFormInstallmentId(null)}
+                                                    className="px-2 py-0.5 bg-gray-200 dark:bg-gray-850 text-gray-650 dark:text-gray-400 text-[9px] font-black rounded uppercase hover:bg-gray-300 dark:hover:bg-gray-750"
+                                                  >
+                                                    No
+                                                  </button>
+                                                </div>
+                                              ) : (
+                                                <button 
+                                                  type="button"
+                                                  onClick={() => setDeletingFormInstallmentId(inst.id)}
+                                                  className="p-1.5 text-gray-400 dark:text-gray-500 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20 rounded transition-colors"
+                                                  title="Delete Installment"
+                                                >
+                                                  <Trash2 size={12} />
+                                                </button>
+                                              )}
+                                            </div>
+                                          </>
                                         )}
                                       </div>
                                     ))}
@@ -1950,6 +2147,8 @@ export function StudentExplorer() {
   const [newInstActDate, setNewInstActDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [newInstDuration, setNewInstDuration] = useState<string>('1 month');
   const [deletingInstallmentId, setDeletingInstallmentId] = useState<string | null>(null);
+  const [editingInstallmentId, setEditingInstallmentId] = useState<string | null>(null);
+  const [editingInstallmentData, setEditingInstallmentData] = useState<any | null>(null);
   const [admins, setAdmins] = useState<{username: string}[]>([]);
   const [selectedAdmin, setSelectedAdmin] = useState<string>(user?.admin_type === 'super_admin' ? '' : user?.username || '');
 
@@ -2291,6 +2490,50 @@ export function StudentExplorer() {
     } catch (err: any) {
       console.error(err);
       toast.error(err.message || 'Failed to delete installment');
+    }
+  };
+
+  const handleStartEditInstallment = (inst: any) => {
+    setEditingInstallmentId(inst.id);
+    setEditingInstallmentData({ ...inst });
+  };
+
+  const handleCancelEditInstallment = () => {
+    setEditingInstallmentId(null);
+    setEditingInstallmentData(null);
+  };
+
+  const handleUpdateInstallment = async (pcaid: string) => {
+    if (!editingInstallmentData) return;
+    const paidAmt = Number(editingInstallmentData.paid_amount);
+    if (!editingInstallmentData.paid_amount || isNaN(paidAmt) || paidAmt <= 0) {
+      toast.error('Please enter a valid paid amount greater than zero');
+      return;
+    }
+
+    const expDate = calculateExpiry(editingInstallmentData.activation_date, editingInstallmentData.duration);
+
+    try {
+      const { error } = await supabase
+        .from('installment')
+        .update({
+          paid_amount: paidAmt,
+          paid_date: editingInstallmentData.paid_date,
+          activation_date: editingInstallmentData.activation_date,
+          duration: editingInstallmentData.duration,
+          expired_date: expDate
+        })
+        .eq('id', editingInstallmentId);
+
+      if (error) throw error;
+
+      toast.success('Installment updated successfully');
+      setEditingInstallmentId(null);
+      setEditingInstallmentData(null);
+      await fetchStudentPayments(pcaid);
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err.message || 'Failed to update installment');
     }
   };
 
@@ -2948,9 +3191,28 @@ export function StudentExplorer() {
                                       <div className="flex justify-between items-center gap-2">
                                         <span className="text-[9px] font-bold text-teal-600 block uppercase">Paid Amount</span>
                                         {pendingPaymentEdit.total_amount !== undefined && (
-                                          <span className="text-[9px] font-black text-red-500 block">
-                                            Pen: LKR {Math.max(0, pendingPaymentEdit.total_amount - pendingPaymentEdit.payment).toLocaleString()}
-                                          </span>
+                                          (() => {
+                                            const diff = pendingPaymentEdit.total_amount - pendingPaymentEdit.payment;
+                                            if (diff > 0) {
+                                              return (
+                                                <span className="text-[9px] font-black text-red-500 block">
+                                                  Pen: LKR {diff.toLocaleString()}
+                                                </span>
+                                              );
+                                            } else if (diff < 0) {
+                                              return (
+                                                <span className="text-[9px] font-black text-emerald-500 block">
+                                                  Over: LKR {Math.abs(diff).toLocaleString()}
+                                                </span>
+                                              );
+                                            } else {
+                                              return (
+                                                <span className="text-[9px] font-black text-gray-400 block">
+                                                  Paid
+                                                </span>
+                                              );
+                                            }
+                                          })()
                                         )}
                                       </div>
                                       <input 
@@ -2986,12 +3248,29 @@ export function StudentExplorer() {
                                 {(() => {
                                   const activeData = isEditing && pendingPaymentEdit ? pendingPaymentEdit : p;
                                   const totFee = activeData.total_amount !== undefined ? activeData.total_amount : activeData.payment;
-                                  const bal = Math.max(0, totFee - (activeData.payment || 0));
-                                  return bal > 0 ? (
-                                    <span className="text-[11px] font-black text-red-500">Rs. {bal.toLocaleString()}</span>
-                                  ) : (
-                                    <span className="text-[11px] text-gray-400">Rs. 0</span>
-                                  );
+                                  const diff = totFee - (activeData.payment || 0);
+                                  if (diff > 0) {
+                                    return (
+                                      <div className="flex flex-col">
+                                        <span className="text-[11px] font-black text-red-500">Rs. {diff.toLocaleString()}</span>
+                                        <span className="text-[9px] font-bold text-red-400 uppercase">Balance to Pay</span>
+                                      </div>
+                                    );
+                                  } else if (diff < 0) {
+                                    return (
+                                      <div className="flex flex-col">
+                                        <span className="text-[11px] font-black text-emerald-500">Rs. {Math.abs(diff).toLocaleString()}</span>
+                                        <span className="text-[9px] font-bold text-emerald-400 uppercase">Overpaid</span>
+                                      </div>
+                                    );
+                                  } else {
+                                    return (
+                                      <div className="flex flex-col">
+                                        <span className="text-[11px] text-gray-400">Rs. 0</span>
+                                        <span className="text-[9px] font-bold text-gray-450 uppercase">Fully Paid</span>
+                                      </div>
+                                    );
+                                  }
                                 })()}
                               </td>
                               <td className="px-4 py-3">
@@ -3085,56 +3364,129 @@ export function StudentExplorer() {
                                         Payment billing reference: {p.id}
                                       </span>
                                     </div>
-                                    
-                                    {/* Installments List */}
-                                    {p.installments && p.installments.length > 0 ? (
+                                                                      {p.installments && p.installments.length > 0 ? (
                                       <div className="space-y-1.5 max-w-4xl">
                                         {p.installments.map((inst, index) => (
-                                          <div key={inst.id || index} className="flex items-center justify-between bg-white dark:bg-gray-850 p-2.5 rounded-xl border border-gray-100 dark:border-gray-800 text-xs shadow-sm hover:shadow-md transition-shadow">
-                                            <div className="flex flex-wrap items-center gap-x-5 gap-y-1">
-                                              <span className="font-extrabold text-teal-700 bg-teal-50 dark:bg-teal-950/45 px-2 py-0.5 rounded-full text-[10px] uppercase font-mono">
-                                                Bill #{index + 1}
-                                              </span>
-                                              <div>
-                                                <span className="font-bold text-gray-400 mr-1 uppercase text-[9px]">Paid:</span>
-                                                <span className="font-mono font-black text-teal-650 dark:text-teal-400">Rs. {Number(inst.paid_amount || 0).toLocaleString()}</span>
-                                              </div>
-                                              <div>
-                                                <span className="font-bold text-gray-400 mr-1 uppercase text-[9px]">Date:</span>
-                                                <span className="font-bold text-gray-750 dark:text-gray-300">{formatDate(inst.paid_date)}</span>
-                                              </div>
-                                              <div>
-                                                <span className="font-bold text-gray-400 mr-1 uppercase text-[9px]">Duration / Package:</span>
-                                                <span className="font-medium text-gray-700 dark:text-gray-350">{formatDate(inst.activation_date)} to {formatDate(inst.expired_date)}</span>
-                                              </div>
-                                              <span className="text-[9px] font-black bg-teal-50 dark:bg-teal-955 px-1.5 py-0.5 rounded text-teal-600 dark:text-teal-400 uppercase tracking-wider">{inst.duration}</span>
-                                            </div>
-                                            
-                                            {/* Delete Installment */}
-                                            {deletingInstallmentId === inst.id ? (
-                                              <div className="flex items-center gap-1.5 shrink-0 bg-red-50 dark:bg-red-950/40 p-1 rounded-lg">
-                                                <span className="text-[9px] font-black text-red-600 dark:text-red-450 uppercase">Delete?</span>
-                                                <button 
-                                                  onClick={() => handleDeleteInstallment(inst.id, p.pcaid)}
-                                                  className="px-2 py-0.5 bg-red-600 text-white text-[9px] font-black rounded uppercase hover:bg-red-700 transition-colors"
-                                                >
-                                                  Confirm
-                                                </button>
-                                                <button 
-                                                  onClick={() => setDeletingInstallmentId(null)}
-                                                  className="px-2 py-0.5 bg-gray-200 dark:bg-gray-850 text-gray-600 dark:text-gray-400 text-[9px] font-black rounded uppercase hover:bg-gray-300 dark:hover:bg-gray-750"
-                                                >
-                                                  No
-                                                </button>
+                                          <div key={inst.id || index} className="flex flex-col md:flex-row md:items-center justify-between bg-white dark:bg-gray-850 p-3 rounded-xl border border-gray-100 dark:border-gray-800 text-xs shadow-sm hover:shadow-md transition-shadow gap-3">
+                                            {editingInstallmentId === inst.id && editingInstallmentData ? (
+                                              <div className="w-full space-y-2">
+                                                <div className="flex items-center gap-1.5 border-b border-gray-150 pb-1 mb-1">
+                                                  <span className="font-black text-teal-700 uppercase text-[10px]">Editing Installment #{index + 1}</span>
+                                                </div>
+                                                <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 items-end">
+                                                  <div>
+                                                    <label className="text-[9px] font-black text-gray-400 dark:text-gray-550 uppercase block mb-0.5">Paid Amount (Rs.)</label>
+                                                    <input
+                                                      type="number"
+                                                      className="w-full text-xs font-bold text-teal-700 dark:text-teal-400 bg-white dark:bg-gray-800 border border-teal-100 dark:border-gray-700 rounded-md p-1 font-mono shadow-inner outline-none focus:ring-1 focus:ring-teal-500"
+                                                      value={editingInstallmentData.paid_amount || ''}
+                                                      onChange={(e) => setEditingInstallmentData({ ...editingInstallmentData, paid_amount: e.target.value })}
+                                                    />
+                                                  </div>
+                                                  <div>
+                                                    <label className="text-[9px] font-black text-gray-400 dark:text-gray-555 uppercase block mb-0.5">Paid Date</label>
+                                                    <input
+                                                      type="date"
+                                                      className="w-full text-xs font-bold text-teal-700 dark:text-teal-400 bg-white dark:bg-gray-800 border border-teal-100 dark:border-gray-700 rounded-md p-1 font-mono shadow-inner outline-none focus:ring-1 focus:ring-teal-500"
+                                                      value={editingInstallmentData.paid_date ? new Date(editingInstallmentData.paid_date).toISOString().split('T')[0] : ''}
+                                                      onChange={(e) => setEditingInstallmentData({ ...editingInstallmentData, paid_date: e.target.value })}
+                                                    />
+                                                  </div>
+                                                  <div>
+                                                    <label className="text-[9px] font-black text-gray-400 dark:text-gray-555 uppercase block mb-0.5">Activation Date</label>
+                                                    <input
+                                                      type="date"
+                                                      className="w-full text-xs font-bold text-teal-700 dark:text-teal-400 bg-white dark:bg-gray-800 border border-teal-100 dark:border-gray-700 rounded-md p-1 font-mono shadow-inner outline-none focus:ring-1 focus:ring-teal-500"
+                                                      value={editingInstallmentData.activation_date ? new Date(editingInstallmentData.activation_date).toISOString().split('T')[0] : ''}
+                                                      onChange={(e) => setEditingInstallmentData({ ...editingInstallmentData, activation_date: e.target.value })}
+                                                    />
+                                                  </div>
+                                                  <div>
+                                                    <label className="text-[9px] font-black text-gray-400 dark:text-gray-555 uppercase block mb-0.5">Duration</label>
+                                                    <select
+                                                      className="w-full text-xs font-bold text-teal-700 dark:text-teal-400 bg-white dark:bg-gray-800 border border-teal-100 dark:border-gray-700 rounded-md p-1 font-sans outline-none focus:ring-1 focus:ring-teal-500"
+                                                      value={editingInstallmentData.duration}
+                                                      onChange={(e) => setEditingInstallmentData({ ...editingInstallmentData, duration: e.target.value })}
+                                                    >
+                                                      {DURATIONS.map(d => <option key={d.label} value={d.label}>{d.label}</option>)}
+                                                    </select>
+                                                  </div>
+                                                </div>
+                                                <div className="flex justify-end gap-1.5 mt-2">
+                                                  <button
+                                                    type="button"
+                                                    onClick={() => handleUpdateInstallment(p.pcaid)}
+                                                    className="px-2.5 py-1 bg-emerald-600 text-white text-[10px] font-black rounded-lg uppercase hover:bg-emerald-700 transition-colors shadow-sm"
+                                                  >
+                                                    Save
+                                                  </button>
+                                                  <button
+                                                    type="button"
+                                                    onClick={handleCancelEditInstallment}
+                                                    className="px-2.5 py-1 bg-gray-200 dark:bg-gray-800 text-gray-650 dark:text-gray-400 text-[10px] font-black rounded-lg uppercase hover:bg-gray-300 dark:hover:bg-gray-700 transition-colors"
+                                                  >
+                                                    Cancel
+                                                  </button>
+                                                </div>
                                               </div>
                                             ) : (
-                                              <button 
-                                                onClick={() => setDeletingInstallmentId(inst.id)}
-                                                className="p-1 text-gray-450 dark:text-gray-500 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20 rounded transition-colors"
-                                                title="Delete Installment"
-                                              >
-                                                <Trash2 size={12} />
-                                              </button>
+                                              <>
+                                                <div className="flex flex-wrap items-center gap-x-5 gap-y-1">
+                                                  <span className="font-extrabold text-teal-700 bg-teal-50 dark:bg-teal-955/45 px-2 py-0.5 rounded-full text-[10px] uppercase font-mono">
+                                                    Bill #{index + 1}
+                                                  </span>
+                                                  <div>
+                                                    <span className="font-bold text-gray-400 mr-1 uppercase text-[9px]">Paid:</span>
+                                                    <span className="font-mono font-black text-teal-650 dark:text-teal-400">Rs. {Number(inst.paid_amount || 0).toLocaleString()}</span>
+                                                  </div>
+                                                  <div>
+                                                    <span className="font-bold text-gray-400 mr-1 uppercase text-[9px]">Date:</span>
+                                                    <span className="font-bold text-gray-755 dark:text-gray-300">{formatDate(inst.paid_date)}</span>
+                                                  </div>
+                                                  <div>
+                                                    <span className="font-bold text-gray-400 mr-1 uppercase text-[9px]">Duration / Package:</span>
+                                                    <span className="font-medium text-gray-700 dark:text-gray-350">{formatDate(inst.activation_date)} to {formatDate(inst.expired_date)}</span>
+                                                  </div>
+                                                  <span className="text-[9px] font-black bg-teal-50 dark:bg-teal-955 px-1.5 py-0.5 rounded text-teal-600 dark:text-teal-400 uppercase tracking-wider">{inst.duration}</span>
+                                                </div>
+                                                
+                                                <div className="flex items-center gap-1 shrink-0">
+                                                  <button
+                                                    onClick={() => handleStartEditInstallment(inst)}
+                                                    className="p-1.5 text-gray-400 dark:text-gray-500 hover:text-teal-600 hover:bg-teal-50 dark:hover:bg-teal-950/20 rounded transition-colors"
+                                                    title="Edit Installment"
+                                                  >
+                                                    <Edit size={12} />
+                                                  </button>
+
+                                                  {/* Delete Installment */}
+                                                  {deletingInstallmentId === inst.id ? (
+                                                    <div className="flex items-center gap-1.5 shrink-0 bg-red-50 dark:bg-red-950/40 p-1 rounded-lg">
+                                                      <span className="text-[9px] font-black text-red-600 dark:text-red-450 uppercase">Delete?</span>
+                                                      <button 
+                                                        onClick={() => handleDeleteInstallment(inst.id, p.pcaid)}
+                                                        className="px-2 py-0.5 bg-red-600 text-white text-[9px] font-black rounded uppercase hover:bg-red-700 transition-colors"
+                                                      >
+                                                        Confirm
+                                                      </button>
+                                                      <button 
+                                                        onClick={() => setDeletingInstallmentId(null)}
+                                                        className="px-2 py-0.5 bg-gray-200 dark:bg-gray-850 text-gray-600 dark:text-gray-400 text-[9px] font-black rounded uppercase hover:bg-gray-300 dark:hover:bg-gray-750"
+                                                      >
+                                                        No
+                                                      </button>
+                                                    </div>
+                                                  ) : (
+                                                    <button 
+                                                      onClick={() => setDeletingInstallmentId(inst.id)}
+                                                      className="p-1 text-gray-450 dark:text-gray-500 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20 rounded transition-colors"
+                                                      title="Delete Installment"
+                                                    >
+                                                      <Trash2 size={12} />
+                                                    </button>
+                                                  )}
+                                                </div>
+                                              </>
                                             )}
                                           </div>
                                         ))}
