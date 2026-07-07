@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase';
 import { toast } from 'sonner';
 import { 
   Plus, 
+  Minus,
   Save, 
   Trash2, 
   Edit, 
@@ -91,6 +92,11 @@ const mapDbPaymentToUI = (p: any): Payment => {
     const sorted = [...installments].sort((a, b) => new Date(a.paid_date).getTime() - new Date(b.paid_date).getTime());
     const latest = sorted[sorted.length - 1] || installments[0];
 
+    // Find the latest billing/payment installment (where paid_amount is positive/non-refund)
+    // to determine the subscription duration, activation, and expiration.
+    const billingInstallments = sorted.filter((inst: any) => Number(inst.paid_amount) >= 0);
+    const latestBilling = billingInstallments[billingInstallments.length - 1] || latest;
+
     return {
       id: p.id,
       pcaid: p.pcaid,
@@ -99,10 +105,10 @@ const mapDbPaymentToUI = (p: any): Payment => {
       package_type: p.package_type,
       payment: totalPaid,
       total_amount: p.payment, // DB billing payment table column 'payment' is Total Fee amount
-      paid_date: latest.paid_date,
-      activation_date: latest.activation_date,
-      duration: latest.duration,
-      expired_date: latest.expired_date,
+      paid_date: latestBilling.paid_date,
+      activation_date: latestBilling.activation_date,
+      duration: latestBilling.duration || p.duration || '1 month',
+      expired_date: latestBilling.expired_date,
       installments: sorted
     };
   }
@@ -351,6 +357,8 @@ export function StudentForm() {
   const [newFormInstPaidDate, setNewFormInstPaidDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [newFormInstActDate, setNewFormInstActDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [newFormInstDuration, setNewFormInstDuration] = useState<string>('1 month');
+  const [newFormInstType, setNewFormInstType] = useState<'billing' | 'refund'>('billing');
+  const [newFormInstRefundReason, setNewFormInstRefundReason] = useState<string>('');
   const [deletingFormInstallmentId, setDeletingFormInstallmentId] = useState<string | null>(null);
   const [editingFormInstallmentId, setEditingFormInstallmentId] = useState<string | null>(null);
   const [editingFormInstallmentData, setEditingFormInstallmentData] = useState<any | null>(null);
@@ -515,13 +523,28 @@ export function StudentForm() {
   };
 
   const handleAddFormInstallment = async (pId: string | undefined, idx: number) => {
-    const paidAmt = Number(newFormInstAmount);
+    const isRefund = newFormInstType === 'refund';
+    let paidAmt = Number(newFormInstAmount);
     if (!newFormInstAmount || isNaN(paidAmt) || paidAmt <= 0) {
-      toast.error('Please enter a valid paid amount greater than zero');
+      toast.error(isRefund ? 'Please enter a valid refund amount greater than zero' : 'Please enter a valid paid amount greater than zero');
       return;
     }
 
-    const expDate = calculateExpiry(newFormInstActDate, newFormInstDuration);
+    if (isRefund) {
+      paidAmt = -paidAmt; // negate it
+    }
+
+    let durationVal = newFormInstDuration;
+    if (isRefund) {
+      if (!newFormInstRefundReason.trim()) {
+        toast.error('Please enter a refund reason');
+        return;
+      }
+      durationVal = newFormInstRefundReason.trim();
+    }
+
+    const expDate = isRefund ? newFormInstPaidDate : calculateExpiry(newFormInstActDate, newFormInstDuration);
+    const actDate = isRefund ? newFormInstPaidDate : newFormInstActDate;
     const isExistingPayment = pId && existingPaymentIds.has(pId);
 
     if (isExistingPayment) {
@@ -529,8 +552,9 @@ export function StudentForm() {
         payment_id: pId,
         paid_amount: paidAmt,
         paid_date: newFormInstPaidDate,
-        activation_date: newFormInstActDate,
-        duration: newFormInstDuration,
+        activation_date: actDate,
+        duration: isRefund ? null : durationVal,
+        refund_reason: isRefund ? durationVal : null,
         expired_date: expDate
       };
 
@@ -541,22 +565,25 @@ export function StudentForm() {
 
         if (insertError) throw insertError;
 
-        toast.success('Installment added successfully');
+        toast.success(isRefund ? 'Refund recorded successfully' : 'Installment added successfully');
         setNewFormInstAmount('');
+        setNewFormInstRefundReason('');
+        setNewFormInstType('billing');
         if (studentData.pcaid) {
           await fetchExistingPayments(studentData.pcaid);
         }
       } catch (err: any) {
         console.error(err);
-        toast.error(err.message || 'Failed to add installment');
+        toast.error(err.message || (isRefund ? 'Failed to record refund' : 'Failed to add installment'));
       }
     } else {
       const newInst = {
         id: 'temp_inst_' + Math.random().toString(36).substr(2, 9),
         paid_amount: paidAmt,
         paid_date: newFormInstPaidDate,
-        activation_date: newFormInstActDate,
-        duration: newFormInstDuration,
+        activation_date: actDate,
+        duration: isRefund ? null : durationVal,
+        refund_reason: isRefund ? durationVal : null,
         expired_date: expDate
       };
 
@@ -573,7 +600,9 @@ export function StudentForm() {
 
       setTempPayments(updated);
       setNewFormInstAmount('');
-      toast.success('Installment added locally');
+      setNewFormInstRefundReason('');
+      setNewFormInstType('billing');
+      toast.success(isRefund ? 'Refund recorded locally' : 'Installment added locally');
     }
   };
 
@@ -619,7 +648,11 @@ export function StudentForm() {
 
   const handleStartEditFormInstallment = (inst: any) => {
     setEditingFormInstallmentId(inst.id);
-    setEditingFormInstallmentData({ ...inst });
+    setEditingFormInstallmentData({ 
+      ...inst, 
+      paid_amount: Math.abs(inst.paid_amount), 
+      is_refund: inst.paid_amount < 0 
+    });
   };
 
   const handleCancelEditFormInstallment = () => {
@@ -629,13 +662,19 @@ export function StudentForm() {
 
   const handleUpdateFormInstallment = async (pId: string | undefined, idx: number) => {
     if (!editingFormInstallmentData) return;
-    const paidAmt = Number(editingFormInstallmentData.paid_amount);
+    const isRefund = !!editingFormInstallmentData.is_refund;
+    let paidAmt = Number(editingFormInstallmentData.paid_amount);
     if (!editingFormInstallmentData.paid_amount || isNaN(paidAmt) || paidAmt <= 0) {
-      toast.error('Please enter a valid paid amount greater than zero');
+      toast.error(isRefund ? 'Please enter a valid refund amount greater than zero' : 'Please enter a valid paid amount greater than zero');
       return;
     }
 
-    const expDate = calculateExpiry(editingFormInstallmentData.activation_date, editingFormInstallmentData.duration);
+    if (isRefund) {
+      paidAmt = -paidAmt; // negate it
+    }
+
+    const expDate = isRefund ? editingFormInstallmentData.paid_date : calculateExpiry(editingFormInstallmentData.activation_date, editingFormInstallmentData.duration);
+    const actDate = isRefund ? editingFormInstallmentData.paid_date : editingFormInstallmentData.activation_date;
     const isExistingPayment = pId && existingPaymentIds.has(pId);
     const isRealInstallment = editingFormInstallmentId && !editingFormInstallmentId.startsWith('temp_inst_');
 
@@ -646,15 +685,16 @@ export function StudentForm() {
           .update({
             paid_amount: paidAmt,
             paid_date: editingFormInstallmentData.paid_date,
-            activation_date: editingFormInstallmentData.activation_date,
-            duration: editingFormInstallmentData.duration,
+            activation_date: actDate,
+            duration: isRefund ? null : editingFormInstallmentData.duration,
+            refund_reason: isRefund ? (editingFormInstallmentData.refund_reason || editingFormInstallmentData.duration) : null,
             expired_date: expDate
           })
           .eq('id', editingFormInstallmentId);
 
         if (error) throw error;
 
-        toast.success('Installment updated successfully');
+        toast.success(isRefund ? 'Refund updated successfully' : 'Installment updated successfully');
         setEditingFormInstallmentId(null);
         setEditingFormInstallmentData(null);
         if (studentData.pcaid) {
@@ -662,7 +702,7 @@ export function StudentForm() {
         }
       } catch (err: any) {
         console.error(err);
-        toast.error(err.message || 'Failed to update installment');
+        toast.error(err.message || (isRefund ? 'Failed to update refund' : 'Failed to update installment'));
       }
     } else {
       const updated = [...tempPayments];
@@ -673,8 +713,9 @@ export function StudentForm() {
             ...inst,
             paid_amount: paidAmt,
             paid_date: editingFormInstallmentData.paid_date,
-            activation_date: editingFormInstallmentData.activation_date,
-            duration: editingFormInstallmentData.duration,
+            activation_date: actDate,
+            duration: isRefund ? null : editingFormInstallmentData.duration,
+            refund_reason: isRefund ? (editingFormInstallmentData.refund_reason || editingFormInstallmentData.duration) : null,
             expired_date: expDate
           };
         }
@@ -691,7 +732,7 @@ export function StudentForm() {
       setTempPayments(updated);
       setEditingFormInstallmentId(null);
       setEditingFormInstallmentData(null);
-      toast.success('Installment updated locally');
+      toast.success(isRefund ? 'Refund updated locally' : 'Installment updated locally');
     }
   };
 
@@ -1026,7 +1067,7 @@ export function StudentForm() {
               payment: p.total_amount !== undefined ? p.total_amount : p.payment, // Total Fee maps to payment
               paid_date: p.paid_date,
               activation_date: p.activation_date,
-              duration: p.duration,
+              duration: p.duration || '1 month',
               expired_date: p.expired_date
             };
 
@@ -1046,6 +1087,7 @@ export function StudentForm() {
                   paid_date: inst.paid_date,
                   activation_date: inst.activation_date,
                   duration: inst.duration,
+                  refund_reason: inst.refund_reason || null,
                   expired_date: inst.expired_date
                 }));
 
@@ -1060,7 +1102,7 @@ export function StudentForm() {
                   paid_amount: p.payment,
                   paid_date: p.paid_date,
                   activation_date: p.activation_date,
-                  duration: p.duration,
+                  duration: p.duration || '1 month',
                   expired_date: p.expired_date
                 };
 
@@ -1086,7 +1128,7 @@ export function StudentForm() {
               payment: p.total_amount !== undefined ? p.total_amount : p.payment, // Total Fee maps to payment
               paid_date: p.paid_date,
               activation_date: p.activation_date,
-              duration: p.duration,
+              duration: p.duration || '1 month',
               expired_date: p.expired_date
             };
 
@@ -1108,7 +1150,7 @@ export function StudentForm() {
               paid_amount: p.payment,
               paid_date: p.paid_date,
               activation_date: p.activation_date,
-              duration: p.duration,
+              duration: p.duration || '1 month',
               expired_date: p.expired_date
             };
 
@@ -1868,46 +1910,75 @@ export function StudentForm() {
                                         {editingFormInstallmentId === inst.id && editingFormInstallmentData ? (
                                           <div className="w-full space-y-2">
                                             <div className="flex items-center gap-1.5 border-b border-gray-150 pb-1 mb-1">
-                                              <span className="font-black text-teal-700 uppercase text-[10px]">Editing Installment #{index + 1}</span>
+                                              <span className={`font-black uppercase text-[10px] ${editingFormInstallmentData.is_refund ? 'text-red-700' : 'text-teal-700'}`}>
+                                                Editing {editingFormInstallmentData.is_refund ? 'Refund' : 'Installment'} #{index + 1}
+                                              </span>
                                             </div>
                                             <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 items-end">
                                               <div>
-                                                <label className="text-[9px] font-black text-gray-400 dark:text-gray-500 uppercase block mb-0.5">Paid Amount (Rs.)</label>
+                                                <label className="text-[9px] font-black text-gray-400 dark:text-gray-500 uppercase block mb-0.5">
+                                                  {editingFormInstallmentData.is_refund ? 'Refund Amount (Rs.)' : 'Paid Amount (Rs.)'}
+                                                </label>
                                                 <input
                                                   type="number"
-                                                  className="w-full text-xs font-bold text-teal-700 dark:text-teal-400 bg-white dark:bg-gray-800 border border-teal-100 dark:border-gray-700 rounded-md p-1 font-mono shadow-inner outline-none focus:ring-1 focus:ring-teal-500"
+                                                  className={`w-full text-xs font-bold bg-white dark:bg-gray-800 border rounded-md p-1 font-mono shadow-inner outline-none focus:ring-1 ${
+                                                    editingFormInstallmentData.is_refund 
+                                                      ? 'text-red-700 dark:text-red-400 border-red-100 dark:border-gray-700 focus:ring-red-500' 
+                                                      : 'text-teal-700 dark:text-teal-400 border-teal-100 dark:border-gray-700 focus:ring-teal-500'
+                                                  }`}
                                                   value={editingFormInstallmentData.paid_amount || ''}
                                                   onChange={(e) => setEditingFormInstallmentData({ ...editingFormInstallmentData, paid_amount: e.target.value })}
                                                 />
                                               </div>
                                               <div>
-                                                <label className="text-[9px] font-black text-gray-400 dark:text-gray-500 uppercase block mb-0.5">Paid Date</label>
+                                                <label className="text-[9px] font-black text-gray-400 dark:text-gray-500 uppercase block mb-0.5">
+                                                  {editingFormInstallmentData.is_refund ? 'Refund Date' : 'Paid Date'}
+                                                </label>
                                                 <input
                                                   type="date"
-                                                  className="w-full text-xs font-bold text-teal-700 dark:text-teal-400 bg-white dark:bg-gray-800 border border-teal-100 dark:border-gray-700 rounded-md p-1 font-mono shadow-inner outline-none focus:ring-1 focus:ring-teal-500"
+                                                  className={`w-full text-xs font-bold bg-white dark:bg-gray-800 border rounded-md p-1 font-mono shadow-inner outline-none focus:ring-1 ${
+                                                    editingFormInstallmentData.is_refund 
+                                                      ? 'text-red-700 dark:text-red-400 border-red-100 dark:border-gray-700 focus:ring-red-500' 
+                                                      : 'text-teal-700 dark:text-teal-400 border-teal-100 dark:border-gray-700 focus:ring-teal-500'
+                                                  }`}
                                                   value={editingFormInstallmentData.paid_date ? new Date(editingFormInstallmentData.paid_date).toISOString().split('T')[0] : ''}
                                                   onChange={(e) => setEditingFormInstallmentData({ ...editingFormInstallmentData, paid_date: e.target.value })}
                                                 />
                                               </div>
-                                              <div>
-                                                <label className="text-[9px] font-black text-gray-400 dark:text-gray-500 uppercase block mb-0.5">Activation Date</label>
-                                                <input
-                                                  type="date"
-                                                  className="w-full text-xs font-bold text-teal-700 dark:text-teal-400 bg-white dark:bg-gray-800 border border-teal-100 dark:border-gray-700 rounded-md p-1 font-mono shadow-inner outline-none focus:ring-1 focus:ring-teal-500"
-                                                  value={editingFormInstallmentData.activation_date ? new Date(editingFormInstallmentData.activation_date).toISOString().split('T')[0] : ''}
-                                                  onChange={(e) => setEditingFormInstallmentData({ ...editingFormInstallmentData, activation_date: e.target.value })}
-                                                />
-                                              </div>
-                                              <div>
-                                                <label className="text-[9px] font-black text-gray-400 dark:text-gray-500 uppercase block mb-0.5">Duration</label>
-                                                <select
-                                                  className="w-full text-xs font-bold text-teal-700 dark:text-teal-400 bg-white dark:bg-gray-800 border border-teal-100 dark:border-gray-700 rounded-md p-1 font-sans outline-none focus:ring-1 focus:ring-teal-500"
-                                                  value={editingFormInstallmentData.duration}
-                                                  onChange={(e) => setEditingFormInstallmentData({ ...editingFormInstallmentData, duration: e.target.value })}
-                                                >
-                                                  {DURATIONS.map(d => <option key={d.label} value={d.label}>{d.label}</option>)}
-                                                </select>
-                                              </div>
+                                              {editingFormInstallmentData.is_refund ? (
+                                                <div className="sm:col-span-2">
+                                                  <label className="text-[9px] font-black text-gray-400 dark:text-gray-500 uppercase block mb-0.5">Refund Reason</label>
+                                                  <input
+                                                    type="text"
+                                                    className="w-full text-xs font-bold text-red-700 dark:text-red-400 bg-white dark:bg-gray-800 border border-red-100 dark:border-gray-700 rounded-md p-1 shadow-inner outline-none focus:ring-1 focus:ring-red-500"
+                                                    value={editingFormInstallmentData.refund_reason || editingFormInstallmentData.duration || ''}
+                                                    onChange={(e) => setEditingFormInstallmentData({ ...editingFormInstallmentData, refund_reason: e.target.value, duration: e.target.value })}
+                                                    placeholder="Enter reason..."
+                                                  />
+                                                </div>
+                                              ) : (
+                                                <>
+                                                  <div>
+                                                    <label className="text-[9px] font-black text-gray-400 dark:text-gray-500 uppercase block mb-0.5">Activation Date</label>
+                                                    <input
+                                                      type="date"
+                                                      className="w-full text-xs font-bold text-teal-700 dark:text-teal-400 bg-white dark:bg-gray-800 border border-teal-100 dark:border-gray-700 rounded-md p-1 font-mono shadow-inner outline-none focus:ring-1 focus:ring-teal-500"
+                                                      value={editingFormInstallmentData.activation_date ? new Date(editingFormInstallmentData.activation_date).toISOString().split('T')[0] : ''}
+                                                      onChange={(e) => setEditingFormInstallmentData({ ...editingFormInstallmentData, activation_date: e.target.value })}
+                                                    />
+                                                  </div>
+                                                  <div>
+                                                    <label className="text-[9px] font-black text-gray-400 dark:text-gray-500 uppercase block mb-0.5">Duration</label>
+                                                    <select
+                                                      className="w-full text-xs font-bold text-teal-700 dark:text-teal-400 bg-white dark:bg-gray-800 border border-teal-100 dark:border-gray-700 rounded-md p-1 font-sans outline-none focus:ring-1 focus:ring-teal-500"
+                                                      value={editingFormInstallmentData.duration}
+                                                      onChange={(e) => setEditingFormInstallmentData({ ...editingFormInstallmentData, duration: e.target.value })}
+                                                    >
+                                                      {DURATIONS.map(d => <option key={d.label} value={d.label}>{d.label}</option>)}
+                                                    </select>
+                                                  </div>
+                                                </>
+                                              )}
                                             </div>
                                             <div className="flex justify-end gap-1.5 mt-2">
                                               <button
@@ -1929,22 +2000,44 @@ export function StudentForm() {
                                         ) : (
                                           <>
                                             <div className="flex flex-wrap items-center gap-x-5 gap-y-1">
-                                              <span className="font-extrabold text-teal-700 bg-teal-50 dark:bg-teal-955/45 px-2 py-0.5 rounded-full text-[10px] uppercase font-mono">
-                                                Bill #{index + 1}
-                                              </span>
-                                              <div>
-                                                <span className="font-bold text-gray-450 mr-1 uppercase text-[9px]">Paid:</span>
-                                                <span className="font-mono font-black text-teal-650 dark:text-teal-400">Rs. {Number(inst.paid_amount || 0).toLocaleString()}</span>
-                                              </div>
-                                              <div>
-                                                <span className="font-bold text-gray-450 mr-1 uppercase text-[9px]">Date:</span>
-                                                <span className="font-bold text-gray-755 dark:text-gray-400">{formatDate(inst.paid_date)}</span>
-                                              </div>
-                                              <div>
-                                                <span className="font-bold text-gray-450 mr-1 uppercase text-[9px]">Duration / Package:</span>
-                                                <span className="font-medium text-gray-700 dark:text-gray-350">{formatDate(inst.activation_date)} to {formatDate(inst.expired_date)}</span>
-                                              </div>
-                                              <span className="text-[9px] font-black bg-teal-50 dark:bg-teal-955 px-1.5 py-0.5 rounded text-teal-600 dark:text-teal-400 uppercase tracking-wider">{inst.duration}</span>
+                                              {Number(inst.paid_amount) < 0 ? (
+                                                <>
+                                                  <span className="font-extrabold text-red-700 bg-red-50 dark:bg-red-955/45 px-2 py-0.5 rounded-full text-[10px] uppercase font-mono flex items-center gap-1">
+                                                    <Minus size={10} /> Refund #{index + 1}
+                                                  </span>
+                                                  <div>
+                                                    <span className="font-bold text-red-450 mr-1 uppercase text-[9px]">Refunded:</span>
+                                                    <span className="font-mono font-black text-red-600 dark:text-red-400">Rs. {Math.abs(Number(inst.paid_amount || 0)).toLocaleString()}</span>
+                                                  </div>
+                                                  <div>
+                                                    <span className="font-bold text-red-450 mr-1 uppercase text-[9px]">Date:</span>
+                                                    <span className="font-bold text-gray-755 dark:text-gray-400">{formatDate(inst.paid_date)}</span>
+                                                  </div>
+                                                  <div className="flex items-center gap-1.5">
+                                                    <span className="font-bold text-red-450 uppercase text-[9px]">Reason:</span>
+                                                    <span className="text-xs font-semibold text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-955 px-2 py-0.5 rounded border border-red-100/30">{inst.refund_reason || inst.duration}</span>
+                                                  </div>
+                                                </>
+                                              ) : (
+                                                <>
+                                                  <span className="font-extrabold text-teal-700 bg-teal-50 dark:bg-teal-955/45 px-2 py-0.5 rounded-full text-[10px] uppercase font-mono">
+                                                    Bill #{index + 1}
+                                                  </span>
+                                                  <div>
+                                                    <span className="font-bold text-gray-450 mr-1 uppercase text-[9px]">Paid:</span>
+                                                    <span className="font-mono font-black text-teal-650 dark:text-teal-400">Rs. {Number(inst.paid_amount || 0).toLocaleString()}</span>
+                                                  </div>
+                                                  <div>
+                                                    <span className="font-bold text-gray-450 mr-1 uppercase text-[9px]">Date:</span>
+                                                    <span className="font-bold text-gray-755 dark:text-gray-400">{formatDate(inst.paid_date)}</span>
+                                                  </div>
+                                                  <div>
+                                                    <span className="font-bold text-gray-450 mr-1 uppercase text-[9px]">Duration / Package:</span>
+                                                    <span className="font-medium text-gray-700 dark:text-gray-350">{formatDate(inst.activation_date)} to {formatDate(inst.expired_date)}</span>
+                                                  </div>
+                                                  <span className="text-[9px] font-black bg-teal-50 dark:bg-teal-955 px-1.5 py-0.5 rounded text-teal-600 dark:text-teal-400 uppercase tracking-wider">{inst.duration}</span>
+                                                </>
+                                              )}
                                             </div>
                                             
                                             <div className="flex items-center gap-1 shrink-0">
@@ -2000,66 +2093,135 @@ export function StudentForm() {
 
                                 {/* Inline Add Installment Form */}
                                 <div className="bg-teal-50/20 dark:bg-teal-955/15 p-4 rounded-2xl border border-teal-100/50 dark:border-teal-900/30 space-y-3 max-w-4xl font-sans animate-fade-in">
-                                  <h5 className="text-[10px] font-black text-teal-855 dark:text-teal-400 uppercase tracking-widest flex items-center gap-1.5 font-sans">
-                                    <Plus size={12} className="text-teal-650" />
-                                    Record Next Installment Payment (2nd, 3rd, etc.)
-                                  </h5>
+                                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-teal-100/30 dark:border-teal-900/20">
+                                    <h5 className="text-[10px] font-black text-teal-855 dark:text-teal-400 uppercase tracking-widest flex items-center gap-1.5 font-sans">
+                                      <Plus size={12} className="text-teal-650" />
+                                      {newFormInstType === 'refund' ? 'Record Refund for this cycle' : 'Record Next Installment Payment'}
+                                    </h5>
+                                    
+                                    {/* Billing vs Refund selector */}
+                                    <div className="flex bg-gray-150 dark:bg-gray-800 p-0.5 rounded-lg border border-gray-250 dark:border-gray-700 w-fit self-end sm:self-auto">
+                                      <button
+                                        type="button"
+                                        onClick={() => setNewFormInstType('billing')}
+                                        className={`px-3 py-1 text-[9px] font-black uppercase tracking-wider rounded-md transition-all ${
+                                          newFormInstType === 'billing'
+                                            ? 'bg-teal-600 text-white shadow-sm'
+                                            : 'text-gray-500 dark:text-gray-400 hover:text-gray-750 dark:hover:text-gray-200'
+                                        }`}
+                                      >
+                                        Billing / Payment
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => setNewFormInstType('refund')}
+                                        className={`px-3 py-1 text-[9px] font-black uppercase tracking-wider rounded-md transition-all ${
+                                          newFormInstType === 'refund'
+                                            ? 'bg-red-600 text-white shadow-sm'
+                                            : 'text-gray-500 dark:text-gray-400 hover:text-gray-750 dark:hover:text-gray-200'
+                                        }`}
+                                      >
+                                        Refund
+                                      </button>
+                                    </div>
+                                  </div>
                                   
                                   <div className="grid grid-cols-1 md:grid-cols-5 gap-3 items-end">
                                     {/* Amount */}
                                     <div className="space-y-1">
-                                      <label className="text-[9px] font-black text-gray-400 dark:text-gray-550 uppercase tracking-wider block">Paid Amount (Rs.)</label>
+                                      <label className="text-[9px] font-black text-gray-400 dark:text-gray-550 uppercase tracking-wider block">
+                                        {newFormInstType === 'refund' ? 'Refund Amount (Rs.)' : 'Paid Amount (Rs.)'}
+                                      </label>
                                       <input 
                                         type="number" 
                                         placeholder="e.g. 5000"
                                         value={newFormInstAmount}
                                         onChange={(e) => setNewFormInstAmount(e.target.value)}
-                                        className="w-full text-xs font-bold text-teal-700 dark:text-teal-400 bg-white dark:bg-gray-850 border border-teal-100 dark:border-gray-700 rounded-lg p-2 font-mono shadow-inner outline-none focus:ring-1 focus:ring-teal-500 font-sans"
+                                        className={`w-full text-xs font-bold bg-white dark:bg-gray-850 border rounded-lg p-2 font-mono shadow-inner outline-none focus:ring-1 font-sans ${
+                                          newFormInstType === 'refund'
+                                            ? 'text-red-700 dark:text-red-400 border-red-100 dark:border-red-900 focus:ring-red-500'
+                                            : 'text-teal-700 dark:text-teal-400 border-teal-100 dark:border-gray-700 focus:ring-teal-500'
+                                        }`}
                                       />
                                     </div>
 
                                     {/* Paid Date */}
                                     <div className="space-y-1">
-                                      <label className="text-[9px] font-black text-gray-400 dark:text-gray-555 uppercase tracking-wider block">Paid Date</label>
+                                      <label className="text-[9px] font-black text-gray-400 dark:text-gray-555 uppercase tracking-wider block">
+                                        {newFormInstType === 'refund' ? 'Refund Date' : 'Paid Date'}
+                                      </label>
                                       <input 
                                         type="date" 
                                         value={newFormInstPaidDate}
                                         onChange={(e) => setNewFormInstPaidDate(e.target.value)}
-                                        className="w-full text-xs font-bold text-teal-700 dark:text-teal-400 bg-white dark:bg-gray-855 border border-teal-100 dark:border-gray-700 rounded-lg p-2 shadow-inner font-sans"
+                                        className={`w-full text-xs font-bold bg-white dark:bg-gray-855 border rounded-lg p-2 shadow-inner font-sans ${
+                                          newFormInstType === 'refund'
+                                            ? 'text-red-700 dark:text-red-400 border-red-100 dark:border-red-900 focus:ring-red-500'
+                                            : 'text-teal-700 dark:text-teal-400 border-teal-100 dark:border-gray-700 focus:ring-teal-500'
+                                        }`}
                                       />
                                     </div>
 
-                                    {/* Activation Date */}
-                                    <div className="space-y-1">
-                                      <label className="text-[9px] font-black text-gray-400 dark:text-gray-555 uppercase tracking-wider block">Activation Date</label>
-                                      <input 
-                                        type="date" 
-                                        value={newFormInstActDate}
-                                        onChange={(e) => setNewFormInstActDate(e.target.value)}
-                                        className="w-full text-xs font-bold text-teal-700 dark:text-teal-400 bg-white dark:bg-gray-855 border border-teal-100 dark:border-gray-700 rounded-lg p-2 shadow-inner font-sans"
-                                      />
-                                    </div>
+                                    {newFormInstType === 'refund' ? (
+                                      /* Refund Reason Input (takes 2 columns) */
+                                      <div className="md:col-span-2 space-y-1">
+                                        <label className="text-[9px] font-black text-gray-400 dark:text-gray-555 uppercase tracking-wider block">Refund Reason</label>
+                                        <input 
+                                          type="text" 
+                                          placeholder="Enter the reason for refund..."
+                                          value={newFormInstRefundReason}
+                                          onChange={(e) => setNewFormInstRefundReason(e.target.value)}
+                                          className="w-full text-xs font-bold text-red-700 dark:text-red-400 bg-white dark:bg-gray-855 border border-red-100 dark:border-red-900 rounded-lg p-2 shadow-inner outline-none focus:ring-1 focus:ring-red-500 font-sans"
+                                        />
+                                      </div>
+                                    ) : (
+                                      <>
+                                        {/* Activation Date */}
+                                        <div className="space-y-1">
+                                          <label className="text-[9px] font-black text-gray-400 dark:text-gray-555 uppercase tracking-wider block">Activation Date</label>
+                                          <input 
+                                            type="date" 
+                                            value={newFormInstActDate}
+                                            onChange={(e) => setNewFormInstActDate(e.target.value)}
+                                            className="w-full text-xs font-bold text-teal-700 dark:text-teal-400 bg-white dark:bg-gray-855 border border-teal-100 dark:border-gray-700 rounded-lg p-2 shadow-inner font-sans"
+                                          />
+                                        </div>
 
-                                    {/* Duration */}
-                                    <div className="space-y-1">
-                                      <label className="text-[9px] font-black text-gray-400 dark:text-gray-555 uppercase tracking-wider block">Duration</label>
-                                      <select
-                                        value={newFormInstDuration}
-                                        onChange={(e) => setNewFormInstDuration(e.target.value)}
-                                        className="w-full text-xs font-bold text-teal-700 dark:text-teal-400 bg-white dark:bg-gray-855 border border-teal-100 dark:border-gray-700 rounded-lg p-2 shadow-inner font-sans"
-                                      >
-                                        {DURATIONS.map(d => <option key={d.label} value={d.label}>{d.label}</option>)}
-                                      </select>
-                                    </div>
+                                        {/* Duration */}
+                                        <div className="space-y-1">
+                                          <label className="text-[9px] font-black text-gray-400 dark:text-gray-555 uppercase tracking-wider block">Duration</label>
+                                          <select
+                                            value={newFormInstDuration}
+                                            onChange={(e) => setNewFormInstDuration(e.target.value)}
+                                            className="w-full text-xs font-bold text-teal-700 dark:text-teal-400 bg-white dark:bg-gray-855 border border-teal-100 dark:border-gray-700 rounded-lg p-2 shadow-inner font-sans"
+                                          >
+                                            {DURATIONS.map(d => <option key={d.label} value={d.label}>{d.label}</option>)}
+                                          </select>
+                                        </div>
+                                      </>
+                                    )}
 
                                     {/* Action */}
                                     <button 
                                       type="button"
                                       onClick={() => handleAddFormInstallment(p.id, idx)}
-                                      className="w-full py-2 px-3 bg-teal-600 hover:bg-teal-700 text-white text-[10px] font-black uppercase tracking-wider rounded-lg shadow-sm hover:shadow transition-all flex items-center justify-center gap-1.5 self-end h-[34px] font-sans"
+                                      className={`w-full py-2 px-3 text-white text-[10px] font-black uppercase tracking-wider rounded-lg shadow-sm hover:shadow transition-all flex items-center justify-center gap-1.5 self-end h-[34px] font-sans ${
+                                        newFormInstType === 'refund'
+                                          ? 'bg-red-600 hover:bg-red-700'
+                                          : 'bg-teal-600 hover:bg-teal-700'
+                                      }`}
                                     >
-                                      <Plus size={14} />
-                                      Add Bill
+                                      {newFormInstType === 'refund' ? (
+                                        <>
+                                          <Trash2 size={14} />
+                                          Record Refund
+                                        </>
+                                      ) : (
+                                        <>
+                                          <Plus size={14} />
+                                          Add Bill
+                                        </>
+                                      )}
                                     </button>
                                   </div>
                                 </div>
@@ -2146,6 +2308,8 @@ export function StudentExplorer() {
   const [newInstPaidDate, setNewInstPaidDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [newInstActDate, setNewInstActDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [newInstDuration, setNewInstDuration] = useState<string>('1 month');
+  const [newInstType, setNewInstType] = useState<'billing' | 'refund'>('billing');
+  const [newInstRefundReason, setNewInstRefundReason] = useState<string>('');
   const [deletingInstallmentId, setDeletingInstallmentId] = useState<string | null>(null);
   const [editingInstallmentId, setEditingInstallmentId] = useState<string | null>(null);
   const [editingInstallmentData, setEditingInstallmentData] = useState<any | null>(null);
@@ -2385,7 +2549,7 @@ export function StudentExplorer() {
       payment: payment.total_amount !== undefined ? payment.total_amount : payment.payment, // Total Fee
       paid_date: payment.paid_date,
       activation_date: payment.activation_date,
-      duration: payment.duration,
+      duration: payment.duration || '1 month',
       expired_date: payment.expired_date
     };
 
@@ -2410,7 +2574,7 @@ export function StudentExplorer() {
       paid_amount: payment.payment,
       paid_date: payment.paid_date,
       activation_date: payment.activation_date,
-      duration: payment.duration,
+      duration: payment.duration || '1 month',
       expired_date: payment.expired_date
     };
 
@@ -2438,20 +2602,36 @@ export function StudentExplorer() {
   };
 
   const handleAddInstallment = async (paymentId: string, pcaid: string) => {
-    const paidAmt = Number(newInstAmount);
+    const isRefund = newInstType === 'refund';
+    let paidAmt = Number(newInstAmount);
     if (!newInstAmount || isNaN(paidAmt) || paidAmt <= 0) {
-      toast.error('Please enter a valid paid amount greater than zero');
+      toast.error(isRefund ? 'Please enter a valid refund amount greater than zero' : 'Please enter a valid paid amount greater than zero');
       return;
     }
 
-    const expDate = calculateExpiry(newInstActDate, newInstDuration);
+    if (isRefund) {
+      paidAmt = -paidAmt; // negate it
+    }
+
+    let durationVal = newInstDuration;
+    if (isRefund) {
+      if (!newInstRefundReason.trim()) {
+        toast.error('Please enter a refund reason');
+        return;
+      }
+      durationVal = newInstRefundReason.trim();
+    }
+
+    const expDate = isRefund ? newInstPaidDate : calculateExpiry(newInstActDate, newInstDuration);
+    const actDate = isRefund ? newInstPaidDate : newInstActDate;
 
     const installmentPayload = {
       payment_id: paymentId,
       paid_amount: paidAmt,
       paid_date: newInstPaidDate,
-      activation_date: newInstActDate,
-      duration: newInstDuration,
+      activation_date: actDate,
+      duration: isRefund ? null : durationVal,
+      refund_reason: isRefund ? durationVal : null,
       expired_date: expDate
     };
 
@@ -2462,16 +2642,18 @@ export function StudentExplorer() {
 
       if (insertError) throw insertError;
 
-      toast.success('Installment added successfully');
+      toast.success(isRefund ? 'Refund recorded successfully' : 'Installment added successfully');
       
-      // Reset amount field
+      // Reset fields
       setNewInstAmount('');
+      setNewInstRefundReason('');
+      setNewInstType('billing');
       
       // Refresh payments for this student
       await fetchStudentPayments(pcaid);
     } catch (err: any) {
       console.error(err);
-      toast.error(err.message || 'Failed to add installment');
+      toast.error(err.message || (isRefund ? 'Failed to record refund' : 'Failed to add installment'));
     }
   };
 
@@ -2495,7 +2677,11 @@ export function StudentExplorer() {
 
   const handleStartEditInstallment = (inst: any) => {
     setEditingInstallmentId(inst.id);
-    setEditingInstallmentData({ ...inst });
+    setEditingInstallmentData({ 
+      ...inst, 
+      paid_amount: Math.abs(inst.paid_amount), 
+      is_refund: inst.paid_amount < 0 
+    });
   };
 
   const handleCancelEditInstallment = () => {
@@ -2505,13 +2691,19 @@ export function StudentExplorer() {
 
   const handleUpdateInstallment = async (pcaid: string) => {
     if (!editingInstallmentData) return;
-    const paidAmt = Number(editingInstallmentData.paid_amount);
+    const isRefund = !!editingInstallmentData.is_refund;
+    let paidAmt = Number(editingInstallmentData.paid_amount);
     if (!editingInstallmentData.paid_amount || isNaN(paidAmt) || paidAmt <= 0) {
-      toast.error('Please enter a valid paid amount greater than zero');
+      toast.error(isRefund ? 'Please enter a valid refund amount greater than zero' : 'Please enter a valid paid amount greater than zero');
       return;
     }
 
-    const expDate = calculateExpiry(editingInstallmentData.activation_date, editingInstallmentData.duration);
+    if (isRefund) {
+      paidAmt = -paidAmt; // negate it
+    }
+
+    const expDate = isRefund ? editingInstallmentData.paid_date : calculateExpiry(editingInstallmentData.activation_date, editingInstallmentData.duration);
+    const actDate = isRefund ? editingInstallmentData.paid_date : editingInstallmentData.activation_date;
 
     try {
       const { error } = await supabase
@@ -2519,21 +2711,22 @@ export function StudentExplorer() {
         .update({
           paid_amount: paidAmt,
           paid_date: editingInstallmentData.paid_date,
-          activation_date: editingInstallmentData.activation_date,
-          duration: editingInstallmentData.duration,
+          activation_date: actDate,
+          duration: isRefund ? null : editingInstallmentData.duration,
+          refund_reason: isRefund ? (editingInstallmentData.refund_reason || editingInstallmentData.duration) : null,
           expired_date: expDate
         })
         .eq('id', editingInstallmentId);
 
       if (error) throw error;
 
-      toast.success('Installment updated successfully');
+      toast.success(isRefund ? 'Refund updated successfully' : 'Installment updated successfully');
       setEditingInstallmentId(null);
       setEditingInstallmentData(null);
       await fetchStudentPayments(pcaid);
     } catch (err: any) {
       console.error(err);
-      toast.error(err.message || 'Failed to update installment');
+      toast.error(err.message || (isRefund ? 'Failed to update refund' : 'Failed to update installment'));
     }
   };
 
@@ -3371,46 +3564,73 @@ export function StudentExplorer() {
                                             {editingInstallmentId === inst.id && editingInstallmentData ? (
                                               <div className="w-full space-y-2">
                                                 <div className="flex items-center gap-1.5 border-b border-gray-150 pb-1 mb-1">
-                                                  <span className="font-black text-teal-700 uppercase text-[10px]">Editing Installment #{index + 1}</span>
+                                                  <span className={`font-black uppercase text-[10px] ${editingInstallmentData.is_refund ? 'text-red-700' : 'text-teal-700'}`}>Editing {editingInstallmentData.is_refund ? 'Refund' : 'Installment'} #{index + 1}</span>
                                                 </div>
                                                 <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 items-end">
                                                   <div>
-                                                    <label className="text-[9px] font-black text-gray-400 dark:text-gray-550 uppercase block mb-0.5">Paid Amount (Rs.)</label>
+                                                    <label className="text-[9px] font-black text-gray-400 dark:text-gray-550 uppercase block mb-0.5">
+                                                      {editingInstallmentData.is_refund ? 'Refund Amount (Rs.)' : 'Paid Amount (Rs.)'}
+                                                    </label>
                                                     <input
                                                       type="number"
-                                                      className="w-full text-xs font-bold text-teal-700 dark:text-teal-400 bg-white dark:bg-gray-800 border border-teal-100 dark:border-gray-700 rounded-md p-1 font-mono shadow-inner outline-none focus:ring-1 focus:ring-teal-500"
+                                                      className={`w-full text-xs font-bold bg-white dark:bg-gray-800 border rounded-md p-1 font-mono shadow-inner outline-none focus:ring-1 ${
+                                                        editingInstallmentData.is_refund 
+                                                          ? 'text-red-700 dark:text-red-400 border-red-100 dark:border-gray-700 focus:ring-red-500' 
+                                                          : 'text-teal-700 dark:text-teal-400 border-teal-100 dark:border-gray-700 focus:ring-teal-500'
+                                                      }`}
                                                       value={editingInstallmentData.paid_amount || ''}
                                                       onChange={(e) => setEditingInstallmentData({ ...editingInstallmentData, paid_amount: e.target.value })}
                                                     />
                                                   </div>
                                                   <div>
-                                                    <label className="text-[9px] font-black text-gray-400 dark:text-gray-555 uppercase block mb-0.5">Paid Date</label>
+                                                    <label className="text-[9px] font-black text-gray-400 dark:text-gray-555 uppercase block mb-0.5">
+                                                      {editingInstallmentData.is_refund ? 'Refund Date' : 'Paid Date'}
+                                                    </label>
                                                     <input
                                                       type="date"
-                                                      className="w-full text-xs font-bold text-teal-700 dark:text-teal-400 bg-white dark:bg-gray-800 border border-teal-100 dark:border-gray-700 rounded-md p-1 font-mono shadow-inner outline-none focus:ring-1 focus:ring-teal-500"
+                                                      className={`w-full text-xs font-bold bg-white dark:bg-gray-800 border rounded-md p-1 font-mono shadow-inner outline-none focus:ring-1 ${
+                                                        editingInstallmentData.is_refund 
+                                                          ? 'text-red-700 dark:text-red-400 border-red-100 dark:border-gray-700 focus:ring-red-500' 
+                                                          : 'text-teal-700 dark:text-teal-400 border-teal-100 dark:border-gray-700 focus:ring-teal-500'
+                                                      }`}
                                                       value={editingInstallmentData.paid_date ? new Date(editingInstallmentData.paid_date).toISOString().split('T')[0] : ''}
                                                       onChange={(e) => setEditingInstallmentData({ ...editingInstallmentData, paid_date: e.target.value })}
                                                     />
                                                   </div>
-                                                  <div>
-                                                    <label className="text-[9px] font-black text-gray-400 dark:text-gray-555 uppercase block mb-0.5">Activation Date</label>
-                                                    <input
-                                                      type="date"
-                                                      className="w-full text-xs font-bold text-teal-700 dark:text-teal-400 bg-white dark:bg-gray-800 border border-teal-100 dark:border-gray-700 rounded-md p-1 font-mono shadow-inner outline-none focus:ring-1 focus:ring-teal-500"
-                                                      value={editingInstallmentData.activation_date ? new Date(editingInstallmentData.activation_date).toISOString().split('T')[0] : ''}
-                                                      onChange={(e) => setEditingInstallmentData({ ...editingInstallmentData, activation_date: e.target.value })}
-                                                    />
-                                                  </div>
-                                                  <div>
-                                                    <label className="text-[9px] font-black text-gray-400 dark:text-gray-555 uppercase block mb-0.5">Duration</label>
-                                                    <select
-                                                      className="w-full text-xs font-bold text-teal-700 dark:text-teal-400 bg-white dark:bg-gray-800 border border-teal-100 dark:border-gray-700 rounded-md p-1 font-sans outline-none focus:ring-1 focus:ring-teal-500"
-                                                      value={editingInstallmentData.duration}
-                                                      onChange={(e) => setEditingInstallmentData({ ...editingInstallmentData, duration: e.target.value })}
-                                                    >
-                                                      {DURATIONS.map(d => <option key={d.label} value={d.label}>{d.label}</option>)}
-                                                    </select>
-                                                  </div>
+                                                  {editingInstallmentData.is_refund ? (
+                                                    <div className="sm:col-span-2">
+                                                      <label className="text-[9px] font-black text-gray-400 dark:text-gray-555 uppercase block mb-0.5">Refund Reason</label>
+                                                      <input
+                                                        type="text"
+                                                        className="w-full text-xs font-bold text-red-700 dark:text-red-400 bg-white dark:bg-gray-800 border border-red-100 dark:border-gray-700 rounded-md p-1 shadow-inner outline-none focus:ring-1 focus:ring-red-500"
+                                                        value={editingInstallmentData.refund_reason || editingInstallmentData.duration || ''}
+                                                        onChange={(e) => setEditingInstallmentData({ ...editingInstallmentData, refund_reason: e.target.value, duration: e.target.value })}
+                                                        placeholder="Enter reason..."
+                                                      />
+                                                    </div>
+                                                  ) : (
+                                                    <>
+                                                      <div>
+                                                        <label className="text-[9px] font-black text-gray-400 dark:text-gray-555 uppercase block mb-0.5">Activation Date</label>
+                                                        <input
+                                                          type="date"
+                                                          className="w-full text-xs font-bold text-teal-700 dark:text-teal-400 bg-white dark:bg-gray-800 border border-teal-100 dark:border-gray-700 rounded-md p-1 font-mono shadow-inner outline-none focus:ring-1 focus:ring-teal-500"
+                                                          value={editingInstallmentData.activation_date ? new Date(editingInstallmentData.activation_date).toISOString().split('T')[0] : ''}
+                                                          onChange={(e) => setEditingInstallmentData({ ...editingInstallmentData, activation_date: e.target.value })}
+                                                        />
+                                                      </div>
+                                                      <div>
+                                                        <label className="text-[9px] font-black text-gray-400 dark:text-gray-555 uppercase block mb-0.5">Duration</label>
+                                                        <select
+                                                          className="w-full text-xs font-bold text-teal-700 dark:text-teal-400 bg-white dark:bg-gray-800 border border-teal-100 dark:border-gray-700 rounded-md p-1 font-sans outline-none focus:ring-1 focus:ring-teal-500"
+                                                          value={editingInstallmentData.duration}
+                                                          onChange={(e) => setEditingInstallmentData({ ...editingInstallmentData, duration: e.target.value })}
+                                                        >
+                                                          {DURATIONS.map(d => <option key={d.label} value={d.label}>{d.label}</option>)}
+                                                        </select>
+                                                      </div>
+                                                    </>
+                                                  )}
                                                 </div>
                                                 <div className="flex justify-end gap-1.5 mt-2">
                                                   <button
@@ -3432,22 +3652,44 @@ export function StudentExplorer() {
                                             ) : (
                                               <>
                                                 <div className="flex flex-wrap items-center gap-x-5 gap-y-1">
-                                                  <span className="font-extrabold text-teal-700 bg-teal-50 dark:bg-teal-955/45 px-2 py-0.5 rounded-full text-[10px] uppercase font-mono">
-                                                    Bill #{index + 1}
-                                                  </span>
-                                                  <div>
-                                                    <span className="font-bold text-gray-400 mr-1 uppercase text-[9px]">Paid:</span>
-                                                    <span className="font-mono font-black text-teal-650 dark:text-teal-400">Rs. {Number(inst.paid_amount || 0).toLocaleString()}</span>
-                                                  </div>
-                                                  <div>
-                                                    <span className="font-bold text-gray-400 mr-1 uppercase text-[9px]">Date:</span>
-                                                    <span className="font-bold text-gray-755 dark:text-gray-300">{formatDate(inst.paid_date)}</span>
-                                                  </div>
-                                                  <div>
-                                                    <span className="font-bold text-gray-400 mr-1 uppercase text-[9px]">Duration / Package:</span>
-                                                    <span className="font-medium text-gray-700 dark:text-gray-350">{formatDate(inst.activation_date)} to {formatDate(inst.expired_date)}</span>
-                                                  </div>
-                                                  <span className="text-[9px] font-black bg-teal-50 dark:bg-teal-955 px-1.5 py-0.5 rounded text-teal-600 dark:text-teal-400 uppercase tracking-wider">{inst.duration}</span>
+                                                  {Number(inst.paid_amount) < 0 ? (
+                                                    <>
+                                                      <span className="font-extrabold text-red-700 bg-red-50 dark:bg-red-955/45 px-2 py-0.5 rounded-full text-[10px] uppercase font-mono flex items-center gap-1">
+                                                        <Minus size={10} /> Refund #{index + 1}
+                                                      </span>
+                                                      <div>
+                                                        <span className="font-bold text-red-450 mr-1 uppercase text-[9px]">Refunded:</span>
+                                                        <span className="font-mono font-black text-red-600 dark:text-red-400">Rs. {Math.abs(Number(inst.paid_amount || 0)).toLocaleString()}</span>
+                                                      </div>
+                                                      <div>
+                                                        <span className="font-bold text-red-450 mr-1 uppercase text-[9px]">Date:</span>
+                                                        <span className="font-bold text-gray-755 dark:text-gray-300">{formatDate(inst.paid_date)}</span>
+                                                      </div>
+                                                      <div className="flex items-center gap-1.5">
+                                                        <span className="font-bold text-red-450 uppercase text-[9px]">Reason:</span>
+                                                        <span className="text-xs font-semibold text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-955 px-2 py-0.5 rounded border border-red-100/30">{inst.refund_reason || inst.duration}</span>
+                                                      </div>
+                                                    </>
+                                                  ) : (
+                                                    <>
+                                                      <span className="font-extrabold text-teal-700 bg-teal-50 dark:bg-teal-955/45 px-2 py-0.5 rounded-full text-[10px] uppercase font-mono">
+                                                        Bill #{index + 1}
+                                                      </span>
+                                                      <div>
+                                                        <span className="font-bold text-gray-400 mr-1 uppercase text-[9px]">Paid:</span>
+                                                        <span className="font-mono font-black text-teal-650 dark:text-teal-400">Rs. {Number(inst.paid_amount || 0).toLocaleString()}</span>
+                                                      </div>
+                                                      <div>
+                                                        <span className="font-bold text-gray-400 mr-1 uppercase text-[9px]">Date:</span>
+                                                        <span className="font-bold text-gray-755 dark:text-gray-300">{formatDate(inst.paid_date)}</span>
+                                                      </div>
+                                                      <div>
+                                                        <span className="font-bold text-gray-400 mr-1 uppercase text-[9px]">Duration / Package:</span>
+                                                        <span className="font-medium text-gray-700 dark:text-gray-350">{formatDate(inst.activation_date)} to {formatDate(inst.expired_date)}</span>
+                                                      </div>
+                                                      <span className="text-[9px] font-black bg-teal-50 dark:bg-teal-955 px-1.5 py-0.5 rounded text-teal-600 dark:text-teal-400 uppercase tracking-wider">{inst.duration}</span>
+                                                    </>
+                                                  )}
                                                 </div>
                                                 
                                                 <div className="flex items-center gap-1 shrink-0">
@@ -3498,66 +3740,135 @@ export function StudentExplorer() {
                                     )}
 
                                     {/* Inline Add Installment Form */}
-                                    <div className="bg-teal-50/20 dark:bg-teal-950/15 p-4 rounded-2xl border border-teal-100/50 dark:border-teal-900/30 space-y-3 max-w-4xl">
-                                      <h5 className="text-[10px] font-black text-teal-850 dark:text-teal-400 uppercase tracking-widest flex items-center gap-1.5">
-                                        <Plus size={12} className="text-teal-650" />
-                                        Record Next Installment Payment (2nd, 3rd, etc.)
-                                      </h5>
+                                    <div className="bg-teal-50/20 dark:bg-teal-955/15 p-4 rounded-2xl border border-teal-100/50 dark:border-teal-900/30 space-y-3 max-w-4xl">
+                                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-teal-100/30 dark:border-teal-900/20">
+                                        <h5 className="text-[10px] font-black text-teal-850 dark:text-teal-400 uppercase tracking-widest flex items-center gap-1.5 font-sans">
+                                          <Plus size={12} className="text-teal-650" />
+                                          {newInstType === 'refund' ? 'Record Refund for this cycle' : 'Record Next Installment Payment'}
+                                        </h5>
+                                        
+                                        {/* Billing vs Refund selector */}
+                                        <div className="flex bg-gray-150 dark:bg-gray-800 p-0.5 rounded-lg border border-gray-200 dark:border-gray-700 w-fit self-end sm:self-auto">
+                                          <button
+                                            type="button"
+                                            onClick={() => setNewInstType('billing')}
+                                            className={`px-3 py-1 text-[9px] font-black uppercase tracking-wider rounded-md transition-all ${
+                                              newInstType === 'billing'
+                                                ? 'bg-teal-600 text-white shadow-sm'
+                                                : 'text-gray-500 dark:text-gray-400 hover:text-gray-750 dark:hover:text-gray-200'
+                                            }`}
+                                          >
+                                            Billing / Payment
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => setNewInstType('refund')}
+                                            className={`px-3 py-1 text-[9px] font-black uppercase tracking-wider rounded-md transition-all ${
+                                              newInstType === 'refund'
+                                                ? 'bg-red-600 text-white shadow-sm'
+                                                : 'text-gray-500 dark:text-gray-400 hover:text-gray-750 dark:hover:text-gray-200'
+                                            }`}
+                                          >
+                                            Refund
+                                          </button>
+                                        </div>
+                                      </div>
                                       
                                       <div className="grid grid-cols-1 md:grid-cols-5 gap-3 items-end">
                                         {/* Amount */}
                                         <div className="space-y-1">
-                                          <label className="text-[9px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-wider block">Paid Amount (Rs.)</label>
+                                          <label className="text-[9px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-wider block">
+                                            {newInstType === 'refund' ? 'Refund Amount (Rs.)' : 'Paid Amount (Rs.)'}
+                                          </label>
                                           <input 
                                             type="number" 
                                             placeholder="e.g. 5000"
                                             value={newInstAmount}
                                             onChange={(e) => setNewInstAmount(e.target.value)}
-                                            className="w-full text-xs font-bold text-teal-700 dark:text-teal-400 bg-white dark:bg-gray-850 border border-teal-100 dark:border-gray-700 rounded-lg p-2 font-mono shadow-inner outline-none focus:ring-1 focus:ring-teal-500 font-sans"
+                                            className={`w-full text-xs font-bold bg-white dark:bg-gray-850 border rounded-lg p-2 font-mono shadow-inner outline-none focus:ring-1 font-sans ${
+                                              newInstType === 'refund'
+                                                ? 'text-red-700 dark:text-red-400 border-red-100 dark:border-red-900 focus:ring-red-500'
+                                                : 'text-teal-700 dark:text-teal-400 border-teal-100 dark:border-gray-700 focus:ring-teal-500'
+                                            }`}
                                           />
                                         </div>
 
                                         {/* Paid Date */}
                                         <div className="space-y-1">
-                                          <label className="text-[9px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-wider block">Paid Date</label>
+                                          <label className="text-[9px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-wider block">
+                                            {newInstType === 'refund' ? 'Refund Date' : 'Paid Date'}
+                                          </label>
                                           <input 
                                             type="date" 
                                             value={newInstPaidDate}
                                             onChange={(e) => setNewInstPaidDate(e.target.value)}
-                                            className="w-full text-xs font-bold text-teal-700 dark:text-teal-400 bg-white dark:bg-gray-850 border border-teal-100 dark:border-gray-700 rounded-lg p-2 shadow-inner font-sans"
+                                            className={`w-full text-xs font-bold bg-white dark:bg-gray-850 border rounded-lg p-2 shadow-inner font-sans ${
+                                              newInstType === 'refund'
+                                                ? 'text-red-700 dark:text-red-400 border-red-100 dark:border-red-900 focus:ring-red-500'
+                                                : 'text-teal-700 dark:text-teal-400 border-teal-100 dark:border-gray-700 focus:ring-teal-500'
+                                            }`}
                                           />
                                         </div>
 
-                                        {/* Activation Date */}
-                                        <div className="space-y-1">
-                                          <label className="text-[9px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-wider block">Activation Date</label>
-                                          <input 
-                                            type="date" 
-                                            value={newInstActDate}
-                                            onChange={(e) => setNewInstActDate(e.target.value)}
-                                            className="w-full text-xs font-bold text-teal-700 dark:text-teal-400 bg-white dark:bg-gray-850 border border-teal-100 dark:border-gray-700 rounded-lg p-2 shadow-inner font-sans"
-                                          />
-                                        </div>
+                                        {newInstType === 'refund' ? (
+                                          /* Refund Reason Input (takes 2 columns) */
+                                          <div className="md:col-span-2 space-y-1">
+                                            <label className="text-[9px] font-black text-gray-400 dark:text-gray-550 uppercase tracking-wider block">Refund Reason</label>
+                                            <input 
+                                              type="text" 
+                                              placeholder="Enter the reason for refund..."
+                                              value={newInstRefundReason}
+                                              onChange={(e) => setNewInstRefundReason(e.target.value)}
+                                              className="w-full text-xs font-bold text-red-700 dark:text-red-400 bg-white dark:bg-gray-850 border border-red-100 dark:border-red-900 rounded-lg p-2 shadow-inner outline-none focus:ring-1 focus:ring-red-500 font-sans"
+                                            />
+                                          </div>
+                                        ) : (
+                                          <>
+                                            {/* Activation Date */}
+                                            <div className="space-y-1">
+                                              <label className="text-[9px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-wider block">Activation Date</label>
+                                              <input 
+                                                type="date" 
+                                                value={newInstActDate}
+                                                onChange={(e) => setNewInstActDate(e.target.value)}
+                                                className="w-full text-xs font-bold text-teal-700 dark:text-teal-400 bg-white dark:bg-gray-850 border border-teal-100 dark:border-gray-700 rounded-lg p-2 shadow-inner font-sans"
+                                              />
+                                            </div>
 
-                                        {/* Duration */}
-                                        <div className="space-y-1">
-                                          <label className="text-[9px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-wider block">Duration</label>
-                                          <select
-                                            value={newInstDuration}
-                                            onChange={(e) => setNewInstDuration(e.target.value)}
-                                            className="w-full text-xs font-bold text-teal-700 dark:text-teal-400 bg-white dark:bg-gray-850 border border-teal-100 dark:border-gray-700 rounded-lg p-2 shadow-inner font-sans"
-                                          >
-                                            {DURATIONS.map(d => <option key={d.label} value={d.label}>{d.label}</option>)}
-                                          </select>
-                                        </div>
+                                            {/* Duration */}
+                                            <div className="space-y-1">
+                                              <label className="text-[9px] font-black text-gray-400 dark:text-gray-550 uppercase tracking-wider block">Duration</label>
+                                              <select
+                                                value={newInstDuration}
+                                                onChange={(e) => setNewInstDuration(e.target.value)}
+                                                className="w-full text-xs font-bold text-teal-700 dark:text-teal-400 bg-white dark:bg-gray-850 border border-teal-100 dark:border-gray-700 rounded-lg p-2 shadow-inner font-sans"
+                                              >
+                                                {DURATIONS.map(d => <option key={d.label} value={d.label}>{d.label}</option>)}
+                                              </select>
+                                            </div>
+                                          </>
+                                        )}
 
                                         {/* Action */}
                                         <button 
                                           onClick={() => handleAddInstallment(p.id, p.pcaid)}
-                                          className="w-full py-2 px-3 bg-teal-600 hover:bg-teal-700 text-white text-[10px] font-black uppercase tracking-wider rounded-lg shadow-sm hover:shadow transition-all flex items-center justify-center gap-1.5 self-end h-[34px] font-sans"
+                                          className={`w-full py-2 px-3 text-white text-[10px] font-black uppercase tracking-wider rounded-lg shadow-sm hover:shadow transition-all flex items-center justify-center gap-1.5 self-end h-[34px] font-sans ${
+                                            newInstType === 'refund'
+                                              ? 'bg-red-600 hover:bg-red-700'
+                                              : 'bg-teal-600 hover:bg-teal-700'
+                                          }`}
                                         >
-                                          <Plus size={14} />
-                                          Add Bill
+                                          {newInstType === 'refund' ? (
+                                            <>
+                                              <Trash2 size={14} />
+                                              Record Refund
+                                            </>
+                                          ) : (
+                                            <>
+                                              <Plus size={14} />
+                                              Add Bill
+                                            </>
+                                          )}
                                         </button>
                                       </div>
                                     </div>
