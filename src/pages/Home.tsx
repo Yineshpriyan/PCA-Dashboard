@@ -344,31 +344,41 @@ export default function Home() {
               </div>
 
               {stat.title === "Total Students" && !loading && (
-                <div className="mt-4 pt-3 border-t border-gray-100 dark:border-gray-800/60 grid grid-cols-3 gap-2">
-                  <div>
-                    <span className="text-[10px] text-gray-400 dark:text-gray-500 uppercase font-bold tracking-wider block mb-0.5">{new Date().getFullYear()} Batch</span>
-                    <span className="text-sm font-bold text-teal-600 dark:text-teal-400">{stats.studentsThisYear}</span>
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-gray-400 dark:text-gray-500 uppercase font-bold tracking-wider block mb-0.5">{new Date().getFullYear() + 1} Batch</span>
-                    <span className="text-sm font-bold text-sky-600 dark:text-sky-400">{stats.studentsNextYear}</span>
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-gray-400 dark:text-gray-500 uppercase font-bold tracking-wider block mb-0.5">{new Date().getFullYear() + 2} Batch</span>
-                    <span className="text-sm font-bold text-indigo-600 dark:text-indigo-400">{stats.studentsYearAfterNext}</span>
+                <div className="mt-5 p-3.5 rounded-xl border border-gray-150 dark:border-gray-800 bg-gray-50/40 dark:bg-gray-850/10">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-gray-400 dark:text-gray-500 block mb-2.5">
+                    Batch Enrollment Breakdown
+                  </span>
+                  <div className="grid grid-cols-3 gap-2.5">
+                    <div className="bg-white dark:bg-gray-900 border border-teal-100 dark:border-teal-900/40 rounded-lg p-2.5 shadow-3xs hover:shadow-2xs transition-all flex flex-col items-center justify-center text-center">
+                      <span className="text-[9px] text-teal-650 dark:text-teal-400 uppercase font-black tracking-wider block mb-1">{new Date().getFullYear()} Batch</span>
+                      <span className="text-xl font-black text-teal-600 dark:text-teal-400 font-mono leading-none">{stats.studentsThisYear}</span>
+                    </div>
+                    <div className="bg-white dark:bg-gray-900 border border-sky-100 dark:border-sky-900/40 rounded-lg p-2.5 shadow-3xs hover:shadow-2xs transition-all flex flex-col items-center justify-center text-center">
+                      <span className="text-[9px] text-sky-650 dark:text-sky-400 uppercase font-black tracking-wider block mb-1">{new Date().getFullYear() + 1} Batch</span>
+                      <span className="text-xl font-black text-sky-600 dark:text-sky-400 font-mono leading-none">{stats.studentsNextYear}</span>
+                    </div>
+                    <div className="bg-white dark:bg-gray-900 border border-indigo-100 dark:border-indigo-900/40 rounded-lg p-2.5 shadow-3xs hover:shadow-2xs transition-all flex flex-col items-center justify-center text-center">
+                      <span className="text-[9px] text-indigo-650 dark:text-indigo-400 uppercase font-black tracking-wider block mb-1">{new Date().getFullYear() + 2} Batch</span>
+                      <span className="text-xl font-black text-indigo-600 dark:text-indigo-400 font-mono leading-none">{stats.studentsYearAfterNext}</span>
+                    </div>
                   </div>
                 </div>
               )}
 
               {stat.title === "Total Revenue" && !loading && (
-                <div className="mt-4 pt-3 border-t border-gray-100 dark:border-gray-800/60 grid grid-cols-2 gap-4">
-                  <div>
-                    <span className="text-[10px] text-gray-400 dark:text-gray-500 uppercase font-bold tracking-wider block mb-0.5">Class Fees</span>
-                    <span className="text-sm font-bold text-teal-600 dark:text-teal-400">{formatCurrency(stats.classIncome)}</span>
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-gray-400 dark:text-gray-500 uppercase font-bold tracking-wider block mb-0.5">Package Sales</span>
-                    <span className="text-sm font-bold text-sky-600 dark:text-sky-400">{formatCurrency(stats.packageIncome)}</span>
+                <div className="mt-5 p-3.5 rounded-xl border border-gray-150 dark:border-gray-800 bg-gray-50/40 dark:bg-gray-850/10">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-gray-400 dark:text-gray-500 block mb-2.5">
+                    Revenue Stream Breakdown
+                  </span>
+                  <div className="grid grid-cols-2 gap-2.5">
+                    <div className="bg-white dark:bg-gray-900 border border-teal-100 dark:border-teal-900/40 rounded-lg p-2.5 shadow-3xs hover:shadow-2xs transition-all flex flex-col items-center justify-center text-center">
+                      <span className="text-[9px] text-teal-650 dark:text-teal-400 uppercase font-black tracking-wider block mb-1">Class Fees</span>
+                      <span className="text-sm sm:text-[15px] font-black text-teal-600 dark:text-teal-400 font-mono leading-none">{formatCurrency(stats.classIncome)}</span>
+                    </div>
+                    <div className="bg-white dark:bg-gray-900 border border-sky-100 dark:border-sky-900/40 rounded-lg p-2.5 shadow-3xs hover:shadow-2xs transition-all flex flex-col items-center justify-center text-center">
+                      <span className="text-[9px] text-sky-650 dark:text-sky-400 uppercase font-black tracking-wider block mb-1">Package Sales</span>
+                      <span className="text-sm sm:text-[15px] font-black text-sky-600 dark:text-sky-400 font-mono leading-none">{formatCurrency(stats.packageIncome)}</span>
+                    </div>
                   </div>
                 </div>
               )}
@@ -535,7 +545,7 @@ export default function Home() {
             </p>
           </div>
 
-          <div className="flex items-center justify-center py-6">
+          <div className="flex flex-col md:flex-row items-center justify-center gap-10 md:gap-16 py-6">
             <div className="h-80 w-80 relative flex-shrink-0">
               {loading ? (
                 <div className="w-full h-full flex items-center justify-center text-xs text-gray-400">
@@ -577,6 +587,31 @@ export default function Home() {
                 </div>
               )}
             </div>
+
+            {/* Responsive, Scrollable Custom Legend Outside the Pie Chart */}
+            {!loading && districtDistribution.length > 0 && (
+              <div className="flex-1 max-w-xl w-full">
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-2 gap-x-6 gap-y-3 max-h-[280px] overflow-y-auto pr-3 scrollbar-thin scrollbar-thumb-gray-200 dark:scrollbar-thumb-gray-800">
+                  {districtDistribution.map((entry, index) => (
+                    <div 
+                      key={entry.name} 
+                      className="flex items-center gap-2.5 text-xs py-1.5 px-3 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-850/50 transition-colors border border-transparent hover:border-gray-100 dark:hover:border-gray-800"
+                    >
+                      <span 
+                        className="w-3 h-3 rounded-full flex-shrink-0 shadow-sm" 
+                        style={{ backgroundColor: DISTRICT_COLORS[index % DISTRICT_COLORS.length] }} 
+                      />
+                      <span className="font-semibold text-gray-650 dark:text-gray-400 truncate" title={entry.name}>
+                        {entry.name}
+                      </span>
+                      <span className="font-extrabold text-gray-900 dark:text-white ml-auto font-mono bg-gray-50 dark:bg-gray-850 px-2 py-0.5 rounded-md border border-gray-100 dark:border-gray-800/60 text-[11px]">
+                        {entry.value}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </motion.div>
       </div>
