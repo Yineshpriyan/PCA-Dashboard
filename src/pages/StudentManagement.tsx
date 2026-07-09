@@ -178,6 +178,20 @@ export function StudentForm() {
   const [isGeneratingPcaId, setIsGeneratingPcaId] = useState(false);
   const [latestGeneratedPcaId, setLatestGeneratedPcaId] = useState<string | null>(null);
 
+  const getInitialStudentType = (): 'Paid' | 'Scholarship' => {
+    const pcaid = editStudent?.pcaid || leadData?.pcaid || '';
+    if (pcaid && pcaid.length >= 3) {
+      const last3 = pcaid.slice(-3);
+      const num = parseInt(last3, 10);
+      if (!isNaN(num) && num >= 900 && num <= 999) {
+        return 'Scholarship';
+      }
+    }
+    return 'Paid';
+  };
+
+  const [studentType, setStudentType] = useState<'Paid' | 'Scholarship'>(getInitialStudentType);
+
   // Duplicate alert modal state
   const [showDuplicateAlert, setShowDuplicateAlert] = useState(false);
   const [existingStudentName, setExistingStudentName] = useState('');
@@ -257,20 +271,67 @@ export function StudentForm() {
 
       // 8th, 9th, 10th character - last ID
       let dbLastId = 0;
+      if (studentType === 'Scholarship') {
+        dbLastId = 899; // Defaults to starting from 900
+      }
+
       const { data, error } = await supabase
         .from('last_pca_id')
-        .select('last_id')
+        .select('last_id, last_scholarship_id')
         .eq('joined_batch', studentData.joined_batch)
         .eq('district_code', districtCode)
         .maybeSingle();
 
       if (error) {
         console.error('Error fetching sequential PCA ID from DB:', error);
-      } else if (data && typeof data.last_id === 'number') {
-        dbLastId = data.last_id;
+      } else if (data) {
+        if (studentType === 'Scholarship') {
+          if ('last_scholarship_id' in data && typeof data.last_scholarship_id === 'number') {
+            dbLastId = data.last_scholarship_id;
+          } else {
+            // Fallback to old _sch district_code if column is missing/undefined in returned data
+            const { data: oldSchData } = await supabase
+              .from('last_pca_id')
+              .select('last_id')
+              .eq('joined_batch', studentData.joined_batch)
+              .eq('district_code', districtCode + '_sch')
+              .maybeSingle();
+            if (oldSchData && typeof oldSchData.last_id === 'number') {
+              dbLastId = oldSchData.last_id;
+            }
+          }
+        } else {
+          if (typeof data.last_id === 'number') {
+            dbLastId = data.last_id;
+          }
+        }
+      } else if (studentType === 'Scholarship') {
+        // Fallback to old _sch district_code if main row not found and is scholarship
+        const { data: oldSchData } = await supabase
+          .from('last_pca_id')
+          .select('last_id')
+          .eq('joined_batch', studentData.joined_batch)
+          .eq('district_code', districtCode + '_sch')
+          .maybeSingle();
+        if (oldSchData && typeof oldSchData.last_id === 'number') {
+          dbLastId = oldSchData.last_id;
+        }
       }
 
       const nextId = dbLastId + 1;
+
+      // Limit checking based on student type
+      if (studentType === 'Paid' && nextId > 899) {
+        toast.error('IDs are full (Maximum of 899 Paid student IDs reached)');
+        setIsGeneratingPcaId(false);
+        return;
+      }
+      if (studentType === 'Scholarship' && nextId > 999) {
+        toast.error('IDs are full (Maximum of 999 Scholarship student IDs reached)');
+        setIsGeneratingPcaId(false);
+        return;
+      }
+
       let lastIdStr = '';
       if (String(nextId).length === 2) {
         lastIdStr = '0' + nextId;
@@ -453,6 +514,17 @@ export function StudentForm() {
         batch_type: s.batch_type || '',
         gender: s.gender || ''
       });
+      if (s.pcaid && s.pcaid.length >= 3) {
+        const last3 = s.pcaid.slice(-3);
+        const num = parseInt(last3, 10);
+        if (!isNaN(num) && num >= 900 && num <= 999) {
+          setStudentType('Scholarship');
+        } else {
+          setStudentType('Paid');
+        }
+      } else {
+        setStudentType('Paid');
+      }
       toast.success('Details grabbed successfully!');
     }
   };
@@ -911,32 +983,88 @@ export function StudentForm() {
             finalDistrictCode = digitsOnly.padStart(2, '0');
           }
 
+          // Determine if it is a scholarship or paid sequence based on the actual PCA ID digits
+          let isScholarshipSeq = false;
+          const pcaidSuffix = studentData.pcaid.slice(-3);
+          const last3Val = parseInt(pcaidSuffix, 10);
+          if (!isNaN(last3Val) && last3Val >= 900 && last3Val <= 999) {
+            isScholarshipSeq = true;
+          }
+
           if (studentData.joined_batch && finalDistrictCode) {
-            const { data: existingRecord } = await supabase
+            // First fetch the record with plain district code to check for the new column
+            const { data: existingPlain } = await supabase
               .from('last_pca_id')
               .select('*')
               .eq('joined_batch', studentData.joined_batch)
               .eq('district_code', finalDistrictCode)
               .maybeSingle();
 
-            const dbLastId = existingRecord ? (existingRecord.last_id || 0) : 0;
-            // Calculate final value by adding 1 to the current db record
-            const finalValue = dbLastId + 1;
+            const hasScholarshipColumn = existingPlain && ('last_scholarship_id' in existingPlain);
 
-            if (existingRecord) {
-              await supabase
+            if (isScholarshipSeq && !hasScholarshipColumn) {
+              // Fallback to the old '_sch' district code logic if the database hasn't been migrated yet
+              const oldSchCode = finalDistrictCode + '_sch';
+              const { data: existingOldSch } = await supabase
                 .from('last_pca_id')
-                .update({ last_id: finalValue })
+                .select('*')
                 .eq('joined_batch', studentData.joined_batch)
-                .eq('district_code', finalDistrictCode);
+                .eq('district_code', oldSchCode)
+                .maybeSingle();
+
+              const finalValue = !isNaN(last3Val) ? last3Val : ((existingOldSch ? (existingOldSch.last_id || 899) : 899) + 1);
+
+              if (existingOldSch) {
+                await supabase
+                  .from('last_pca_id')
+                  .update({ last_id: finalValue })
+                  .eq('joined_batch', studentData.joined_batch)
+                  .eq('district_code', oldSchCode);
+              } else {
+                await supabase
+                  .from('last_pca_id')
+                  .insert({
+                    joined_batch: studentData.joined_batch,
+                    district_code: oldSchCode,
+                    last_id: finalValue
+                  });
+              }
             } else {
-              await supabase
-                .from('last_pca_id')
-                .insert({
+              // Use the unified single-row approach with last_id or last_scholarship_id
+              const finalValue = !isNaN(last3Val) ? last3Val : (
+                isScholarshipSeq
+                  ? ((existingPlain ? (existingPlain.last_scholarship_id || 899) : 899) + 1)
+                  : ((existingPlain ? (existingPlain.last_id || 0) : 0) + 1)
+              );
+
+              if (existingPlain) {
+                const updatePayload: any = {};
+                if (isScholarshipSeq) {
+                  updatePayload.last_scholarship_id = finalValue;
+                } else {
+                  updatePayload.last_id = finalValue;
+                }
+                await supabase
+                  .from('last_pca_id')
+                  .update(updatePayload)
+                  .eq('joined_batch', studentData.joined_batch)
+                  .eq('district_code', finalDistrictCode);
+              } else {
+                const insertPayload: any = {
                   joined_batch: studentData.joined_batch,
                   district_code: finalDistrictCode,
-                  last_id: finalValue
-                });
+                };
+                if (isScholarshipSeq) {
+                  insertPayload.last_scholarship_id = finalValue;
+                  insertPayload.last_id = 0;
+                } else {
+                  insertPayload.last_id = finalValue;
+                  insertPayload.last_scholarship_id = 899;
+                }
+                await supabase
+                  .from('last_pca_id')
+                  .insert(insertPayload);
+              }
             }
           }
           setLatestGeneratedPcaId(null);
@@ -1191,6 +1319,7 @@ export function StudentForm() {
       } else {
         // Clear all
         setStudentData({ pcaid: '', name: '', phone: '', stream: '', proper_batch: '', joined_batch: '', school: '', district: '', mail: '', address: '', asked_class_type: '', asked_package_type: '', batch_type: '', gender: '' });
+        setStudentType('Paid');
         setTempPayments([]);
       }
     } catch (err: any) {
@@ -1314,30 +1443,45 @@ export function StudentForm() {
           <div className="flex flex-col gap-1.5">
             <label className="text-sm font-semibold text-gray-700">PCA ID</label>
             <div className="flex flex-col gap-2">
-              <input
-                type="text"
-                value={studentData.pcaid}
-                onChange={(e) => setStudentData({ ...studentData, pcaid: e.target.value.toUpperCase() })}
-                className="w-36 px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg font-mono text-base focus:outline-none focus:ring-2 focus:ring-teal-500/20"
-                placeholder="PCA-XXXX"
-              />
               <div className="flex items-center gap-2">
-                <button 
-                  type="button"
-                  onClick={handleGenerateTempId}
-                  disabled={isGeneratingTempId}
-                  className="inline-flex items-center justify-center px-3 py-1.5 bg-teal-50 hover:bg-teal-100/80 active:bg-teal-200 text-teal-700 border border-teal-100 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all disabled:opacity-50 cursor-pointer text-center h-[32px] whitespace-nowrap"
+                <input
+                  type="text"
+                  value={studentData.pcaid}
+                  onChange={(e) => setStudentData({ ...studentData, pcaid: e.target.value.toUpperCase() })}
+                  className="w-36 px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg font-mono text-base focus:outline-none focus:ring-2 focus:ring-teal-500/20"
+                  placeholder="PCA-XXXX"
+                />
+                <div className="flex items-center gap-2">
+                  <button 
+                    type="button"
+                    onClick={handleGenerateTempId}
+                    disabled={isGeneratingTempId}
+                    className="inline-flex items-center justify-center px-3 py-1.5 bg-teal-50 hover:bg-teal-100/80 active:bg-teal-200 text-teal-700 border border-teal-100 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all disabled:opacity-50 cursor-pointer text-center h-[32px] whitespace-nowrap"
+                  >
+                    {isGeneratingTempId ? 'Generating...' : 'Temp ID'}
+                  </button>
+                  <button 
+                    type="button"
+                    onClick={handleGeneratePcaId}
+                    disabled={isGeneratingPcaId}
+                    className="inline-flex items-center justify-center px-3 py-1.5 bg-teal-600 hover:bg-teal-700 active:bg-teal-800 text-white border border-teal-600 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all disabled:opacity-50 cursor-pointer text-center h-[32px] whitespace-nowrap font-sans font-bold"
+                  >
+                    {isGeneratingPcaId ? 'Generating...' : 'PCA ID'}
+                  </button>
+                </div>
+              </div>
+
+              {/* Student Category Dropdown Box */}
+              <div className="flex flex-col gap-1 mt-1 max-w-[240px]">
+                <label className="text-[10px] font-black uppercase tracking-wider text-gray-400">Student Category</label>
+                <select
+                  value={studentType}
+                  onChange={(e) => setStudentType(e.target.value as 'Paid' | 'Scholarship')}
+                  className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-teal-500/20 text-gray-700 font-semibold cursor-pointer"
                 >
-                  {isGeneratingTempId ? 'Generating...' : 'Temp ID'}
-                </button>
-                <button 
-                  type="button"
-                  onClick={handleGeneratePcaId}
-                  disabled={isGeneratingPcaId}
-                  className="inline-flex items-center justify-center px-3 py-1.5 bg-teal-600 hover:bg-teal-700 active:bg-teal-800 text-white border border-teal-600 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all disabled:opacity-50 cursor-pointer text-center h-[32px] whitespace-nowrap font-sans font-bold"
-                >
-                  {isGeneratingPcaId ? 'Generating...' : 'PCA ID'}
-                </button>
+                  <option value="Paid">Paid Student (Sequence 001 - 899)</option>
+                  <option value="Scholarship">Scholarship Holder (Sequence 900 - 999)</option>
+                </select>
               </div>
             </div>
           </div>

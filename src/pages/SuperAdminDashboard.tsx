@@ -519,7 +519,8 @@ export function ItemsView() {
           return {
             joined_batch: val,
             district_code: districtCode,
-            last_id: 0
+            last_id: 0,
+            last_scholarship_id: 899
           };
         });
         const { error: batchErr } = await supabase.from('last_pca_id').insert(lastPcaIdRows);
