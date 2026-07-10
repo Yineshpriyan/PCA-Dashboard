@@ -184,8 +184,7 @@ export function FixingView() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
-        <h2 className="text-xl md:text-2xl font-bold text-gray-900 border-l-4 border-teal-600 pl-4">Fixing</h2>
+      <div className="flex flex-col xl:flex-row xl:items-center justify-end gap-4">
         
         <div className="flex flex-wrap items-center gap-2">
           <div className="relative group flex-1 md:flex-none">
@@ -612,102 +611,116 @@ export function ItemsView() {
   };
 
   return (
-    <div className="space-y-12">
-      <div className="space-y-8">
-        <h2 className="text-2xl font-bold text-gray-900 border-l-4 border-teal-600 pl-4">Management Items</h2>
+    <div className="space-y-8">
+      {/* Section 1: Management Items Configuration */}
+      <div className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-3xl p-6 md:p-8 shadow-md space-y-6">
+        <label className="text-sm font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest block">
+          Management Items Configuration
+        </label>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-          <ItemList 
-            title="Issue Types" 
-            type="issue" 
-            items={issueItems} 
-            col="issue_type" 
-            placeholder="New Issue..." 
-            newValues={newValues}
-            setNewValues={setNewValues}
-            handleAdd={handleAdd}
-            editing={editing}
-            setEditing={setEditing}
-            handleUpdate={handleUpdate}
-            handleDelete={handleDelete}
-            loading={loading}
-          />
-          <ItemList 
-            title="Class Types" 
-            type="class" 
-            items={classItems} 
-            col="class_type" 
-            placeholder="New Class..." 
-            newValues={newValues}
-            setNewValues={setNewValues}
-            handleAdd={handleAdd}
-            editing={editing}
-            setEditing={setEditing}
-            handleUpdate={handleUpdate}
-            handleDelete={handleDelete}
-            loading={loading}
-          />
-          <ItemList 
-            title="Package Types" 
-            type="package" 
-            items={packageItems} 
-            col="package_type" 
-            placeholder="New Package..." 
-            newValues={newValues}
-            setNewValues={setNewValues}
-            handleAdd={handleAdd}
-            editing={editing}
-            setEditing={setEditing}
-            handleUpdate={handleUpdate}
-            handleDelete={handleDelete}
-            loading={loading}
-          />
-          <ItemList 
-            title="Joined Batches" 
-            type="joinedBatch" 
-            items={joinedBatchItems} 
-            col="joined_batch" 
-            placeholder="New Batch (e.g. 2025)..." 
-            newValues={newValues}
-            setNewValues={setNewValues}
-            handleAdd={handleAdd}
-            editing={editing}
-            setEditing={setEditing}
-            handleUpdate={handleUpdate}
-            handleDelete={handleDelete}
-            loading={loading}
-          />
+          <div className="bg-slate-50/50 dark:bg-slate-900/30 border border-slate-100 dark:border-slate-800/60 rounded-2xl p-5 shadow-sm hover:border-teal-100/80 dark:hover:border-teal-900/30 transition-all duration-300">
+            <ItemList 
+              title="Issue Types" 
+              type="issue" 
+              items={issueItems} 
+              col="issue_type" 
+              placeholder="New Issue..." 
+              newValues={newValues}
+              setNewValues={setNewValues}
+              handleAdd={handleAdd}
+              editing={editing}
+              setEditing={setEditing}
+              handleUpdate={handleUpdate}
+              handleDelete={handleDelete}
+              loading={loading}
+            />
+          </div>
+
+          <div className="bg-slate-50/50 dark:bg-slate-900/30 border border-slate-100 dark:border-slate-800/60 rounded-2xl p-5 shadow-sm hover:border-teal-100/80 dark:hover:border-teal-900/30 transition-all duration-300">
+            <ItemList 
+              title="Class Types" 
+              type="class" 
+              items={classItems} 
+              col="class_type" 
+              placeholder="New Class..." 
+              newValues={newValues}
+              setNewValues={setNewValues}
+              handleAdd={handleAdd}
+              editing={editing}
+              setEditing={setEditing}
+              handleUpdate={handleUpdate}
+              handleDelete={handleDelete}
+              loading={loading}
+            />
+          </div>
+
+          <div className="bg-slate-50/50 dark:bg-slate-900/30 border border-slate-100 dark:border-slate-800/60 rounded-2xl p-5 shadow-sm hover:border-teal-100/80 dark:hover:border-teal-900/30 transition-all duration-300">
+            <ItemList 
+              title="Package Types" 
+              type="package" 
+              items={packageItems} 
+              col="package_type" 
+              placeholder="New Package..." 
+              newValues={newValues}
+              setNewValues={setNewValues}
+              handleAdd={handleAdd}
+              editing={editing}
+              setEditing={setEditing}
+              handleUpdate={handleUpdate}
+              handleDelete={handleDelete}
+              loading={loading}
+            />
+          </div>
+
+          <div className="bg-slate-50/50 dark:bg-slate-900/30 border border-slate-100 dark:border-slate-800/60 rounded-2xl p-5 shadow-sm hover:border-teal-100/80 dark:hover:border-teal-900/30 transition-all duration-300">
+            <ItemList 
+              title="Joined Batches" 
+              type="joinedBatch" 
+              items={joinedBatchItems} 
+              col="joined_batch" 
+              placeholder="New Batch (e.g. 2025)..." 
+              newValues={newValues}
+              setNewValues={setNewValues}
+              handleAdd={handleAdd}
+              editing={editing}
+              setEditing={setEditing}
+              handleUpdate={handleUpdate}
+              handleDelete={handleDelete}
+              loading={loading}
+            />
+          </div>
         </div>
       </div>
 
-      {/* Temporary ID Section */}
-      <div className="border-t border-gray-100 pt-8">
-        <label className="text-sm font-black text-gray-400 uppercase tracking-widest block mb-4">
+      {/* Section 2: Temporary ID Section */}
+      <div className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-3xl p-6 md:p-8 shadow-md space-y-6">
+        <label className="text-sm font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest block">
           Call Task - Last Temporary ID Configuration
         </label>
         
-        <div className="max-w-xl bg-white border border-gray-100 rounded-3xl p-6 shadow-sm space-y-5">
+        <div className="max-w-xl bg-white dark:bg-gray-800/50 border border-gray-100 dark:border-gray-800 rounded-3xl p-6 shadow-sm space-y-5">
           <div className="flex items-start gap-4">
-            <div className="p-3 bg-teal-50 text-teal-600 rounded-2xl">
+            <div className="p-3 bg-teal-50 dark:bg-teal-950/30 text-teal-600 dark:text-teal-400 rounded-2xl">
               <Sliders size={24} />
             </div>
             <div className="space-y-1">
-              <h3 className="font-bold text-gray-800 text-sm">Temporary ID Base</h3>
-              <p className="text-xs text-gray-400 leading-relaxed">
-                Configure the baseline sequence/ID (e.g. <span className="font-mono text-gray-500 font-semibold bg-gray-50 px-1 py-0.5 rounded border border-gray-100">PCA-0500</span>) used as the starting/last reference point for generating brand new PCA IDs on call tasks.
+              <h3 className="font-bold text-gray-800 dark:text-gray-200 text-sm">Temporary ID Base</h3>
+              <p className="text-xs text-gray-400 dark:text-gray-500 leading-relaxed">
+                Configure the baseline sequence/ID (e.g. <span className="font-mono text-gray-500 dark:text-gray-400 font-semibold bg-gray-50 dark:bg-gray-900 px-1 py-0.5 rounded border border-gray-100 dark:border-gray-800">PCA-0500</span>) used as the starting/last reference point for generating brand new PCA IDs on call tasks.
               </p>
             </div>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-3 items-center pt-2">
             <div className="relative">
-              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[9px] font-black text-gray-400 uppercase font-mono bg-gray-50 px-2 py-0.5 rounded border border-gray-100 select-none">
+              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[9px] font-black text-gray-400 dark:text-gray-500 uppercase font-mono bg-gray-50 dark:bg-gray-900 px-2 py-0.5 rounded border border-gray-100 dark:border-gray-800 select-none">
                 CURRENT BASE
               </span>
               <input
                 value={lastTempId}
                 onChange={(e) => setLastTempId(e.target.value)}
                 placeholder="e.g. PCA-0001"
-                className="w-full pl-32 pr-4 py-3 bg-white border-2 border-gray-100 rounded-2xl focus:border-teal-600 focus:outline-none text-sm font-bold font-mono text-gray-800 transition-all"
+                className="w-full pl-32 pr-4 py-3 bg-white dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-800 rounded-2xl focus:border-teal-600 focus:outline-none text-sm font-bold font-mono text-gray-800 dark:text-gray-200 transition-all"
               />
             </div>
             
@@ -771,7 +784,7 @@ function ItemList({
                 handleAdd(type);
               }
             }}
-            className="w-full pl-4 pr-12 py-2 bg-white border-2 border-gray-100 rounded-xl focus:border-teal-600 outline-none transition-all placeholder:text-gray-300 text-sm font-medium"
+            className="w-full pl-4 pr-12 py-2 bg-white dark:bg-gray-800 border-2 border-gray-100 dark:border-gray-700/80 rounded-xl focus:border-teal-600 outline-none transition-all placeholder:text-gray-300 dark:placeholder:text-gray-500 text-sm font-medium text-gray-800 dark:text-gray-200"
             placeholder={placeholder}
           />
           <button 
@@ -787,7 +800,7 @@ function ItemList({
       <div className="flex-1 overflow-auto max-h-[400px] pr-2 scrollbar-thin scrollbar-thumb-gray-200">
         <div className="space-y-2">
           {items.map(item => (
-            <div key={item.id} className="group p-3 bg-white border border-gray-100 rounded-xl hover:border-teal-200 hover:shadow-sm transition-all flex items-center justify-between">
+            <div key={item.id} className="group p-3 bg-white dark:bg-gray-800/80 border border-gray-100 dark:border-gray-800/60 rounded-xl hover:border-teal-200 dark:hover:border-teal-900/40 hover:shadow-sm transition-all flex items-center justify-between">
               {confirmDeleteId === item.id ? (
                 <div className="flex-1 flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-in fade-in zoom-in-95 duration-150">
                   <div className="flex flex-col">
@@ -831,7 +844,7 @@ function ItemList({
                         setEditing(null);
                       }
                     }}
-                    className="flex-1 px-2 py-1 border-b-2 border-teal-600 outline-none text-sm font-medium text-gray-800"
+                    className="flex-1 px-2 py-1 border-b-2 border-teal-600 bg-transparent outline-none text-sm font-medium text-gray-800 dark:text-gray-100"
                     autoFocus
                   />
                   <button onClick={handleUpdate} className="text-green-600 hover:text-green-700 p-1 rounded hover:bg-green-50 transition-colors" title="Save (Enter)">
@@ -842,7 +855,7 @@ function ItemList({
                 </div>
               ) : (
                 <>
-                  <span className="text-sm font-semibold text-gray-700 truncate mr-2">{item[col]}</span>
+                  <span className="text-sm font-semibold text-gray-700 dark:text-gray-200 truncate mr-2">{item[col]}</span>
                   <div className="flex gap-1">
                     {type !== 'joinedBatch' && (
                       <button 
@@ -923,13 +936,6 @@ export function SignupView() {
 
   return (
     <div className="max-w-xl mx-auto">
-      <div className="flex items-center justify-between mb-8 border-l-4 border-teal-600 pl-4">
-        <h2 className="text-2xl font-bold text-gray-900">Signup</h2>
-        <div className="w-12 h-12 rounded-full border-4 border-gray-900 flex items-center justify-center">
-            <UserPlus size={24} className="text-gray-900" />
-        </div>
-      </div>
-
       <form onSubmit={handleSubmit} className="space-y-5 bg-white p-6 md:p-8 rounded-2xl shadow-sm border border-gray-100">
         <div className="space-y-4">
           <div className="flex flex-col gap-1.5">
@@ -1046,7 +1052,6 @@ export function AdminsView() {
 
   return (
     <div className="space-y-6">
-      <h2 className="text-2xl font-bold text-gray-900 border-l-4 border-teal-600 pl-4">Admins List</h2>
       <div className="overflow-x-auto bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800">
         <table className="w-full text-left border-collapse">
           <thead>
