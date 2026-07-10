@@ -22,7 +22,8 @@ import {
   Eye,
   ShieldCheck,
   ShieldAlert,
-  AlertTriangle
+  AlertTriangle,
+  MessageCircle
 } from 'lucide-react';
 import { 
   Student, 
@@ -180,7 +181,7 @@ export function StudentForm() {
 
   const getInitialStudentType = (): 'Paid' | 'Scholarship' => {
     const pcaid = editStudent?.pcaid || leadData?.pcaid || '';
-    if (pcaid && pcaid.length >= 3) {
+    if (pcaid && pcaid.length === 10) {
       const last3 = pcaid.slice(-3);
       const num = parseInt(last3, 10);
       if (!isNaN(num) && num >= 900 && num <= 999) {
@@ -514,7 +515,7 @@ export function StudentForm() {
         batch_type: s.batch_type || '',
         gender: s.gender || ''
       });
-      if (s.pcaid && s.pcaid.length >= 3) {
+      if (s.pcaid && s.pcaid.length === 10) {
         const last3 = s.pcaid.slice(-3);
         const num = parseInt(last3, 10);
         if (!isNaN(num) && num >= 900 && num <= 999) {
@@ -987,7 +988,7 @@ export function StudentForm() {
           let isScholarshipSeq = false;
           const pcaidSuffix = studentData.pcaid.slice(-3);
           const last3Val = parseInt(pcaidSuffix, 10);
-          if (!isNaN(last3Val) && last3Val >= 900 && last3Val <= 999) {
+          if (studentData.pcaid && studentData.pcaid.length === 10 && !isNaN(last3Val) && last3Val >= 900 && last3Val <= 999) {
             isScholarshipSeq = true;
           }
 
@@ -2469,7 +2470,8 @@ export function StudentExplorer() {
     packages: [] as string[],
     startDate: '',
     endDate: '',
-    pcaid: ''
+    pcaid: '',
+    studentType: ''
   });
 
   // Verification States & Duplicate Check
@@ -2910,6 +2912,19 @@ export function StudentExplorer() {
     const matchesPackages = filters.packages.length === 0 || 
       (s.asked_package_type ? filters.packages.some(p => s.asked_package_type.toLowerCase().includes(p.toLowerCase())) : false);
     
+    // Check if scholarship
+    let isScholarship = false;
+    if (s.pcaid && s.pcaid.length === 10) {
+      const last3 = s.pcaid.slice(-3);
+      const num = parseInt(last3, 10);
+      if (!isNaN(num) && num >= 900 && num <= 999) {
+        isScholarship = true;
+      }
+    }
+    const matchesStudentType = !filters.studentType || 
+      (filters.studentType === 'Scholarship' && isScholarship) ||
+      (filters.studentType === 'Paid' && !isScholarship);
+
     // Date Range Logic
     const studentDate = s.created_at ? new Date(s.created_at).setHours(0,0,0,0) : null;
     const start = filters.startDate ? new Date(filters.startDate).setHours(0,0,0,0) : null;
@@ -2923,27 +2938,27 @@ export function StudentExplorer() {
       matchesDateRange = false;
     }
 
-    return matchesSearch && matchesPcaidSearch && matchesDistrict && matchesProperBatch && matchesJoinedBatch && matchesClasses && matchesPackages && matchesDateRange;
+    return matchesSearch && matchesPcaidSearch && matchesDistrict && matchesProperBatch && matchesJoinedBatch && matchesClasses && matchesPackages && matchesDateRange && matchesStudentType;
   });
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Header Bar with Title, Verification Search, and Actions */}
-      <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 border-b border-gray-100 pb-5">
+      <div className="flex flex-wrap items-center gap-3 border-b border-gray-100 pb-3">
+        {/* 1. Admin dropdownbox */}
         <div className="flex items-center gap-3">
-          <h2 className="text-xl md:text-2xl font-bold text-gray-900 border-l-4 border-teal-600 pl-4 whitespace-nowrap">Student Explorer</h2>
           {user?.admin_type !== 'super_admin' ? (
-            <div className="hidden md:flex items-center gap-1.5 px-3 py-1 bg-teal-50 text-teal-700 rounded-full border border-teal-100 italic">
+            <div className="flex items-center gap-1.5 px-3 py-1 bg-teal-50 text-teal-700 rounded-full border border-teal-100 italic">
               <ShieldCheck size={12} />
               <span className="text-[10px] font-bold">Personal View: {user?.username}</span>
             </div>
           ) : (
-            <div className="hidden md:flex items-center gap-2">
+            <div className="flex items-center gap-2">
               <span className="text-[10px] font-black text-gray-400 uppercase">Admin:</span>
               <select 
                 value={selectedAdmin}
                 onChange={(e) => setSelectedAdmin(e.target.value)}
-                className="px-3 py-1 bg-white border border-gray-200 rounded-lg text-[10px] font-black text-teal-600 uppercase outline-none focus:ring-2 focus:ring-teal-500/20"
+                className="px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-[10px] font-black text-teal-600 uppercase outline-none focus:ring-2 focus:ring-teal-500/20 cursor-pointer shadow-sm"
               >
                 <option value="">All Admins (Global)</option>
                 {admins.map(a => (
@@ -2954,93 +2969,99 @@ export function StudentExplorer() {
           )}
         </div>
 
-        {/* Top Right Actions: Verification Search Bar & New Student Button */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full xl:w-auto">
-          {/* Verification Bar */}
-          <div className="relative group flex-1 max-w-md min-w-[320px]">
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400 group-focus-within:text-teal-600 transition-colors">
-              <Search size={16} />
-            </div>
-            <input
-              type="text"
-              value={verifyQuery}
-              onChange={(e) => setVerifyQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 bg-white border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all shadow-sm placeholder:text-gray-400 font-bold"
-              placeholder="Verify PCA ID or Phone Number..."
-            />
-            <div className="absolute inset-y-0 right-0 flex items-center py-1.5 pr-1.5 gap-2">
-              {verificationStatus.lookupDone && (
-                <div className="flex items-center gap-2">
-                  <div className={cn(
-                    "flex items-center gap-1.5 px-3 h-[30px] rounded-lg text-[10px] font-black uppercase tracking-wider animate-in fade-in slide-in-from-right-2 duration-300",
-                    verificationStatus.exists ? "bg-red-50 text-red-600 border border-red-100" : "bg-green-50 text-green-600 border border-green-100"
-                  )}>
-                    {verificationStatus.exists ? (
-                      <>
-                        <ShieldAlert size={12}/>
-                        Exists
-                      </>
-                    ) : (
-                      <>
-                        <ShieldCheck size={12}/>
-                        New
-                      </>
-                    )}
-                  </div>
-                  
-                  {verificationStatus.exists && (
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={handleGrabExplorerDetails}
-                        className="flex items-center gap-1.5 px-3 h-[30px] bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-[10px] font-black uppercase tracking-wider transition-colors shadow-sm animate-in zoom-in duration-300 cursor-pointer"
-                        title="Edit Student Form"
-                      >
-                        <RefreshCw size={12} />
-                        Grab Data
-                      </button>
-                      
-                      <button
-                        onClick={handleViewExplorerStudent}
-                        className="flex items-center gap-1.5 px-3 h-[30px] bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-[10px] font-black uppercase tracking-wider transition-colors shadow-sm animate-in zoom-in duration-300 cursor-pointer"
-                        title="View student in explorer modal"
-                      >
-                        <ExternalLink size={12} />
-                        View
-                      </button>
-                    </div>
+        {/* 2. Textbox */}
+        <div className="relative group flex-1 max-w-md min-w-[280px]">
+          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400 group-focus-within:text-teal-600 transition-colors">
+            <Search size={16} />
+          </div>
+          <input
+            type="text"
+            value={verifyQuery}
+            onChange={(e) => setVerifyQuery(e.target.value)}
+            className="w-full pl-10 pr-4 py-2 bg-white border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all shadow-sm placeholder:text-gray-400 font-bold"
+            placeholder="Verify PCA ID or Phone Number..."
+          />
+          <div className="absolute inset-y-0 right-0 flex items-center py-1.5 pr-1.5 gap-2">
+            {verificationStatus.lookupDone && (
+              <div className="flex items-center gap-2">
+                <div className={cn(
+                  "flex items-center gap-1.5 px-3 h-[30px] rounded-lg text-[10px] font-black uppercase tracking-wider animate-in fade-in slide-in-from-right-2 duration-300",
+                  verificationStatus.exists ? "bg-red-50 text-red-600 border border-red-100" : "bg-green-50 text-green-600 border border-green-100"
+                )}>
+                  {verificationStatus.exists ? (
+                    <>
+                      <ShieldAlert size={12}/>
+                      Exists
+                    </>
+                  ) : (
+                    <>
+                      <ShieldCheck size={12}/>
+                      New
+                    </>
                   )}
                 </div>
-              )}
-            </div>
-
-            {/* Quick Action Badge if student exists */}
-            {verificationStatus.exists && verificationStatus.student && (
-              <div className="absolute mt-2 z-10 animate-in fade-in slide-in-from-top-1 duration-200">
-                 <button 
-                  onClick={handleViewExplorerStudent}
-                  className="flex items-center gap-2 px-3 py-1 bg-teal-900 text-white rounded-full text-[10px] font-bold hover:bg-black transition-colors shadow-lg cursor-pointer"
-                >
-                  <ExternalLink size={10}/>
-                  View {verificationStatus.student.name} in Explorer
-                </button>
+                
+                {verificationStatus.exists && (
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={handleGrabExplorerDetails}
+                      className="flex items-center gap-1.5 px-3 h-[30px] bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-[10px] font-black uppercase tracking-wider transition-colors shadow-sm animate-in zoom-in duration-300 cursor-pointer"
+                      title="Edit Student Form"
+                    >
+                      <RefreshCw size={12} />
+                      Grab Data
+                    </button>
+                    
+                    <button
+                      onClick={handleViewExplorerStudent}
+                      className="flex items-center gap-1.5 px-3 h-[30px] bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-[10px] font-black uppercase tracking-wider transition-colors shadow-sm animate-in zoom-in duration-300 cursor-pointer"
+                      title="View student in explorer modal"
+                    >
+                      <ExternalLink size={12} />
+                      View
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </div>
 
-          {/* New Student Button */}
-          <button
-            onClick={() => navigate('/admin/student-form')}
-            className="flex items-center justify-center gap-2 px-5 py-2.5 bg-teal-600 hover:bg-teal-700 active:scale-95 text-white rounded-xl font-bold text-sm transition-all shadow-md active:shadow-sm cursor-pointer whitespace-nowrap hover:shadow-lg"
-          >
-            <Plus size={18} />
-            New Student
-          </button>
+          {/* Quick Action Badge if student exists */}
+          {verificationStatus.exists && verificationStatus.student && (
+            <div className="absolute mt-2 z-10 animate-in fade-in slide-in-from-top-1 duration-200">
+               <button 
+                onClick={handleViewExplorerStudent}
+                className="flex items-center gap-2 px-3 py-1 bg-teal-900 text-white rounded-full text-[10px] font-bold hover:bg-black transition-colors shadow-lg cursor-pointer"
+              >
+                <ExternalLink size={10}/>
+                View {verificationStatus.student.name} in Explorer
+              </button>
+            </div>
+          )}
         </div>
+
+        {/* 3. New Student button */}
+        <button
+          onClick={() => navigate('/admin/student-form')}
+          className="flex items-center justify-center gap-2 px-5 py-2.5 bg-teal-600 hover:bg-teal-700 active:scale-95 text-white rounded-xl font-bold text-sm transition-all shadow-md active:shadow-sm cursor-pointer whitespace-nowrap hover:shadow-lg h-[38px]"
+        >
+          <Plus size={18} />
+          New Student
+        </button>
+
+        {/* 4. Export button */}
+        <button
+          onClick={handleExport}
+          className="flex items-center gap-2 px-4 py-2.5 bg-teal-50 text-teal-700 hover:bg-teal-100 rounded-xl font-bold text-sm transition-colors shadow-sm whitespace-nowrap cursor-pointer h-[38px]"
+        >
+          <FileDown size={18} />
+          Export
+        </button>
       </div>
 
       {/* Search and Filters Section */}
-      <div className="flex flex-col gap-4 w-full">
-        <div className="flex flex-col xl:flex-row items-start xl:items-center justify-between gap-4">
+      <div className="flex flex-col gap-3 w-full">
+        <div className="flex flex-col xl:flex-row items-start xl:items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-2 w-full xl:w-auto">
             <div className="flex flex-wrap items-center bg-white rounded-xl shadow-sm border border-gray-100 p-1 gap-1 w-full lg:w-auto">
               {/* Count */}
@@ -3079,6 +3100,17 @@ export function StudentExplorer() {
               >
                 <option value="">All Districts</option>
                 {SRI_LANKAN_DISTRICTS.map(d => <option key={d} value={d}>{d}</option>)}
+              </select>
+
+              {/* Student Category Dropdown */}
+              <select 
+                value={filters.studentType}
+                onChange={(e) => setFilters({ ...filters, studentType: e.target.value })}
+                className="px-3 py-1.5 text-xs font-bold text-gray-600 border-none outline-none bg-transparent cursor-pointer min-w-[130px] border-l border-gray-100"
+              >
+                <option value="">All Categories</option>
+                <option value="Paid">Paid Students</option>
+                <option value="Scholarship">Scholarship Holders</option>
               </select>
 
               <div className="bg-gray-100 w-px my-1 hidden sm:block" />
@@ -3234,32 +3266,20 @@ export function StudentExplorer() {
                   />
                 </div>
               </div>
-            </div>
 
-            {/* Action Buttons Row */}
-            <div className="flex items-center gap-2">
-              <button
-                onClick={handleExport}
-                className="flex items-center gap-2 px-4 py-2 bg-teal-50 text-teal-700 hover:bg-teal-100 rounded-xl font-bold text-sm transition-colors shadow-sm whitespace-nowrap"
-              >
-                <FileDown size={18} />
-                Export
-              </button>
-
-              <div className="flex items-center px-3 py-2 bg-white border border-gray-100 rounded-xl shadow-sm whitespace-nowrap">
-                <span className="text-[10px] font-bold text-gray-400 uppercase mr-2">Count</span>
-                <span className="text-sm font-black text-teal-600">{filteredStudents.length}</span>
-              </div>
-
-              {(filters.district || filters.classes.length > 0 || filters.packages.length > 0 || filters.startDate || filters.endDate || filters.search || filters.properBatch || filters.joinedBatch || filters.pcaid) && (
-                <button
-                  onClick={() => setFilters({ district: '', classes: [], packages: [], startDate: '', endDate: '', search: '', properBatch: '', joinedBatch: '', pcaid: '' })}
-                  className="flex items-center gap-1.5 px-3 py-2 bg-red-50 text-red-600 hover:bg-red-100 rounded-xl font-bold text-sm transition-colors shadow-sm whitespace-nowrap"
-                  title="Clear All Filters"
-                >
-                  <X size={16} />
-                  <span>Clear Filters</span>
-                </button>
+              {/* Clear Filters Button */}
+              {(filters.district || filters.classes.length > 0 || filters.packages.length > 0 || filters.startDate || filters.endDate || filters.search || filters.properBatch || filters.joinedBatch || filters.pcaid || filters.studentType) && (
+                <>
+                  <div className="bg-gray-100 w-px my-1 hidden sm:block" />
+                  <button
+                    onClick={() => setFilters({ district: '', classes: [], packages: [], startDate: '', endDate: '', search: '', properBatch: '', joinedBatch: '', pcaid: '', studentType: '' })}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg font-bold text-xs transition-colors cursor-pointer whitespace-nowrap border border-red-100 ml-1"
+                    title="Clear All Filters"
+                  >
+                    <X size={14} />
+                    <span>Clear Filters</span>
+                  </button>
+                </>
               )}
             </div>
           </div>
@@ -3268,15 +3288,15 @@ export function StudentExplorer() {
 
       <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 overflow-hidden">
         <div className="max-h-[600px] overflow-y-auto overflow-x-auto scrollbar-visible">
-          <table className="w-full text-left border-collapse min-w-[900px] table-fixed">
+          <table className="w-full text-left border-collapse min-w-[850px] table-fixed">
             <thead className="sticky top-0 z-20">
               <tr className="bg-teal-600">
                 <th className="p-4 font-bold text-white text-center w-[50px]">No</th>
-                <th className="p-4 font-bold text-white w-[120px]">PCA ID</th>
-                <th className="p-4 font-bold text-white w-[220px]">Student Name</th>
-                <th className="p-4 font-bold text-white w-[130px]">Phone</th>
-                <th className="p-4 font-bold text-white w-[180px]">District</th>
-                <th className="p-4 font-bold text-white text-center w-[200px]">Actions</th>
+                <th className="p-4 font-bold text-white w-[140px]">PCA ID</th>
+                <th className="p-4 font-bold text-white">Student Name</th>
+                <th className="p-4 font-bold text-white w-[190px]">Phone</th>
+                <th className="p-4 font-bold text-white w-[140px]">District</th>
+                <th className="p-4 font-bold text-white text-center w-[140px]">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50 dark:divide-gray-800/60">
@@ -3300,42 +3320,37 @@ export function StudentExplorer() {
                       </div>
                     </td>
                     <td className="p-4 bg-white dark:bg-gray-900 group-hover:bg-gray-50/50 dark:group-hover:bg-gray-800/20">
-                      <div className="flex flex-col gap-1.5">
-                        <div className="flex items-center gap-2 font-bold text-gray-900 dark:text-gray-100">
-                          {s.name}
-                          <button 
-                            onClick={() => toast.success(copyToClipboard(s.name, 'Name'))}
-                            className="p-1 text-gray-300 dark:text-gray-600 hover:text-teal-600 dark:hover:text-teal-400 transition-colors"
-                          >
-                            <Copy size={12}/>
-                          </button>
-                        </div>
-                        
-                        {(s.asked_class_type || s.asked_package_type) && (
-                          <div className="flex flex-wrap gap-1">
-                            {s.asked_class_type?.split(', ').filter(Boolean).map(c => (
-                              <span key={c} className="px-2 py-0.5 bg-teal-100 dark:bg-teal-900/50 text-teal-800 dark:text-teal-200 rounded text-[9px] font-bold border border-teal-200 dark:border-teal-800/80">
-                                {c}
-                              </span>
-                            ))}
-                            {s.asked_package_type?.split(', ').filter(Boolean).map(p => (
-                              <span key={p} className="px-2 py-0.5 bg-orange-100 dark:bg-amber-900/50 text-orange-800 dark:text-amber-200 rounded text-[9px] font-bold border border-orange-200 dark:border-amber-800/80">
-                                {p}
-                              </span>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    </td>
-                    <td className="p-4 text-sm text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-900 group-hover:bg-gray-50/50 dark:group-hover:bg-gray-800/20">
-                      <div className="flex items-center gap-2 font-mono">
-                        {s.phone}
+                      <div className="flex items-center gap-2 font-bold text-gray-900 dark:text-gray-100">
+                        {s.name}
                         <button 
-                          onClick={() => toast.success(copyToClipboard(s.phone, 'Phone'))}
+                          onClick={() => toast.success(copyToClipboard(s.name, 'Name'))}
                           className="p-1 text-gray-300 dark:text-gray-600 hover:text-teal-600 dark:hover:text-teal-400 transition-colors"
                         >
                           <Copy size={12}/>
                         </button>
+                      </div>
+                    </td>
+                    <td className="p-4 text-sm text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-900 group-hover:bg-gray-50/50 dark:group-hover:bg-gray-800/20">
+                      <div className="flex items-center gap-1.5 font-mono whitespace-nowrap flex-nowrap">
+                        <span>{s.phone}</span>
+                        <div className="flex items-center gap-0.5">
+                          <button 
+                            onClick={() => toast.success(copyToClipboard(s.phone, 'Phone'))}
+                            className="p-1 text-gray-300 dark:text-gray-600 hover:text-teal-600 dark:hover:text-teal-400 transition-colors cursor-pointer"
+                            title="Copy Phone Number"
+                          >
+                            <Copy size={12}/>
+                          </button>
+                          <a 
+                            href={`https://wa.me/${s.phone.replace(/\D/g, '')}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="p-1 text-green-500 hover:text-green-600 dark:text-green-400 dark:hover:text-green-300 transition-colors flex items-center justify-center cursor-pointer"
+                            title="Chat on WhatsApp"
+                          >
+                            <MessageCircle size={13} className="fill-green-500/10 dark:fill-green-400/10" />
+                          </a>
+                        </div>
                       </div>
                     </td>
                     <td className="p-4 text-sm text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-900 group-hover:bg-gray-50/50 dark:group-hover:bg-gray-800/20">

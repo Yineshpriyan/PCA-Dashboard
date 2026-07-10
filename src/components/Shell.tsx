@@ -273,23 +273,50 @@ export function Topbar({
   const { user, logout } = useAuth();
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
 
   const handleLogout = () => {
     logout();
     navigate('/login');
   };
 
+  // Find current nav item label
+  let activeLabel = '';
+  for (const section of navSections) {
+    const found = section.items.find(item => item.path === location.pathname);
+    if (found) {
+      activeLabel = found.label;
+      break;
+    }
+  }
+
+  // Fallbacks for other dynamic routes or specific paths
+  if (!activeLabel) {
+    if (location.pathname.startsWith('/admin/student-form')) {
+      activeLabel = 'Student Form';
+    } else if (location.pathname.startsWith('/admin/home')) {
+      activeLabel = 'Home';
+    } else if (location.pathname === '/admin/student-explorer') {
+      activeLabel = 'Student Explorer';
+    }
+  }
+
   return (
     <header className="sticky top-0 z-45 h-16 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 px-4 flex items-center justify-between">
-      <button
-        onClick={setIsSidebarOpen}
-        className="lg:hidden p-2 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-md"
-      >
-        <Menu size={24} />
-      </button>
-
-      <div className="hidden lg:block">
-        {/* Placeholder if needed */}
+      <div className="flex items-center gap-3">
+        <button
+          onClick={setIsSidebarOpen}
+          className="lg:hidden p-2 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-md"
+        >
+          <Menu size={24} />
+        </button>
+        {activeLabel && (
+          <div className="flex items-center gap-2">
+            <h2 className="text-lg md:text-xl font-bold text-gray-900 dark:text-gray-100 border-l-4 border-teal-600 pl-3 whitespace-nowrap">
+              {activeLabel}
+            </h2>
+          </div>
+        )}
       </div>
 
       <div className="flex items-center gap-4">
@@ -439,7 +466,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
       <Sidebar isOpen={isSidebarOpen} setIsOpen={setIsSidebarOpen} theme={theme} toggleTheme={toggleTheme} />
       <div className="lg:ml-64 flex flex-col min-h-screen">
         <Topbar setIsSidebarOpen={() => setIsSidebarOpen(true)} theme={theme} toggleTheme={toggleTheme} />
-        <main className="flex-1 p-4 lg:p-8">
+        <main className="flex-1 p-4 lg:px-6 lg:py-4">
           <div className="max-w-7xl mx-auto h-full">
             {children}
           </div>
