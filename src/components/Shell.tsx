@@ -158,27 +158,32 @@ export function Sidebar({
       <motion.aside
         initial={false}
         animate={{ 
-          x: isDesktop || isOpen ? 0 : -300 
+          x: isOpen ? 0 : -260 
         }}
         transition={{ type: 'spring', damping: 25, stiffness: 200 }}
         className={cn(
-          "fixed top-0 bottom-0 left-0 z-50 w-64 bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 lg:translate-x-0 transition-shadow",
-          !isOpen && "max-lg:hidden",
-          isOpen && "shadow-2xl"
+          "fixed top-0 bottom-0 left-0 z-50 w-64 bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 transition-shadow",
+          isOpen && "shadow-2xl lg:shadow-md"
         )}
       >
         <div className="flex flex-col h-full">
           <div className="p-4 py-5 flex items-center justify-between border-b border-gray-100 dark:border-gray-800">
-            <h1 className="text-xl font-black text-teal-700 tracking-tight flex items-center gap-2">
-              <AcademyLogo width={34} height={34} showText={false} />
-              <div className="flex flex-col">
-                <span className="text-sm font-black text-gray-800 dark:text-gray-100 leading-none">PHYSICS CUBE</span>
-                <span className="text-[10px] font-black uppercase tracking-widest text-teal-600 dark:text-teal-400 leading-none mt-1">Portal</span>
-              </div>
-            </h1>
-            <button onClick={() => setIsOpen(false)} className="lg:hidden p-1 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg">
-              <X size={24} />
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setIsOpen(false)}
+                className="p-1.5 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-md transition-colors cursor-pointer"
+                title="Collapse Sidebar"
+              >
+                <Menu size={20} />
+              </button>
+              <h1 className="text-xl font-black text-teal-700 tracking-tight flex items-center gap-2 select-none">
+                <AcademyLogo width={34} height={34} showText={false} />
+                <div className="flex flex-col">
+                  <span className="text-sm font-black text-gray-800 dark:text-gray-100 leading-none">PHYSICS CUBE</span>
+                  <span className="text-[10px] font-black uppercase tracking-widest text-teal-600 dark:text-teal-400 leading-none mt-1">Portal</span>
+                </div>
+              </h1>
+            </div>
           </div>
 
           <div className="flex-1 px-3 py-6 space-y-6 overflow-y-auto">
@@ -192,7 +197,7 @@ export function Sidebar({
                     <Link
                       key={item.path}
                       to={item.path}
-                      onClick={() => setIsOpen(false)}
+                      onClick={() => !isDesktop && setIsOpen(false)}
                       className={cn(
                         "flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-bold transition-all border border-transparent",
                         location.pathname === item.path
@@ -262,10 +267,12 @@ export function Sidebar({
 }
 
 export function Topbar({ 
+  isSidebarOpen,
   setIsSidebarOpen,
   theme,
   toggleTheme
 }: { 
+  isSidebarOpen: boolean;
   setIsSidebarOpen: () => void;
   theme: 'light' | 'dark';
   toggleTheme: () => void;
@@ -304,12 +311,14 @@ export function Topbar({
   return (
     <header className="sticky top-0 z-45 h-16 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 px-4 flex items-center justify-between">
       <div className="flex items-center gap-3">
-        <button
-          onClick={setIsSidebarOpen}
-          className="lg:hidden p-2 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-md"
-        >
-          <Menu size={24} />
-        </button>
+        {!isSidebarOpen && (
+          <button
+            onClick={setIsSidebarOpen}
+            className="p-2 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-md transition-colors cursor-pointer animate-in fade-in duration-200"
+          >
+            <Menu size={24} />
+          </button>
+        )}
         {activeLabel && (
           <div className="flex items-center gap-2">
             <h2 className="text-lg md:text-xl font-bold text-gray-900 dark:text-gray-100 border-l-4 border-teal-600 pl-3 whitespace-nowrap">
@@ -385,8 +394,27 @@ export function Topbar({
 }
 
 export function Shell({ children }: { children: React.ReactNode }) {
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return window.innerWidth >= 1024;
+    }
+    return true;
+  });
   const { user } = useAuth();
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    let prevIsDesktop = window.innerWidth >= 1024;
+    const handleResize = () => {
+      const isDesktop = window.innerWidth >= 1024;
+      if (isDesktop !== prevIsDesktop) {
+        setIsSidebarOpen(isDesktop);
+        prevIsDesktop = isDesktop;
+      }
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   // Unified system-wide light/dark theme state
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
@@ -464,8 +492,8 @@ export function Shell({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100 transition-colors duration-200">
       <Sidebar isOpen={isSidebarOpen} setIsOpen={setIsSidebarOpen} theme={theme} toggleTheme={toggleTheme} />
-      <div className="lg:ml-64 flex flex-col min-h-screen">
-        <Topbar setIsSidebarOpen={() => setIsSidebarOpen(true)} theme={theme} toggleTheme={toggleTheme} />
+      <div className={cn("flex flex-col min-h-screen transition-all duration-300 ease-in-out", isSidebarOpen ? "lg:ml-64" : "lg:ml-0")}>
+        <Topbar isSidebarOpen={isSidebarOpen} setIsSidebarOpen={() => setIsSidebarOpen(!isSidebarOpen)} theme={theme} toggleTheme={toggleTheme} />
         <main className="flex-1 p-4 lg:px-6 lg:py-4">
           <div className="max-w-7xl mx-auto h-full">
             {children}
