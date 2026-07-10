@@ -180,11 +180,7 @@ CREATE POLICY "Allow authenticated read and write to transaction_logs"
       {/* Header Banner */}
       <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div className="space-y-1">
-          <h2 className="text-2xl font-black text-gray-900 border-l-4 border-teal-600 pl-4 tracking-tight flex items-center gap-2">
-            <ArrowRightLeft className="text-teal-600" />
-            Transaction History
-          </h2>
-          <p className="text-xs text-gray-500 font-medium pl-5">Audit log detailing operations, authentications, edits, and enrolments.</p>
+          <p className="text-xs text-gray-500 font-medium pl-1">Audit log detailing operations, authentications, edits, and enrolments.</p>
         </div>
 
         <div className="flex items-center gap-2 w-full md:w-auto">

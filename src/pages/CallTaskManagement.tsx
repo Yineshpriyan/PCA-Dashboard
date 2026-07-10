@@ -412,44 +412,45 @@ export function CallTaskForm({ editData, onComplete }: { editData?: CallTask; on
 
   return (
     <div className="max-w-4xl mx-auto">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
-        <h2 className="text-2xl font-bold text-gray-900 border-l-4 border-teal-600 pl-4 mb-0">
-          {editData ? 'Edit Call Task' : 'New Call Task'}
-        </h2>
+      <form onSubmit={handleSubmit} className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100 flex flex-col gap-8">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-gray-100 pb-6">
+          <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+            <Plus size={20} className="text-teal-600" />
+            {editData ? 'Edit Call Task' : 'New Call Task'}
+          </h3>
 
-        {/* Verification Bar */}
-        <div className="flex-1 max-w-md w-full">
-          <div className="relative group">
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <Search size={18} className="text-gray-400 group-focus-within:text-teal-600 transition-colors" />
-            </div>
-            <input 
-              type="text"
-              value={verifyQuery}
-              onChange={(e) => setVerifyQuery(e.target.value)}
-              placeholder="Verify PCA ID or Phone Availability..."
-              className="block w-full pl-10 pr-10 py-2.5 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 text-sm transition-all"
-            />
-            <div className="absolute inset-y-0 right-0 pr-3 flex items-center">
-              {verificationStatus.lookupDone && (
-                verificationStatus.exists ? (
-                  <div className="flex items-center gap-1.5 text-red-500 bg-red-50 px-2.5 py-1 rounded-full border border-red-100 shadow-sm animate-in fade-in slide-in-from-right-2">
-                    <Trash2 size={14} className="animate-pulse" />
-                    <span className="text-[10px] font-bold uppercase tracking-wider">Already Exists</span>
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-1.5 text-teal-600 bg-teal-50 px-2.5 py-1 rounded-full border border-teal-100 shadow-sm animate-in fade-in slide-in-from-right-2">
-                    <CheckCircle2 size={14} />
-                    <span className="text-[10px] font-bold uppercase tracking-wider">Available</span>
-                  </div>
-                )
-              )}
+          {/* Verification Bar */}
+          <div className="flex-1 max-w-md w-full relative">
+            <div className="relative group">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <Search size={18} className="text-gray-400 group-focus-within:text-teal-600 transition-colors" />
+              </div>
+              <input 
+                type="text"
+                value={verifyQuery}
+                onChange={(e) => setVerifyQuery(e.target.value)}
+                placeholder="Verify PCA ID or Phone Availability..."
+                className="block w-full pl-10 pr-10 py-2.5 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 text-sm transition-all shadow-sm"
+              />
+              <div className="absolute inset-y-0 right-0 pr-3 flex items-center">
+                {verificationStatus.lookupDone && (
+                  verificationStatus.exists ? (
+                    <div className="flex items-center gap-1.5 text-red-500 bg-red-50 px-2.5 py-1 rounded-full border border-red-100 shadow-sm animate-in fade-in slide-in-from-right-2">
+                      <Trash2 size={14} className="animate-pulse" />
+                      <span className="text-[10px] font-bold uppercase tracking-wider">Already Exists</span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1.5 text-teal-600 bg-teal-50 px-2.5 py-1 rounded-full border border-teal-100 shadow-sm animate-in fade-in slide-in-from-right-2">
+                      <CheckCircle2 size={14} />
+                      <span className="text-[10px] font-bold uppercase tracking-wider">Available</span>
+                    </div>
+                  )
+                )}
+              </div>
             </div>
           </div>
         </div>
-      </div>
-      
-      <form onSubmit={handleSubmit} className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100 flex flex-col gap-8">
+
         <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-6">
           {/* Left Column */}
           <div className="space-y-4">
@@ -1425,54 +1426,75 @@ export function CallTaskDisplay() {
   return (
     <div className="space-y-6">
         <div className="flex flex-col gap-4 w-full">
-          {/* Top Row: Navigation, Search, and Core Actions */}
-          <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
-            <div className="flex flex-col sm:flex-row sm:items-center gap-4 w-full lg:w-auto">
-              <h2 className="text-xl md:text-2xl font-black text-gray-900 border-l-4 border-teal-600 pl-4 whitespace-nowrap">Call Tasks</h2>
-              
-              {/* Exactly Replicated Verification Bar */}
-              <div className="w-full sm:w-[320px] md:w-[380px]">
-                <div className="relative group">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <Search size={16} className="text-gray-400 group-focus-within:text-teal-600 transition-colors" />
-                  </div>
-                  <input 
-                    type="text"
-                    value={verifyQuery}
-                    onChange={(e) => setVerifyQuery(e.target.value)}
-                    placeholder="Verify PCA ID / Phone Availability..."
-                    className="block w-full pl-9 pr-24 py-2 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 text-xs transition-all font-semibold text-gray-700"
-                  />
-                  <div className="absolute inset-y-0 right-0 pr-2.5 flex items-center">
-                    {verificationStatus.lookupDone && (
-                      verificationStatus.exists ? (
-                        <div className="flex items-center gap-1 text-red-500 bg-red-50 px-2 py-0.5 rounded-full border border-red-100 shadow-sm animate-in fade-in duration-200">
-                          <Trash2 size={12} className="animate-pulse" />
-                          <span className="text-[9px] font-black uppercase tracking-wider">Exists</span>
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-1 text-teal-600 bg-teal-50 px-2 py-0.5 rounded-full border border-teal-100 shadow-sm animate-in fade-in duration-200">
-                          <CheckCircle2 size={12} />
-                          <span className="text-[9px] font-black uppercase tracking-wider">Available</span>
-                        </div>
-                      )
-                    )}
-                  </div>
+          {/* Top Row: Search, New Task, Import, Export */}
+          <div className="flex flex-wrap items-center gap-3 w-full">
+            {/* Search textbox (Verify PCA ID / Phone Availability...) */}
+            <div className="flex-1 min-w-[280px] max-w-md">
+              <div className="relative group">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <Search size={16} className="text-gray-400 group-focus-within:text-teal-600 transition-colors" />
+                </div>
+                <input 
+                  type="text"
+                  value={verifyQuery}
+                  onChange={(e) => setVerifyQuery(e.target.value)}
+                  placeholder="Verify PCA ID / Phone Availability..."
+                  className="block w-full pl-9 pr-24 py-2 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 text-xs transition-all font-semibold text-gray-700 shadow-sm"
+                />
+                <div className="absolute inset-y-0 right-0 pr-2.5 flex items-center">
+                  {verificationStatus.lookupDone && (
+                    verificationStatus.exists ? (
+                      <div className="flex items-center gap-1 text-red-500 bg-red-50 px-2 py-0.5 rounded-full border border-red-100 shadow-sm animate-in fade-in duration-200">
+                        <Trash2 size={12} className="animate-pulse" />
+                        <span className="text-[9px] font-black uppercase tracking-wider">Exists</span>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-1 text-teal-600 bg-teal-50 px-2 py-0.5 rounded-full border border-teal-100 shadow-sm animate-in fade-in duration-200">
+                        <CheckCircle2 size={12} />
+                        <span className="text-[9px] font-black uppercase tracking-wider">Available</span>
+                      </div>
+                    )
+                  )}
                 </div>
               </div>
             </div>
-            
-            {/* Core Action Buttons aligned cleanly on the right */}
-            <div className="flex items-center gap-2 w-full lg:w-auto">
-              <button
-                onClick={() => setShowNewModal(true)}
-                className="flex-1 lg:flex-none flex items-center justify-center gap-1.5 px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-xl font-bold text-xs transition-all shadow-md shadow-teal-600/20 active:scale-95 whitespace-nowrap"
-                title="Create New Call Task"
-              >
-                <Plus size={16} />
-                New Task
-              </button>
-            </div>
+
+            {/* New Task Button */}
+            <button
+              onClick={() => setShowNewModal(true)}
+              className="flex items-center justify-center gap-1.5 px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-xl font-bold text-xs transition-all shadow-md shadow-teal-600/20 active:scale-95 whitespace-nowrap cursor-pointer"
+              title="Create New Call Task"
+            >
+              <Plus size={16} />
+              New Task
+            </button>
+
+            {/* Import Button */}
+            <button
+              onClick={() => document.getElementById('csv-import-input')?.click()}
+              className="flex items-center justify-center gap-1.5 px-4 py-2 bg-teal-50 hover:bg-teal-100 text-teal-700 border border-teal-100/50 rounded-xl font-bold text-xs transition-colors shadow-sm cursor-pointer whitespace-nowrap"
+              title="Import Call Tasks from CSV or Excel"
+            >
+              <FileUp size={14} />
+              Import
+            </button>
+            <input
+              id="csv-import-input"
+              type="file"
+              accept=".csv, .xlsx, .xls"
+              className="hidden"
+              onChange={handleImportFile}
+            />
+
+            {/* Export Button */}
+            <button
+              onClick={handleExport}
+              className="flex items-center justify-center gap-1.5 px-4 py-2 bg-teal-50 hover:bg-teal-100 text-teal-700 border border-teal-100/50 rounded-xl font-bold text-xs transition-colors shadow-sm cursor-pointer whitespace-nowrap"
+              title="Export Call Tasks to Excel"
+            >
+              <FileDown size={14} />
+              Export
+            </button>
           </div>
           
           {/* Master Advanced Filters Grid Panel */}
@@ -1709,59 +1731,30 @@ export function CallTaskDisplay() {
                     Clear All Filters
                   </button>
                 )}
-
-                <button
-                  onClick={() => document.getElementById('csv-import-input')?.click()}
-                  className="inline-flex items-center justify-center gap-1.5 px-4 py-1.5 bg-teal-50 hover:bg-teal-100 text-teal-700 border border-teal-100/50 rounded-xl font-bold text-xs transition-colors shadow-sm cursor-pointer"
-                  title="Import Call Tasks from CSV or Excel"
-                >
-                  <FileUp size={14} />
-                  Import
-                </button>
-                <input
-                  id="csv-import-input"
-                  type="file"
-                  accept=".csv, .xlsx, .xls"
-                  className="hidden"
-                  onChange={handleImportFile}
-                />
-
-                <button
-                  onClick={handleExport}
-                  className="inline-flex items-center justify-center gap-1.5 px-4 py-1.5 bg-teal-50 hover:bg-teal-100 text-teal-700 border border-teal-100/50 rounded-xl font-bold text-xs transition-colors shadow-sm cursor-pointer"
-                  title="Export Call Tasks to Excel"
-                >
-                  <FileDown size={14} />
-                  Export
-                </button>
               </div>
             </div>
           </div>
         </div>
 
       <div className="max-h-[calc(100vh-260px)] min-h-[450px] overflow-auto bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 relative shadow-md">
-        <table className="w-full text-left border-collapse min-w-[1450px]">
+        <table className="w-full text-left border-collapse min-w-[1100px]">
           <thead className="sticky top-0 z-30">
             <tr className="bg-teal-600">
               <th className="p-4 font-bold text-white text-center sticky left-0 top-0 z-40 bg-teal-600 w-[50px]">No</th>
               <th className="p-4 font-bold text-white sticky left-[50px] top-0 z-40 bg-teal-600 min-w-[120px]">PCA ID</th>
               <th className="p-4 font-bold text-white sticky left-[170px] top-0 z-40 bg-teal-600 min-w-[180px] border-r border-teal-500/20 shadow-[4px_0_8px_-4px_rgba(0,0,0,0.2)]">Name</th>
-              <th className="p-4 font-bold text-white min-w-[120px] bg-teal-600">Phone</th>
-              <th className="p-4 font-bold text-white min-w-[120px] bg-teal-600">District</th>
-              <th className="p-4 font-bold text-white min-w-[130px] bg-teal-600">Class</th>
-              <th className="p-4 font-bold text-white min-w-[130px] bg-teal-600">Package</th>
-              <th className="p-4 font-bold text-white min-w-[100px] bg-teal-600 text-center">1st Call</th>
-              <th className="p-4 font-bold text-white min-w-[100px] bg-teal-600 text-center">2nd Call</th>
-              <th className="p-4 font-bold text-white min-w-[100px] bg-teal-600 text-center">3rd Call</th>
+              <th className="p-4 font-bold text-white min-w-[130px] bg-teal-600">Phone</th>
+              <th className="p-4 font-bold text-white min-w-[110px] bg-teal-600 text-center">1st Call</th>
+              <th className="p-4 font-bold text-white min-w-[110px] bg-teal-600 text-center">2nd Call</th>
+              <th className="p-4 font-bold text-white min-w-[110px] bg-teal-600 text-center">3rd Call</th>
               <th className="p-4 font-bold text-white min-w-[120px] bg-teal-600">Status</th>
-              <th className="p-4 font-bold text-white min-w-[140px] bg-teal-600">Date Created</th>
               <th className="p-4 font-bold text-white text-center min-w-[160px] sticky top-0 bg-teal-600">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50 dark:divide-gray-800/60">
             {filteredTasks.length === 0 ? (
               <tr>
-                <td colSpan={12} className="p-12 text-center text-gray-400 dark:text-gray-500 font-medium">No records found</td>
+                <td colSpan={9} className="p-12 text-center text-gray-400 dark:text-gray-500 font-medium">No records found</td>
               </tr>
             ) : (
               filteredTasks.map((task, idx) => (
@@ -1785,9 +1778,6 @@ export function CallTaskDisplay() {
                       <button onClick={() => toast.success(copyToClipboard(task.phone))} className="text-gray-300 dark:text-gray-600 hover:text-teal-600 dark:hover:text-teal-400"><Copy size={14}/></button>
                     </div>
                   </td>
-                  <td className="p-4 text-sm text-gray-600 dark:text-gray-300">{task.district}</td>
-                  <td className="p-4 text-sm text-gray-600 dark:text-gray-300">{task.asked_class_type || '-'}</td>
-                  <td className="p-4 text-sm text-gray-600 dark:text-gray-300">{task.asked_package_type || '-'}</td>
                   <td className="p-4 text-center">
                     <div className="flex flex-col gap-0.5">
                       <span className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase">{task.first_call_date || 'N/A'}</span>
@@ -1819,7 +1809,6 @@ export function CallTaskDisplay() {
                       </span>
                     </div>
                   </td>
-                  <td className="p-4 text-xs text-gray-400 dark:text-gray-500 italic">{formatDate(task.created_at)}</td>
                   <td className="p-4">
                     <div className="flex items-center justify-center gap-2">
                         {task.status === 'Joined' ? (

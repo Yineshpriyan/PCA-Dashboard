@@ -178,11 +178,7 @@ export default function RecycleBin() {
       {/* Header Banner */}
       <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div className="space-y-1">
-          <h2 className="text-2xl font-black text-gray-900 dark:text-white border-l-4 border-teal-600 pl-4 tracking-tight flex items-center gap-2">
-            <Trash2 className="text-teal-600" />
-            Recycle Bin
-          </h2>
-          <p className="text-xs text-gray-500 dark:text-gray-400 font-medium pl-5">
+          <p className="text-xs text-gray-500 dark:text-gray-400 font-medium pl-1">
             View, review, and restore soft-deleted student and call task records instantly.
           </p>
         </div>

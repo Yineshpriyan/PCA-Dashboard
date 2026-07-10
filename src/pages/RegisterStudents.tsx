@@ -289,16 +289,6 @@ export default function RegisterStudents() {
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">
-      {/* Page Title */}
-      <div className="mb-8">
-        <h2 className="text-2xl font-bold text-gray-900 dark:text-white border-l-4 border-teal-600 pl-4">
-          Bulk Webinar Registration
-        </h2>
-        <p className="text-sm text-gray-500 dark:text-gray-400 mt-2 pl-4">
-          Upload a student list CSV to register candidates on Zoom Webinars in controlled batches.
-        </p>
-      </div>
-
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         
         {/* Left column - Form details */}
@@ -585,10 +575,13 @@ export default function RegisterStudents() {
           
           {/* Instructions box */}
           <div className="bg-teal-50/30 dark:bg-teal-950/10 border border-teal-100/50 dark:border-teal-900/30 rounded-2xl p-6">
-            <h3 className="text-sm font-bold text-teal-800 dark:text-teal-300 flex items-center gap-1.5 mb-3">
+            <h3 className="text-sm font-bold text-teal-800 dark:text-teal-300 flex items-center gap-1.5 mb-1.5">
               <AlertCircle size={16} />
               Setup Guide
             </h3>
+            <p className="text-xs text-teal-700/80 dark:text-teal-400/80 mb-4 leading-relaxed">
+              Upload a student list CSV to register candidates on Zoom Webinars in controlled batches.
+            </p>
             <ul className="space-y-2.5 text-xs text-teal-700/90 dark:text-teal-400/90 leading-relaxed">
               <li>
                 <strong>1. Required Columns:</strong> Your CSV file must contain at least an <span className="underline">Email</span> column.
