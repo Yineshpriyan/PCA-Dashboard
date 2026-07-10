@@ -18,7 +18,8 @@ import {
   Calendar,
   X,
   ChevronDown,
-  Check
+  Check,
+  MessageCircle
 } from 'lucide-react';
 import { 
   CallTask, 
@@ -1773,9 +1774,28 @@ export function CallTaskDisplay() {
                     </div>
                   </td>
                   <td className="p-4 font-mono text-sm text-gray-600 dark:text-gray-350">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1.5 flex-nowrap">
                       <span>{task.phone}</span>
-                      <button onClick={() => toast.success(copyToClipboard(task.phone))} className="text-gray-300 dark:text-gray-600 hover:text-teal-600 dark:hover:text-teal-400"><Copy size={14}/></button>
+                      <div className="flex items-center gap-0.5">
+                        <button 
+                          onClick={() => toast.success(copyToClipboard(task.phone))} 
+                          className="p-1 text-gray-300 dark:text-gray-600 hover:text-teal-600 dark:hover:text-teal-400 transition-colors cursor-pointer"
+                          title="Copy Phone Number"
+                        >
+                          <Copy size={13}/>
+                        </button>
+                        {task.phone && (
+                          <a 
+                            href={`https://wa.me/${task.phone.replace(/\D/g, '')}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="p-1 text-green-500 hover:text-green-600 dark:text-green-400 dark:hover:text-green-300 transition-colors flex items-center justify-center cursor-pointer"
+                            title="Chat on WhatsApp"
+                          >
+                            <MessageCircle size={14} className="fill-green-500/10 dark:fill-green-400/10" />
+                          </a>
+                        )}
+                      </div>
                     </div>
                   </td>
                   <td className="p-4 text-center">
