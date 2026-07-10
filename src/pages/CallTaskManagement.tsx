@@ -48,7 +48,7 @@ export function CallTaskForm({ editData, onComplete }: { editData?: CallTask; on
   const [formData, setFormData] = useState({
     pcaid: editData?.pcaid || '',
     name: editData?.name || '',
-    phone: editData?.phone || '',
+    phone: editData?.phone ? (editData.phone.replace(/\D/g, '').replace(/^0+/, '').slice(0, 9)) : '',
     stream: editData?.stream || '',
     proper_batch: editData?.proper_batch || '',
     joined_batch: editData?.joined_batch || '',
@@ -79,6 +79,38 @@ export function CallTaskForm({ editData, onComplete }: { editData?: CallTask; on
   // Temporary ID generator state & function
   const [isGeneratingTempId, setIsGeneratingTempId] = useState(false);
   const [latestGeneratedTempId, setLatestGeneratedTempId] = useState<string | null>(null);
+
+  // Field Validation State
+  const [phoneError, setPhoneError] = useState('');
+  const [mailError, setMailError] = useState('');
+
+  const handlePhoneBlur = (phoneVal: string) => {
+    const cleanPhone = phoneVal.replace(/\D/g, '');
+    if (!cleanPhone) {
+      setPhoneError('');
+    } else if (cleanPhone.length !== 9) {
+      setPhoneError('Invalid Phone Number');
+    } else {
+      setPhoneError('');
+    }
+  };
+
+  const handleMailBlur = (mailVal: string) => {
+    if (!mailVal) {
+      setMailError('');
+      return;
+    }
+    const isInvalid = mailVal === '@gmail.com' || 
+                      !mailVal.endsWith('@gmail.com') || 
+                      mailVal.startsWith('@') ||
+                      mailVal.split('@')[0].includes(' ') ||
+                      mailVal.split('@')[0].includes('@');
+    if (isInvalid) {
+      setMailError('Invalid Gmail username');
+    } else {
+      setMailError('');
+    }
+  };
 
   const handleGenerateTempId = async () => {
     setIsGeneratingTempId(true);
@@ -202,6 +234,24 @@ export function CallTaskForm({ editData, onComplete }: { editData?: CallTask; on
     if (!formData.name || !formData.phone) {
       toast.error('Name and Phone are required');
       return;
+    }
+
+    const cleanPhone = formData.phone.replace(/\D/g, '');
+    if (cleanPhone.length !== 9) {
+      toast.error('Sri Lankan phone number must be exactly 9 digits (e.g., 7X XXX XXXX)');
+      return;
+    }
+
+    if (formData.mail) {
+      const isInvalid = formData.mail === '@gmail.com' || 
+                        !formData.mail.endsWith('@gmail.com') || 
+                        formData.mail.startsWith('@') ||
+                        formData.mail.split('@')[0].includes(' ') ||
+                        formData.mail.split('@')[0].includes('@');
+      if (isInvalid) {
+        toast.error('Please enter a valid Gmail username');
+        return;
+      }
     }
 
     setLoading(true);
@@ -551,23 +601,65 @@ export function CallTaskForm({ editData, onComplete }: { editData?: CallTask; on
             </div>
             <div className="flex flex-col gap-1.5">
               <label className="text-sm font-semibold text-gray-700">Mail</label>
-              <input
-                type="email"
-                value={formData.mail}
-                onChange={(e) => setFormData({ ...formData, mail: e.target.value })}
-                className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500/20"
-                placeholder="Email Address"
-              />
+              <div className={cn(
+                "relative flex items-center border bg-gray-50 dark:bg-gray-900 rounded-lg overflow-hidden focus-within:ring-2 transition-all",
+                mailError 
+                  ? "border-red-500 focus-within:ring-red-500/20 focus-within:border-red-500" 
+                  : "border-gray-200 dark:border-gray-800 focus-within:ring-teal-500/20 focus-within:border-teal-500"
+              )}>
+                <input
+                  type="text"
+                  value={formData.mail.endsWith('@gmail.com') ? formData.mail.slice(0, -10) : formData.mail}
+                  onChange={(e) => {
+                    const val = e.target.value.trim();
+                    const cleanVal = val.replace(/[^a-zA-Z0-9._-]/g, '');
+                    setFormData({ ...formData, mail: cleanVal ? `${cleanVal}@gmail.com` : '' });
+                    if (mailError) setMailError('');
+                  }}
+                  onBlur={() => handleMailBlur(formData.mail)}
+                  className="w-full px-3 py-2 bg-transparent focus:outline-none text-sm text-gray-800 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
+                  placeholder="username"
+                />
+                <div className="px-3 py-2 bg-gray-100/80 dark:bg-gray-800/80 border-l border-gray-200 dark:border-gray-700 select-none text-sm font-semibold text-gray-500 dark:text-gray-400">
+                  @gmail.com
+                </div>
+              </div>
+              {mailError && (
+                <span className="text-xs text-red-500 font-medium mt-0.5">{mailError}</span>
+              )}
             </div>
             <div className="flex flex-col gap-1.5">
               <label className="text-sm font-semibold text-gray-700">Phone</label>
-              <input
-                type="text"
-                value={formData.phone}
-                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500/20"
-                placeholder="Phone Number"
-              />
+              <div className={cn(
+                "relative flex items-center border bg-gray-50 dark:bg-gray-900 rounded-lg overflow-hidden focus-within:ring-2 transition-all",
+                phoneError 
+                  ? "border-red-500 focus-within:ring-red-500/20 focus-within:border-red-500" 
+                  : "border-gray-200 dark:border-gray-800 focus-within:ring-teal-500/20 focus-within:border-teal-500"
+              )}>
+                <div className="flex items-center gap-1.5 px-3 py-2 bg-gray-100/80 dark:bg-gray-800/80 border-r border-gray-200 dark:border-gray-700 select-none text-sm font-semibold text-gray-700 dark:text-gray-300">
+                  <span className="text-base" role="img" aria-label="Sri Lanka Flag">🇱🇰</span>
+                  <span>+94</span>
+                  <ChevronDown size={14} className="text-gray-400 dark:text-gray-500" />
+                </div>
+                <input
+                  type="text"
+                  value={formData.phone}
+                  onChange={(e) => {
+                    let digits = e.target.value.replace(/\D/g, '');
+                    if (digits.startsWith('0')) {
+                      digits = digits.slice(1);
+                    }
+                    setFormData({ ...formData, phone: digits.slice(0, 9) });
+                    if (phoneError) setPhoneError('');
+                  }}
+                  onBlur={() => handlePhoneBlur(formData.phone)}
+                  className="w-full px-3 py-2 bg-transparent focus:outline-none text-sm text-gray-800 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
+                  placeholder="7X XXX XXXX"
+                />
+              </div>
+              {phoneError && (
+                <span className="text-xs text-red-500 font-medium mt-0.5">{phoneError}</span>
+              )}
             </div>
             <div className="flex flex-col gap-1.5">
               <label className="text-sm font-semibold text-gray-700">Address</label>

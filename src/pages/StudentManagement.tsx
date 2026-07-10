@@ -175,21 +175,25 @@ export function StudentForm() {
   }>({ exists: false, lookupDone: false });
 
   // Student Data
-  const [studentData, setStudentData] = useState({
-    pcaid: editStudent?.pcaid || leadData?.pcaid || '',
-    name: editStudent?.name || leadData?.name || '',
-    phone: editStudent?.phone || leadData?.phone || '',
-    stream: editStudent?.stream || leadData?.stream || '',
-    proper_batch: editStudent?.proper_batch || leadData?.proper_batch || '',
-    joined_batch: editStudent?.joined_batch || leadData?.joined_batch || '',
-    school: editStudent?.school || leadData?.school || '',
-    district: editStudent?.district || leadData?.district || '',
-    mail: editStudent?.mail || leadData?.mail || '',
-    address: editStudent?.address || leadData?.address || '',
-    asked_class_type: editStudent?.asked_class_type || leadData?.asked_class_type || '',
-    asked_package_type: editStudent?.asked_package_type || leadData?.asked_package_type || '',
-    batch_type: editStudent?.batch_type || leadData?.batch_type || '',
-    gender: editStudent?.gender || leadData?.gender || ''
+  const [studentData, setStudentData] = useState(() => {
+    const rawPhone = editStudent?.phone || leadData?.phone || '';
+    const cleanPhone = rawPhone.replace(/\D/g, '').replace(/^0+/, '').slice(0, 9);
+    return {
+      pcaid: editStudent?.pcaid || leadData?.pcaid || '',
+      name: editStudent?.name || leadData?.name || '',
+      phone: cleanPhone,
+      stream: editStudent?.stream || leadData?.stream || '',
+      proper_batch: editStudent?.proper_batch || leadData?.proper_batch || '',
+      joined_batch: editStudent?.joined_batch || leadData?.joined_batch || '',
+      school: editStudent?.school || leadData?.school || '',
+      district: editStudent?.district || leadData?.district || '',
+      mail: editStudent?.mail || leadData?.mail || '',
+      address: editStudent?.address || leadData?.address || '',
+      asked_class_type: editStudent?.asked_class_type || leadData?.asked_class_type || '',
+      asked_package_type: editStudent?.asked_package_type || leadData?.asked_package_type || '',
+      batch_type: editStudent?.batch_type || leadData?.batch_type || '',
+      gender: editStudent?.gender || leadData?.gender || ''
+    };
   });
 
   // Temporary ID generator state & function
@@ -199,6 +203,38 @@ export function StudentForm() {
   // Sequential PCA ID generator state & function
   const [isGeneratingPcaId, setIsGeneratingPcaId] = useState(false);
   const [latestGeneratedPcaId, setLatestGeneratedPcaId] = useState<string | null>(null);
+
+  // Field Validation State
+  const [phoneError, setPhoneError] = useState('');
+  const [mailError, setMailError] = useState('');
+
+  const handlePhoneBlur = (phoneVal: string) => {
+    const cleanPhone = phoneVal.replace(/\D/g, '');
+    if (!cleanPhone) {
+      setPhoneError('');
+    } else if (cleanPhone.length !== 9) {
+      setPhoneError('Invalid Phone Number');
+    } else {
+      setPhoneError('');
+    }
+  };
+
+  const handleMailBlur = (mailVal: string) => {
+    if (!mailVal) {
+      setMailError('');
+      return;
+    }
+    const isInvalid = mailVal === '@gmail.com' || 
+                      !mailVal.endsWith('@gmail.com') || 
+                      mailVal.startsWith('@') ||
+                      mailVal.split('@')[0].includes(' ') ||
+                      mailVal.split('@')[0].includes('@');
+    if (isInvalid) {
+      setMailError('Invalid Gmail username');
+    } else {
+      setMailError('');
+    }
+  };
 
   const getInitialStudentType = (): 'Paid' | 'Scholarship' => {
     const pcaid = editStudent?.pcaid || leadData?.pcaid || '';
@@ -909,6 +945,23 @@ export function StudentForm() {
     if (!studentData.pcaid || !studentData.name) {
       toast.error('PCA ID and Name are required');
       return;
+    }
+
+    if (studentData.phone && studentData.phone.replace(/\D/g, '').length !== 9) {
+      toast.error('Sri Lankan phone number must be exactly 9 digits (e.g., 7X XXX XXXX)');
+      return;
+    }
+
+    if (studentData.mail) {
+      const isInvalid = studentData.mail === '@gmail.com' || 
+                        !studentData.mail.endsWith('@gmail.com') || 
+                        studentData.mail.startsWith('@') ||
+                        studentData.mail.split('@')[0].includes(' ') ||
+                        studentData.mail.split('@')[0].includes('@');
+      if (isInvalid) {
+        toast.error('Please enter a valid Gmail username');
+        return;
+      }
     }
 
     // Skip duplicate check if editing existing student and PCA ID hasn't been changed
@@ -1659,25 +1712,67 @@ export function StudentForm() {
           {/* Field 11: Phone */}
           <div className="flex flex-col gap-1.5">
             <label className="text-sm font-semibold text-gray-700">Phone</label>
-            <input
-              type="text"
-              value={studentData.phone}
-              onChange={(e) => setStudentData({ ...studentData, phone: e.target.value })}
-              className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500/20"
-              placeholder="Phone Number"
-            />
+            <div className={cn(
+              "relative flex items-center border bg-gray-50 dark:bg-gray-900 rounded-lg overflow-hidden focus-within:ring-2 transition-all",
+              phoneError 
+                ? "border-red-500 focus-within:ring-red-500/20 focus-within:border-red-500" 
+                : "border-gray-200 dark:border-gray-800 focus-within:ring-teal-500/20 focus-within:border-teal-500"
+            )}>
+              <div className="flex items-center gap-1.5 px-3 py-2 bg-gray-100/80 dark:bg-gray-800/80 border-r border-gray-200 dark:border-gray-700 select-none text-sm font-semibold text-gray-700 dark:text-gray-300">
+                <span className="text-base" role="img" aria-label="Sri Lanka Flag">🇱🇰</span>
+                <span>+94</span>
+                <ChevronDown size={14} className="text-gray-400 dark:text-gray-500" />
+              </div>
+              <input
+                type="text"
+                value={studentData.phone}
+                onChange={(e) => {
+                  let digits = e.target.value.replace(/\D/g, '');
+                  if (digits.startsWith('0')) {
+                    digits = digits.slice(1);
+                  }
+                  setStudentData({ ...studentData, phone: digits.slice(0, 9) });
+                  if (phoneError) setPhoneError('');
+                }}
+                onBlur={() => handlePhoneBlur(studentData.phone)}
+                className="w-full px-3 py-2 bg-transparent focus:outline-none text-sm text-gray-800 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
+                placeholder="7X XXX XXXX"
+              />
+            </div>
+            {phoneError && (
+              <span className="text-xs text-red-500 font-medium mt-0.5">{phoneError}</span>
+            )}
           </div>
 
           {/* Field 10: Mail */}
           <div className="flex flex-col gap-1.5">
             <label className="text-sm font-semibold text-gray-700">Mail</label>
-            <input
-              type="email"
-              value={studentData.mail}
-              onChange={(e) => setStudentData({ ...studentData, mail: e.target.value })}
-              className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500/20"
-              placeholder="Email Address"
-            />
+            <div className={cn(
+              "relative flex items-center border bg-gray-50 dark:bg-gray-900 rounded-lg overflow-hidden focus-within:ring-2 transition-all",
+              mailError 
+                ? "border-red-500 focus-within:ring-red-500/20 focus-within:border-red-500" 
+                : "border-gray-200 dark:border-gray-800 focus-within:ring-teal-500/20 focus-within:border-teal-500"
+            )}>
+              <input
+                type="text"
+                value={studentData.mail.endsWith('@gmail.com') ? studentData.mail.slice(0, -10) : studentData.mail}
+                onChange={(e) => {
+                  const val = e.target.value.trim();
+                  const cleanVal = val.replace(/[^a-zA-Z0-9._-]/g, '');
+                  setStudentData({ ...studentData, mail: cleanVal ? `${cleanVal}@gmail.com` : '' });
+                  if (mailError) setMailError('');
+                }}
+                onBlur={() => handleMailBlur(studentData.mail)}
+                className="w-full px-3 py-2 bg-transparent focus:outline-none text-sm text-gray-800 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
+                placeholder="username"
+              />
+              <div className="px-3 py-2 bg-gray-100/80 dark:bg-gray-800/80 border-l border-gray-200 dark:border-gray-700 select-none text-sm font-semibold text-gray-500 dark:text-gray-400">
+                @gmail.com
+              </div>
+            </div>
+            {mailError && (
+              <span className="text-xs text-red-500 font-medium mt-0.5">{mailError}</span>
+            )}
           </div>
 
           {/* Field 9: School */}
