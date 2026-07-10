@@ -130,6 +130,11 @@ const mapDbPaymentToUI = (p: any): Payment => {
   };
 };
 
+const MONTHS = [
+  "January", "February", "March", "April", "May", "June", 
+  "July", "August", "September", "October", "November", "December"
+];
+
 export function StudentForm() {
   const { state } = useLocation();
   const navigate = useNavigate();
@@ -143,7 +148,23 @@ export function StudentForm() {
   const [packageTypes, setPackageTypes] = useState<PackageItem[]>([]);
   const [joinedBatches, setJoinedBatches] = useState<JoinedBatchItem[]>([]);
   const [selectedClass, setSelectedClass] = useState('');
+  const [selectedMonth, setSelectedMonth] = useState('');
   const [selectedPackage, setSelectedPackage] = useState('');
+  const [paymentClassType, setPaymentClassType] = useState('');
+  const [paymentMonth, setPaymentMonth] = useState('');
+
+  // Compute clean, unique base class types (without monthly suffix) for the dropdown selection
+  const baseClassTypes = (Array.from(new Set(classTypes.map(c => {
+    const match = MONTHS.find(m => c.class_type.endsWith(` ${m}`) || c.class_type.endsWith(` - ${m}`));
+    if (match) {
+      let idx = c.class_type.lastIndexOf(` - ${match}`);
+      if (idx === -1) {
+        idx = c.class_type.lastIndexOf(` ${match}`);
+      }
+      return c.class_type.substring(0, idx).trim();
+    }
+    return c.class_type;
+  }))) as string[]).sort((a, b) => a.localeCompare(b));
   
   // Verification State
   const [verifyQuery, setVerifyQuery] = useState('');
@@ -553,13 +574,20 @@ export function StudentForm() {
     if (batches) setJoinedBatches(batches);
   };
   const handleAddPayment = () => {
-    if (currentPayment.type === 'class' && !currentPayment.class_type) {
-      toast.error('Select a class type');
-      return;
-    }
-    if (currentPayment.type === 'package' && !currentPayment.package_type) {
-      toast.error('Select a package type');
-      return;
+    let finalClassType = '';
+    if (currentPayment.type === 'class') {
+      if (!paymentClassType) {
+        toast.error('Select a class type');
+        return;
+      }
+      
+      finalClassType = paymentMonth ? `${paymentClassType} ${paymentMonth}` : paymentClassType;
+      currentPayment.class_type = finalClassType;
+    } else {
+      if (!currentPayment.package_type) {
+        toast.error('Select a package type');
+        return;
+      }
     }
 
     const expiry = calculateExpiry(currentPayment.activation_date!, currentPayment.duration!);
@@ -585,12 +613,31 @@ export function StudentForm() {
       payment: 0,
       total_amount: undefined
     });
+    setPaymentClassType('');
+    setPaymentMonth('');
   };
 
   const handleEditPayment = (index: number) => {
     const p = tempPayments[index];
     setCurrentPayment({ ...p });
     setEditingIndex(index);
+    if (p.type === 'class' && p.class_type) {
+      const match = MONTHS.find(m => p.class_type!.endsWith(` ${m}`) || p.class_type!.endsWith(` - ${m}`));
+      if (match) {
+        let idx = p.class_type.lastIndexOf(` - ${match}`);
+        if (idx === -1) {
+          idx = p.class_type.lastIndexOf(` ${match}`);
+        }
+        setPaymentClassType(p.class_type.substring(0, idx).trim());
+        setPaymentMonth(match);
+      } else {
+        setPaymentClassType(p.class_type);
+        setPaymentMonth('');
+      }
+    } else {
+      setPaymentClassType('');
+      setPaymentMonth('');
+    }
     // Focus or scroll to the payment entry form if needed
     window.scrollTo({ top: document.getElementById('payment-entry-section')?.offsetTop || 0, behavior: 'smooth' });
   };
@@ -816,14 +863,18 @@ export function StudentForm() {
 
   const handleAddClass = () => {
     if (!selectedClass) return;
+    const combinedClass = selectedMonth ? `${selectedClass} ${selectedMonth}` : selectedClass;
+
     const current = studentData.asked_class_type ? studentData.asked_class_type.split(', ') : [];
-    if (current.includes(selectedClass)) {
+    if (current.includes(combinedClass)) {
       toast.error('Class already added');
       return;
     }
-    const updated = [...current, selectedClass].join(', ');
+
+    const updated = [...current, combinedClass].join(', ');
     setStudentData({ ...studentData, asked_class_type: updated });
     setSelectedClass('');
+    setSelectedMonth('');
   };
 
   const handleRemoveClass = (val: string) => {
@@ -1355,89 +1406,87 @@ export function StudentForm() {
 
   return (
     <div className="max-w-5xl mx-auto space-y-8 pb-12">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <h2 className="text-2xl font-bold text-gray-900 border-l-4 border-teal-600 pl-4">{editStudent ? 'Edit Student' : 'New Student'}</h2>
-        
-        {/* Verification Bar */}
-        <div className="flex-1 max-w-md w-full">
-          <div className="relative group">
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400 group-focus-within:text-teal-600 transition-colors">
-              <Search size={16} />
-            </div>
-            <input
-              type="text"
-              value={verifyQuery}
-              onChange={(e) => setVerifyQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 bg-white border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all shadow-sm"
-              placeholder="Verify PCA ID or Phone Number..."
-            />
-            <div className="absolute inset-y-0 right-0 flex items-center py-1.5 pr-1.5 gap-2">
-              {verificationStatus.lookupDone && (
-                <div className="flex items-center gap-2">
-                  <div className={cn(
-                    "flex items-center gap-1.5 px-3 h-[30px] rounded-lg text-[10px] font-black uppercase tracking-wider animate-in fade-in slide-in-from-right-2 duration-300",
-                    verificationStatus.exists ? "bg-red-50 text-red-600 border border-red-100" : "bg-green-50 text-green-600 border border-green-100"
-                  )}>
-                    {verificationStatus.exists ? (
-                      <>
-                        <ShieldAlert size={12}/>
-                        Exists
-                      </>
-                    ) : (
-                      <>
-                        <ShieldCheck size={12}/>
-                        New
-                      </>
-                    )}
-                  </div>
-                  
-                  {verificationStatus.exists && (
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={handleGrabDetails}
-                        className="flex items-center gap-1.5 px-3 h-[30px] bg-teal-600 text-white rounded-lg text-[10px] font-black uppercase tracking-wider hover:bg-teal-700 transition-colors shadow-sm animate-in zoom-in duration-300"
-                        title="Fill form with existing details"
-                      >
-                        <RefreshCw size={12} className={loading ? "animate-spin" : ""} />
-                        Grab Data
-                      </button>
-                      
-                      <button
-                        onClick={() => navigate('/admin/student-explorer', { state: { search: verifyQuery } })}
-                        className="flex items-center gap-1.5 px-3 h-[30px] bg-orange-500 text-white rounded-lg text-[10px] font-black uppercase tracking-wider hover:bg-orange-600 transition-colors shadow-sm animate-in zoom-in duration-300"
-                        title="View student details in directory"
-                      >
-                        <ExternalLink size={12} />
-                        View
-                      </button>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-          
-          {/* Quick Action Badge if student exists */}
-          {verificationStatus.exists && verificationStatus.student && (
-            <div className="absolute mt-2 z-10 animate-in fade-in slide-in-from-top-1 duration-200">
-               <button 
-                onClick={() => navigate('/admin/student-explorer', { state: { search: verificationStatus.student?.pcaid } })}
-                className="flex items-center gap-2 px-3 py-1 bg-teal-900 text-white rounded-full text-[10px] font-bold hover:bg-black transition-colors shadow-lg"
-              >
-                <ExternalLink size={10}/>
-                View {verificationStatus.student.name} in Explorer
-              </button>
-            </div>
-          )}
-        </div>
-      </div>
-      
       {/* SECTION 1: STUDENT DATA */}
       <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100">
-        <h3 className="text-lg font-bold text-gray-800 mb-6 flex items-center gap-2">
-          <UserIcon size={20} className="text-teal-600"/>
-          Section 1: Student Data
-        </h3>
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+          <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+            <UserIcon size={20} className="text-teal-600"/>
+            Section 1: Student Data
+          </h3>
+          
+          {/* Verification Bar */}
+          <div className="flex-1 max-w-md w-full relative">
+            <div className="relative group">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400 group-focus-within:text-teal-600 transition-colors">
+                <Search size={16} />
+              </div>
+              <input
+                type="text"
+                value={verifyQuery}
+                onChange={(e) => setVerifyQuery(e.target.value)}
+                className="w-full pl-10 pr-4 py-2 bg-white border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all shadow-sm"
+                placeholder="Verify PCA ID or Phone Number..."
+              />
+              <div className="absolute inset-y-0 right-0 flex items-center py-1.5 pr-1.5 gap-2">
+                {verificationStatus.lookupDone && (
+                  <div className="flex items-center gap-2">
+                    <div className={cn(
+                      "flex items-center gap-1.5 px-3 h-[30px] rounded-lg text-[10px] font-black uppercase tracking-wider animate-in fade-in slide-in-from-right-2 duration-300",
+                      verificationStatus.exists ? "bg-red-50 text-red-600 border border-red-100" : "bg-green-50 text-green-600 border border-green-100"
+                    )}>
+                      {verificationStatus.exists ? (
+                        <>
+                          <ShieldAlert size={12}/>
+                          Exists
+                        </>
+                      ) : (
+                        <>
+                          <ShieldCheck size={12}/>
+                          New
+                        </>
+                      )}
+                    </div>
+                    
+                    {verificationStatus.exists && (
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={handleGrabDetails}
+                          className="flex items-center gap-1.5 px-3 h-[30px] bg-teal-600 text-white rounded-lg text-[10px] font-black uppercase tracking-wider hover:bg-teal-700 transition-colors shadow-sm animate-in zoom-in duration-300"
+                          title="Fill form with existing details"
+                        >
+                          <RefreshCw size={12} className={loading ? "animate-spin" : ""} />
+                          Grab Data
+                        </button>
+                        
+                        <button
+                          onClick={() => navigate('/admin/student-explorer', { state: { search: verifyQuery } })}
+                          className="flex items-center gap-1.5 px-3 h-[30px] bg-orange-500 text-white rounded-lg text-[10px] font-black uppercase tracking-wider hover:bg-orange-600 transition-colors shadow-sm animate-in zoom-in duration-300"
+                          title="View student details in directory"
+                        >
+                          <ExternalLink size={12} />
+                          View
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+            
+            {/* Quick Action Badge if student exists */}
+            {verificationStatus.exists && verificationStatus.student && (
+              <div className="absolute mt-2 z-10 animate-in fade-in slide-in-from-top-1 duration-200">
+                 <button 
+                  onClick={() => navigate('/admin/student-explorer', { state: { search: verificationStatus.student?.pcaid } })}
+                  className="flex items-center gap-2 px-3 py-1 bg-teal-900 text-white rounded-full text-[10px] font-bold hover:bg-black transition-colors shadow-lg"
+                >
+                  <ExternalLink size={10}/>
+                  View {verificationStatus.student.name} in Explorer
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
         
         <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-6">
           {/* Field 1: PCA ID */}
@@ -1655,24 +1704,36 @@ export function StudentForm() {
           </div>
 
           {/* Asked Class Type */}
-          <div className="flex flex-col gap-2 p-4 bg-gray-50 rounded-xl border border-gray-100">
+          <div className="flex flex-col gap-2 p-4 bg-gray-50 rounded-xl border border-gray-100 md:col-span-2">
             <label className="text-sm font-semibold text-gray-700">Asked Class Type</label>
-            <div className="flex gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 w-full">
               <select
                 value={selectedClass}
                 onChange={(e) => setSelectedClass(e.target.value)}
-                className="flex-1 px-4 py-2 bg-white border border-gray-200 rounded-lg focus:outline-none text-gray-700 font-medium"
+                className="w-full min-w-0 px-4 py-2 bg-white border border-gray-200 rounded-lg focus:outline-none text-gray-700 font-medium"
               >
-                <option value="">Select Class</option>
-                {classTypes.map(c => <option key={c.id} value={c.class_type}>{c.class_type}</option>)}
+                <option value="">Select Class Type</option>
+                {baseClassTypes.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
-              <button
-                type="button"
-                onClick={handleAddClass}
-                className="p-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors"
-              >
-                <Plus size={20} />
-              </button>
+
+              <div className="flex gap-2 min-w-0 w-full">
+                <select
+                  value={selectedMonth}
+                  onChange={(e) => setSelectedMonth(e.target.value)}
+                  className="flex-1 min-w-0 px-4 py-2 bg-white border border-gray-200 rounded-lg focus:outline-none text-gray-700 font-medium"
+                >
+                  <option value="">Select Month</option>
+                  {MONTHS.map(m => <option key={m} value={m}>{m}</option>)}
+                </select>
+                <button
+                  type="button"
+                  onClick={handleAddClass}
+                  className="p-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 active:scale-95 transition-all cursor-pointer flex items-center justify-center w-10 h-10 shrink-0"
+                  title="Add Class"
+                >
+                  <Plus size={20} />
+                </button>
+              </div>
             </div>
             <div className="flex flex-wrap gap-2 mt-2">
               {studentData.asked_class_type.split(', ').filter(Boolean).map(c => (
@@ -1687,13 +1748,13 @@ export function StudentForm() {
           </div>
 
           {/* Asked Package Type */}
-          <div className="flex flex-col gap-2 p-4 bg-gray-50 rounded-xl border border-gray-100">
+          <div className="flex flex-col gap-2 p-4 bg-gray-50 rounded-xl border border-gray-100 md:col-span-2">
             <label className="text-sm font-semibold text-gray-700">Asked Package Type</label>
-            <div className="flex gap-2">
+            <div className="flex gap-2 w-full">
               <select
                 value={selectedPackage}
                 onChange={(e) => setSelectedPackage(e.target.value)}
-                className="flex-1 px-4 py-2 bg-white border border-gray-200 rounded-lg focus:outline-none text-gray-700 font-medium"
+                className="flex-1 min-w-0 px-4 py-2 bg-white border border-gray-200 rounded-lg focus:outline-none text-gray-700 font-medium"
               >
                 <option value="">Select Package</option>
                 {packageTypes.map(p => <option key={p.id} value={p.package_type}>{p.package_type}</option>)}
@@ -1701,7 +1762,7 @@ export function StudentForm() {
               <button
                 type="button"
                 onClick={handleAddPackage}
-                className="p-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors"
+                className="p-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors shrink-0"
                 id="add_package_from_view"
               >
                 <Plus size={20} />
@@ -1731,42 +1792,70 @@ export function StudentForm() {
           {/* Entry Row */}
           <div id="payment-entry-section" className="p-6 bg-teal-50/50 rounded-2xl border border-teal-100 flex flex-col gap-6">
             <div className="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
-               <div className="space-y-1">
-                <label className="text-xs font-bold text-teal-800 uppercase tracking-tighter">Entry Type</label>
-                <div className="flex bg-white rounded-lg p-1 border border-teal-100">
-                  <button 
-                    onClick={() => setCurrentPayment({ ...currentPayment, type: 'class', class_type: '', package_type: '' })}
-                    className={cn("flex-1 px-2 py-1.5 text-xs font-bold rounded-md transition-all", currentPayment.type === 'class' ? 'bg-teal-600 text-white shadow-sm' : 'text-gray-500 hover:bg-gray-50')}
-                  >
-                    Class
-                  </button>
-                  <button 
-                    onClick={() => setCurrentPayment({ ...currentPayment, type: 'package', class_type: '', package_type: '' })}
-                    className={cn("flex-1 px-2 py-1.5 text-xs font-bold rounded-md transition-all", currentPayment.type === 'package' ? 'bg-teal-600 text-white shadow-sm' : 'text-gray-500 hover:bg-gray-50')}
-                  >
-                    Package
-                  </button>
+               <div className="md:col-span-2 flex flex-col gap-3">
+                 {/* Entry Type */}
+                 <div className="space-y-1">
+                  <label className="text-xs font-bold text-teal-800 uppercase tracking-tighter">Entry Type</label>
+                  <div className="flex bg-white rounded-lg p-1 border border-teal-100 w-full">
+                    <button 
+                      onClick={() => {
+                        setCurrentPayment({ ...currentPayment, type: 'class', class_type: '', package_type: '' });
+                        setPaymentClassType('');
+                        setPaymentMonth('');
+                      }}
+                      className={cn("flex-1 px-2 py-1.5 text-xs font-bold rounded-md transition-all", currentPayment.type === 'class' ? 'bg-teal-600 text-white shadow-sm' : 'text-gray-500 hover:bg-gray-50')}
+                    >
+                      Class
+                    </button>
+                    <button 
+                      onClick={() => {
+                        setCurrentPayment({ ...currentPayment, type: 'package', class_type: '', package_type: '' });
+                        setPaymentClassType('');
+                        setPaymentMonth('');
+                      }}
+                      className={cn("flex-1 px-2 py-1.5 text-xs font-bold rounded-md transition-all", currentPayment.type === 'package' ? 'bg-teal-600 text-white shadow-sm' : 'text-gray-500 hover:bg-gray-50')}
+                    >
+                      Package
+                    </button>
+                  </div>
                 </div>
-              </div>
 
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-teal-800 uppercase tracking-tighter">
-                  {currentPayment.type === 'class' ? 'Class Type' : 'Package Type'}
-                </label>
-                <select
-                  value={currentPayment.type === 'class' ? currentPayment.class_type : currentPayment.package_type}
-                  onChange={(e) => setCurrentPayment({ 
-                    ...currentPayment, 
-                    [currentPayment.type === 'class' ? 'class_type' : 'package_type']: e.target.value 
-                  })}
-                  className="w-full px-3 py-2 bg-white border border-teal-100 rounded-lg text-sm focus:ring-2 focus:ring-teal-500/20 outline-none"
-                >
-                  <option value="">Select Option</option>
-                  {currentPayment.type === 'class' 
-                    ? classTypes.map(c => <option key={c.id} value={c.class_type}>{c.class_type}</option>)
-                    : packageTypes.map(p => <option key={p.id} value={p.package_type}>{p.package_type}</option>)
-                  }
-                </select>
+                {/* Dropdowns below Entry Type */}
+                {currentPayment.type === 'class' ? (
+                  <div className="space-y-1 w-full">
+                    <label className="text-xs font-bold text-teal-800 uppercase tracking-tighter">Class Type & Month</label>
+                    <div className="grid grid-cols-2 gap-2 w-full">
+                      <select
+                        value={paymentClassType}
+                        onChange={(e) => setPaymentClassType(e.target.value)}
+                        className="w-full px-3 py-2 bg-white border border-teal-100 rounded-lg text-sm focus:ring-2 focus:ring-teal-500/20 outline-none"
+                      >
+                        <option value="">Select Class Type</option>
+                        {baseClassTypes.map(c => <option key={c} value={c}>{c}</option>)}
+                      </select>
+                      <select
+                        value={paymentMonth}
+                        onChange={(e) => setPaymentMonth(e.target.value)}
+                        className="w-full px-3 py-2 bg-white border border-teal-100 rounded-lg text-sm focus:ring-2 focus:ring-teal-500/20 outline-none"
+                      >
+                        <option value="">Select Month</option>
+                        {MONTHS.map(m => <option key={m} value={m}>{m}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-1 w-full">
+                    <label className="text-xs font-bold text-teal-800 uppercase tracking-tighter">Package Type</label>
+                    <select
+                      value={currentPayment.package_type || ''}
+                      onChange={(e) => setCurrentPayment({ ...currentPayment, package_type: e.target.value })}
+                      className="w-full px-3 py-2 bg-white border border-teal-100 rounded-lg text-sm focus:ring-2 focus:ring-teal-500/20 outline-none"
+                    >
+                      <option value="">Select Package</option>
+                      {packageTypes.map(p => <option key={p.id} value={p.package_type}>{p.package_type}</option>)}
+                    </select>
+                  </div>
+                )}
               </div>
 
               <div className="space-y-1">
@@ -1779,7 +1868,7 @@ export function StudentForm() {
                     const val = e.target.value ? Number(e.target.value) : undefined;
                     setCurrentPayment({ ...currentPayment, total_amount: val });
                   }}
-                  className="w-full px-4 py-2.5 bg-white dark:bg-[#0f121d] border border-teal-100 dark:border-slate-800 rounded-xl text-slate-900 dark:text-white font-mono font-semibold text-sm focus:ring-2 focus:ring-teal-500/20 dark:focus:ring-teal-500/50 outline-none placeholder-slate-400 dark:placeholder-slate-500/65 shadow-inner transition-colors"
+                  className="w-full px-4 py-2.5 bg-white dark:bg-[#0f121d] border border-teal-100 dark:border-slate-800 rounded-xl text-slate-900 dark:text-white font-mono font-semibold text-sm focus:ring-2 focus:ring-teal-500/20 dark:focus:ring-teal-500/50 outline-none placeholder-slate-400 dark:placeholder-slate-500/65 shadow-inner transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                 />
               </div>
 
@@ -1790,7 +1879,7 @@ export function StudentForm() {
                   placeholder="0"
                   value={currentPayment.payment === 0 ? '' : currentPayment.payment}
                   onChange={(e) => setCurrentPayment({ ...currentPayment, payment: e.target.value ? Number(e.target.value) : 0 })}
-                  className="w-full px-4 py-2.5 bg-white dark:bg-[#0f121d] border border-teal-100 dark:border-slate-800 rounded-xl text-slate-900 dark:text-white font-mono font-semibold text-sm focus:ring-2 focus:ring-teal-500/20 dark:focus:ring-teal-500/50 outline-none placeholder-slate-400 dark:placeholder-slate-500/65 shadow-inner transition-colors"
+                  className="w-full px-4 py-2.5 bg-white dark:bg-[#0f121d] border border-teal-100 dark:border-slate-800 rounded-xl text-slate-900 dark:text-white font-mono font-semibold text-sm focus:ring-2 focus:ring-teal-500/20 dark:focus:ring-teal-500/50 outline-none placeholder-slate-400 dark:placeholder-slate-500/65 shadow-inner transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                 />
               </div>
 
@@ -1869,6 +1958,8 @@ export function StudentForm() {
                         payment: 0,
                         total_amount: undefined
                       });
+                      setPaymentClassType('');
+                      setPaymentMonth('');
                     }}
                     className="h-10 w-10 flex items-center justify-center bg-gray-200 text-gray-600 rounded-lg hover:bg-gray-300 transition-all active:scale-95 shadow-md shadow-gray-400/20"
                     title="Cancel Edit"
@@ -2435,9 +2526,11 @@ export function StudentExplorer() {
   const { state: navState } = useLocation();
   const { user } = useAuth();
   const [students, setStudents] = useState<Student[]>([]);
+  const [explorerPayments, setExplorerPayments] = useState<{ pcaid: string; class_type: string | null; type: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [showClassDropdown, setShowClassDropdown] = useState(false);
+  const [showMonthDropdown, setShowMonthDropdown] = useState(false);
   const [showPackageDropdown, setShowPackageDropdown] = useState(false);
   const [classTypes, setClassTypes] = useState<ClassItem[]>([]);
   const [packageTypes, setPackageTypes] = useState<PackageItem[]>([]);
@@ -2467,12 +2560,26 @@ export function StudentExplorer() {
     properBatch: '',
     joinedBatch: '',
     classes: [] as string[],
+    month: '',
     packages: [] as string[],
     startDate: '',
     endDate: '',
     pcaid: '',
     studentType: ''
   });
+
+  // Compute clean, unique base class types (without monthly suffix) for the dropdown selection from the class_item table
+  const baseClassTypes = (Array.from(new Set(classTypes.map(c => {
+    const match = MONTHS.find(m => c.class_type.endsWith(` ${m}`) || c.class_type.endsWith(` - ${m}`));
+    if (match) {
+      let idx = c.class_type.lastIndexOf(` - ${match}`);
+      if (idx === -1) {
+        idx = c.class_type.lastIndexOf(` ${match}`);
+      }
+      return c.class_type.substring(0, idx).trim();
+    }
+    return c.class_type;
+  })))).filter(Boolean).sort();
 
   // Verification States & Duplicate Check
   const [verifyQuery, setVerifyQuery] = useState('');
@@ -2566,14 +2673,23 @@ export function StudentExplorer() {
       fetchAdmins();
     }
 
-    // Fast sync: Listen for changes in student table
-    const sub = supabase.channel('student_explorer_sync').on('postgres_changes', { 
+    // Fast sync: Listen for changes in student table and payment table
+    const subStudents = supabase.channel('student_explorer_sync').on('postgres_changes', { 
       event: '*', 
       schema: 'public', 
       table: 'student' 
     }, () => fetchStudents()).subscribe();
 
-    return () => { supabase.removeChannel(sub); };
+    const subPayments = supabase.channel('payment_explorer_sync').on('postgres_changes', { 
+      event: '*', 
+      schema: 'public', 
+      table: 'payment' 
+    }, () => fetchStudents()).subscribe();
+
+    return () => { 
+      supabase.removeChannel(subStudents);
+      supabase.removeChannel(subPayments);
+    };
   }, []);
 
   const fetchItems = async () => {
@@ -2602,6 +2718,17 @@ export function StudentExplorer() {
 
     const { data } = await query.order('created_at', { ascending: false });
     if (data) setStudents(data as Student[]);
+
+    // Fetch all active class payments to build filter dropdown and perform filtering
+    const { data: payData } = await supabase
+      .from('payment')
+      .select('pcaid, class_type, type')
+      .eq('type', 'class')
+      .is('deleted_at', null);
+    if (payData) {
+      setExplorerPayments(payData);
+    }
+
     setLoading(false);
   };
 
@@ -2907,8 +3034,26 @@ export function StudentExplorer() {
     const matchesDistrict = !filters.district || s.district === filters.district;
     const matchesProperBatch = !filters.properBatch || (s.proper_batch && s.proper_batch.toLowerCase().includes(filters.properBatch.toLowerCase()));
     const matchesJoinedBatch = !filters.joinedBatch || (s.joined_batch && s.joined_batch.toLowerCase().includes(filters.joinedBatch.toLowerCase()));
-    const matchesClasses = filters.classes.length === 0 || 
-      (s.asked_class_type ? filters.classes.some(c => s.asked_class_type.toLowerCase().includes(c.toLowerCase())) : false);
+    
+    const studentPayments = explorerPayments.filter(p => p.pcaid === s.pcaid && p.type === 'class');
+    const matchesClasses = filters.classes.length === 0 && !filters.month ? true : (
+      studentPayments.some(p => {
+        if (!p.class_type) return false;
+        const ptLower = p.class_type.toLowerCase();
+        
+        const classMatch = filters.classes.length === 0 || 
+          filters.classes.some(c => ptLower.includes(c.toLowerCase()));
+          
+        const monthMatch = !filters.month || 
+          ptLower.endsWith(` ${filters.month.toLowerCase()}`) || 
+          ptLower.includes(` ${filters.month.toLowerCase()}`) ||
+          ptLower.endsWith(` - ${filters.month.toLowerCase()}`) || 
+          ptLower.includes(`- ${filters.month.toLowerCase()}`);
+          
+        return classMatch && monthMatch;
+      })
+    );
+    
     const matchesPackages = filters.packages.length === 0 || 
       (s.asked_package_type ? filters.packages.some(p => s.asked_package_type.toLowerCase().includes(p.toLowerCase())) : false);
     
@@ -3164,21 +3309,83 @@ export function StudentExplorer() {
                           </button>
                         )}
                       </div>
-                      {classTypes.map(c => {
-                        const isSelected = filters.classes.includes(c.class_type);
+                      {baseClassTypes.map(c => {
+                        const isSelected = filters.classes.includes(c);
                         return (
                           <button
-                            key={c.id}
+                            key={c}
                             onClick={(e) => {
                               e.stopPropagation();
                               const newClasses = isSelected 
-                                ? filters.classes.filter(item => item !== c.class_type)
-                                : [...filters.classes, c.class_type];
+                                ? filters.classes.filter(item => item !== c)
+                                : [...filters.classes, c];
                               setFilters({ ...filters, classes: newClasses });
                             }}
                             className={`w-full flex items-center justify-between px-3 py-2 text-xs font-bold transition-colors ${isSelected ? 'bg-teal-50 text-teal-700' : 'text-gray-600 hover:bg-gray-50'}`}
                           >
-                            {c.class_type}
+                            {c}
+                            {isSelected && <Check size={14} />}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </>
+                )}
+              </div>
+
+              <div className="bg-gray-100 w-px my-1 hidden sm:block" />
+
+              {/* Month Filter */}
+              <div className="relative">
+                <button 
+                  onClick={() => setShowMonthDropdown(!showMonthDropdown)}
+                  className="flex items-center gap-1 px-3 py-1.5 text-xs font-bold text-gray-600 outline-none bg-transparent min-w-[120px] justify-between cursor-pointer"
+                >
+                  <span className="truncate max-w-[90px]">
+                    {filters.month || 'All Months'}
+                  </span>
+                  <ChevronDown size={14} className={`text-gray-400 transition-transform ${showMonthDropdown ? 'rotate-180' : ''}`} />
+                </button>
+
+                {showMonthDropdown && (
+                  <>
+                    <div className="fixed inset-0 z-40" onClick={() => setShowMonthDropdown(false)} />
+                    <div className="absolute left-0 mt-2 w-[180px] bg-white rounded-xl shadow-2xl border border-gray-100 py-2 z-50 max-h-[300px] overflow-auto animate-in fade-in zoom-in-95 duration-100">
+                      <div className="px-3 py-1 mb-1 border-b border-gray-50 flex items-center justify-between">
+                        <span className="text-[10px] font-black text-gray-400 uppercase">Select Month</span>
+                        {filters.month && (
+                          <button 
+                            onClick={(e) => { e.stopPropagation(); setFilters({ ...filters, month: '' }); setShowMonthDropdown(false); }}
+                            className="text-[10px] font-bold text-teal-600 hover:text-teal-700"
+                          >
+                            Clear
+                          </button>
+                        )}
+                      </div>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setFilters({ ...filters, month: '' });
+                          setShowMonthDropdown(false);
+                        }}
+                        className={`w-full flex items-center justify-between px-3 py-2 text-xs font-bold transition-colors ${!filters.month ? 'bg-teal-50 text-teal-700' : 'text-gray-600 hover:bg-gray-50'}`}
+                      >
+                        All Months
+                        {!filters.month && <Check size={14} />}
+                      </button>
+                      {MONTHS.map(m => {
+                        const isSelected = filters.month === m;
+                        return (
+                          <button
+                            key={m}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setFilters({ ...filters, month: m });
+                              setShowMonthDropdown(false);
+                            }}
+                            className={`w-full flex items-center justify-between px-3 py-2 text-xs font-bold transition-colors ${isSelected ? 'bg-teal-50 text-teal-700' : 'text-gray-600 hover:bg-gray-50'}`}
+                          >
+                            {m}
                             {isSelected && <Check size={14} />}
                           </button>
                         );
