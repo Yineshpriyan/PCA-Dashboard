@@ -1480,9 +1480,13 @@ export function StudentForm({ isModal = false, modalStudent = null, modalLead = 
     }
   };
 
-  const handleCopyMessage = (p: Partial<Payment>) => {
+  const getActivationMessage = (p: Partial<Payment>) => {
     const typeLabel = p.type === 'class' ? p.class_type : p.package_type;
-    const msg = `${typeLabel} ${p.duration} மாதங்களுக்கு activate செய்யப்பட்டுள்ளது.✅`;
+    return `${typeLabel} ஆனது ${p.duration} இற்கு Activate செய்யப்பட்டுள்ளது.✅`;
+  };
+
+  const handleCopyMessage = (p: Partial<Payment>) => {
+    const msg = getActivationMessage(p);
     toast.success(copyToClipboard(msg, 'Message'));
   };
 
@@ -2189,13 +2193,31 @@ export function StudentForm({ isModal = false, modalStudent = null, modalLead = 
                            >
                              <ChevronDown size={14} className={cn("transform transition-transform duration-200", isExpanded && "rotate-180")} />
                            </button>
-                           <button 
-                              onClick={() => handleCopyMessage(p)}
-                              className="flex items-center gap-1 px-3 py-1 bg-teal-50 dark:bg-teal-950/40 text-teal-700 dark:text-teal-400 rounded-lg text-xs font-bold hover:bg-teal-100 dark:hover:bg-teal-900/40"
-                              title="Copy activation message"
-                            >
-                             <Copy size={12}/> Msg
-                           </button>
+                           <div className="flex flex-col gap-1 shrink-0">
+                             <button 
+                                type="button"
+                                onClick={() => handleCopyMessage(p)}
+                                className="flex items-center justify-center gap-1 px-2.5 py-1.5 bg-teal-50 dark:bg-teal-950/40 text-teal-700 dark:text-teal-400 rounded-lg text-xs font-bold hover:bg-teal-100 dark:hover:bg-teal-900/40 w-[96px] cursor-pointer"
+                                title="Copy activation message"
+                              >
+                               <Copy size={11}/> Msg
+                             </button>
+                             <a
+                               href={studentData.phone ? `https://wa.me/94${studentData.phone}?text=${encodeURIComponent(getActivationMessage(p))}` : '#'}
+                               target={studentData.phone ? "_blank" : undefined}
+                               rel="noopener noreferrer"
+                               onClick={(e) => {
+                                 if (!studentData.phone) {
+                                   e.preventDefault();
+                                   toast.error('Student phone number is required to send a WhatsApp message');
+                                 }
+                               }}
+                               className="flex items-center justify-center gap-1 px-2.5 py-1.5 bg-green-50 dark:bg-green-950/40 text-green-700 dark:text-green-400 rounded-lg text-xs font-bold hover:bg-green-100 dark:hover:bg-green-900/40 w-[96px]"
+                               title="Send WhatsApp message"
+                             >
+                               <MessageCircle size={11} /> WhatsApp
+                             </a>
+                           </div>
                            <button 
                               onClick={() => handleEditPayment(idx)}
                               className="p-1.5 text-gray-300 dark:text-gray-500 hover:text-teal-600 dark:hover:text-teal-400 transition-colors"
