@@ -135,12 +135,20 @@ const MONTHS = [
   "July", "August", "September", "October", "November", "December"
 ];
 
-export function StudentForm() {
+interface StudentFormProps {
+  key?: string;
+  isModal?: boolean;
+  modalStudent?: Student | null;
+  modalLead?: any | null;
+  onClose?: (shouldRefresh?: boolean) => void;
+}
+
+export function StudentForm({ isModal = false, modalStudent = null, modalLead = null, onClose }: StudentFormProps = {}) {
   const { state } = useLocation();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const leadData = state?.lead;
-  const editStudent = state?.student;
+  const leadData = isModal ? modalLead : state?.lead;
+  const editStudent = isModal ? modalStudent : state?.student;
 
   const [loading, setLoading] = useState(false);
   const [initialPhone] = useState(editStudent?.phone || leadData?.phone || '');
@@ -1420,12 +1428,20 @@ export function StudentForm() {
 
       toast.success('All data saved successfully!');
       if (editStudent) {
-        navigate('/admin/student-explorer');
+        if (isModal && onClose) {
+          onClose(true);
+        } else {
+          navigate('/admin/student-explorer');
+        }
       } else {
-        // Clear all
-        setStudentData({ pcaid: '', name: '', phone: '', stream: '', proper_batch: '', joined_batch: '', school: '', district: '', mail: '', address: '', asked_class_type: '', asked_package_type: '', batch_type: '', gender: '' });
-        setStudentType('Paid');
-        setTempPayments([]);
+        if (isModal && onClose) {
+          onClose(true);
+        } else {
+          // Clear all
+          setStudentData({ pcaid: '', name: '', phone: '', stream: '', proper_batch: '', joined_batch: '', school: '', district: '', mail: '', address: '', asked_class_type: '', asked_package_type: '', batch_type: '', gender: '' });
+          setStudentType('Paid');
+          setTempPayments([]);
+        }
       }
     } catch (err: any) {
       console.error('Detailed save error:', err);
@@ -2631,6 +2647,11 @@ export function StudentExplorer() {
   const [packageTypes, setPackageTypes] = useState<PackageItem[]>([]);
   
   const [viewingStudent, setViewingStudent] = useState<Student | null>(null);
+  
+  // Student Form Modal States
+  const [isStudentFormModalOpen, setIsStudentFormModalOpen] = useState(false);
+  const [modalStudent, setModalStudent] = useState<Student | null>(null);
+  const [modalLead, setModalLead] = useState<any | null>(null);
   const [studentPayments, setStudentPayments] = useState<Payment[]>([]);
   const [loadingPayments, setLoadingPayments] = useState(false);
   const [editingPaymentId, setEditingPaymentId] = useState<string | null>(null);
@@ -2720,8 +2741,10 @@ export function StudentExplorer() {
 
   const handleGrabExplorerDetails = () => {
     if (verificationStatus.student) {
-      navigate('/admin/student-form', { state: { student: verificationStatus.student } });
-      toast.success('Navigated to edit student form!');
+      setModalStudent(verificationStatus.student);
+      setModalLead(null);
+      setIsStudentFormModalOpen(true);
+      toast.success('Opened edit student form in popup!');
     }
   };
 
@@ -3282,7 +3305,11 @@ export function StudentExplorer() {
 
         {/* 3. New Student button */}
         <button
-          onClick={() => navigate('/admin/student-form')}
+          onClick={() => {
+            setModalStudent(null);
+            setModalLead(null);
+            setIsStudentFormModalOpen(true);
+          }}
           className="flex items-center justify-center gap-2 px-5 py-2.5 bg-teal-600 hover:bg-teal-700 active:scale-95 text-white rounded-xl font-bold text-sm transition-all shadow-md active:shadow-sm cursor-pointer whitespace-nowrap hover:shadow-lg h-[38px]"
         >
           <Plus size={18} />
@@ -3610,11 +3637,24 @@ export function StudentExplorer() {
                 filteredStudents.map((s, idx) => (
                   <tr key={s.id} className="hover:bg-gray-50/50 dark:hover:bg-gray-800/20 transition-colors group">
                     <td className="p-4 text-center text-gray-400 dark:text-gray-550 text-sm bg-white dark:bg-gray-900 group-hover:bg-gray-50/50 dark:group-hover:bg-gray-800/20">{idx + 1}</td>
-                    <td className="p-4 font-mono font-bold text-teal-600 dark:text-teal-400 bg-white dark:bg-gray-900 group-hover:bg-gray-50/50 dark:group-hover:bg-gray-800/20">
+                    <td className="p-4 font-mono font-bold bg-white dark:bg-gray-900 group-hover:bg-gray-50/50 dark:group-hover:bg-gray-800/20">
                       <div className="flex items-center gap-2">
-                        {s.pcaid}
+                        <span 
+                          onClick={() => {
+                            setModalStudent(s);
+                            setModalLead(null);
+                            setIsStudentFormModalOpen(true);
+                          }}
+                          className="text-teal-600 dark:text-teal-400 hover:text-teal-700 dark:hover:text-teal-300 cursor-pointer transition-colors"
+                          title="Click to Edit Student"
+                        >
+                          {s.pcaid}
+                        </span>
                         <button 
-                          onClick={() => toast.success(copyToClipboard(s.pcaid, 'PCA ID'))}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toast.success(copyToClipboard(s.pcaid, 'PCA ID'));
+                          }}
                           className="p-1 text-gray-300 dark:text-gray-600 hover:text-teal-600 dark:hover:text-teal-400 transition-colors"
                         >
                           <Copy size={12}/>
@@ -3623,9 +3663,22 @@ export function StudentExplorer() {
                     </td>
                     <td className="p-4 bg-white dark:bg-gray-900 group-hover:bg-gray-50/50 dark:group-hover:bg-gray-800/20">
                       <div className="flex items-center gap-2 font-bold text-gray-900 dark:text-gray-100">
-                        {s.name}
+                        <span 
+                          onClick={() => {
+                            setModalStudent(s);
+                            setModalLead(null);
+                            setIsStudentFormModalOpen(true);
+                          }}
+                          className="hover:text-teal-600 dark:hover:text-teal-400 cursor-pointer underline decoration-dotted transition-colors"
+                          title="Click to Edit Student"
+                        >
+                          {s.name}
+                        </span>
                         <button 
-                          onClick={() => toast.success(copyToClipboard(s.name, 'Name'))}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toast.success(copyToClipboard(s.name, 'Name'));
+                          }}
                           className="p-1 text-gray-300 dark:text-gray-600 hover:text-teal-600 dark:hover:text-teal-400 transition-colors"
                         >
                           <Copy size={12}/>
@@ -3676,7 +3729,11 @@ export function StudentExplorer() {
                           <Eye size={18} />
                         </button>
                         <button 
-                          onClick={() => navigate('/admin/student-form', { state: { student: s } })}
+                          onClick={() => {
+                            setModalStudent(s);
+                            setModalLead(null);
+                            setIsStudentFormModalOpen(true);
+                          }}
                           className="p-2 text-gray-400 hover:text-teal-600 hover:bg-teal-50 rounded-lg transition-colors"
                           title="Edit Student"
                         >
@@ -4354,6 +4411,41 @@ export function StudentExplorer() {
               >
                 Close
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Student Form Modal Pop-up */}
+      {isStudentFormModalOpen && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-gray-100 dark:border-gray-800 w-full max-w-5xl flex flex-col max-h-[90vh] relative animate-in fade-in zoom-in-95 duration-200">
+            {/* Sticky Header with Close button in the top left corner */}
+            <div className="sticky top-0 z-30 flex items-center h-14 px-6 border-b border-gray-100 dark:border-gray-800 bg-white/95 dark:bg-gray-900/95 backdrop-blur-xs rounded-t-2xl shrink-0">
+              <button
+                onClick={() => setIsStudentFormModalOpen(false)}
+                className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 rounded-full transition-all duration-150 shadow-sm cursor-pointer flex items-center justify-center"
+                title="Close Form"
+              >
+                <X size={18} />
+              </button>
+              <span className="ml-4 text-sm font-bold text-gray-550 dark:text-gray-450 uppercase tracking-wider">Student Form</span>
+            </div>
+
+            {/* The form itself - scrollable body */}
+            <div className="flex-1 overflow-y-auto p-8">
+              <StudentForm
+                key={modalStudent?.id || 'new'}
+                isModal={true}
+                modalStudent={modalStudent}
+                modalLead={modalLead}
+                onClose={(shouldRefresh = true) => {
+                  setIsStudentFormModalOpen(false);
+                  if (shouldRefresh) {
+                    fetchStudents();
+                  }
+                }}
+              />
             </div>
           </div>
         </div>

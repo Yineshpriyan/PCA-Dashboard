@@ -2002,17 +2002,22 @@ export function CallTaskDisplay() {
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
-              className="relative bg-white rounded-3xl shadow-2xl border border-gray-100 max-w-4xl w-full max-h-[90vh] overflow-y-auto z-50 p-6 md:p-8"
+              className="relative bg-white dark:bg-gray-900 rounded-3xl shadow-2xl border border-gray-100 dark:border-gray-800 max-w-4xl w-full max-h-[90vh] flex flex-col overflow-hidden z-50"
             >
-              <button
-                onClick={() => setShowNewModal(false)}
-                className="absolute top-4 right-4 p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-all z-10"
-                title="Close"
-              >
-                <X size={20} />
-              </button>
-              
-              <div className="mt-2">
+              {/* Sticky Header with Close button */}
+              <div className="sticky top-0 z-30 flex items-center h-14 px-6 border-b border-gray-100 dark:border-gray-800 bg-white/95 dark:bg-gray-900/95 backdrop-blur-xs rounded-t-3xl shrink-0">
+                <button
+                  onClick={() => setShowNewModal(false)}
+                  className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 rounded-full transition-all duration-150 shadow-sm cursor-pointer flex items-center justify-center"
+                  title="Close Form"
+                >
+                  <X size={18} />
+                </button>
+                <span className="ml-4 text-sm font-bold text-gray-550 dark:text-gray-450 uppercase tracking-wider">New Call Task</span>
+              </div>
+
+              {/* Scrollable Form Body */}
+              <div className="flex-1 overflow-y-auto p-6 md:p-8">
                 <CallTaskForm 
                   onComplete={(task) => {
                     if (task) {
@@ -2042,17 +2047,22 @@ export function CallTaskDisplay() {
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
-              className="relative bg-white rounded-3xl shadow-2xl border border-gray-100 max-w-4xl w-full max-h-[90vh] overflow-y-auto z-50 p-6 md:p-8"
+              className="relative bg-white dark:bg-gray-900 rounded-3xl shadow-2xl border border-gray-100 dark:border-gray-800 max-w-4xl w-full max-h-[90vh] flex flex-col overflow-hidden z-50"
             >
-              <button
-                onClick={() => setEditingTask(null)}
-                className="absolute top-4 right-4 p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-all z-10"
-                title="Close"
-              >
-                <X size={20} />
-              </button>
-              
-              <div className="mt-2">
+              {/* Sticky Header with Close button */}
+              <div className="sticky top-0 z-30 flex items-center h-14 px-6 border-b border-gray-100 dark:border-gray-800 bg-white/95 dark:bg-gray-900/95 backdrop-blur-xs rounded-t-3xl shrink-0">
+                <button
+                  onClick={() => setEditingTask(null)}
+                  className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 rounded-full transition-all duration-150 shadow-sm cursor-pointer flex items-center justify-center"
+                  title="Close Form"
+                >
+                  <X size={18} />
+                </button>
+                <span className="ml-4 text-sm font-bold text-gray-550 dark:text-gray-450 uppercase tracking-wider">Edit Call Task</span>
+              </div>
+
+              {/* Scrollable Form Body */}
+              <div className="flex-1 overflow-y-auto p-6 md:p-8">
                 <CallTaskForm 
                   editData={editingTask}
                   onComplete={(task) => {
