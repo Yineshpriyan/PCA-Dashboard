@@ -172,7 +172,20 @@ export function StudentForm({ isModal = false, modalStudent = null, modalLead = 
       return c.class_type.substring(0, idx).trim();
     }
     return c.class_type;
-  }))) as string[]).sort((a, b) => a.localeCompare(b));
+  }))) as string[]).filter(Boolean).sort((a: string, b: string) => {
+    const topPriorityClasses = [
+      'Admission',
+      'MaxouT',
+      'Paper Class with Theory Revision',
+      'Paper Class with Theory'
+    ];
+    const idxA = topPriorityClasses.indexOf(a);
+    const idxB = topPriorityClasses.indexOf(b);
+    if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+    if (idxA !== -1) return -1;
+    if (idxB !== -1) return 1;
+    return a.localeCompare(b);
+  });
   
   // Verification State
   const [verifyQuery, setVerifyQuery] = useState('');
@@ -1809,13 +1822,14 @@ export function StudentForm({ isModal = false, modalStudent = null, modalLead = 
             <textarea
               value={studentData.address}
               onChange={(e) => setStudentData({ ...studentData, address: e.target.value })}
-              className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500/20 h-11"
+              className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500/20 h-28 resize-y text-sm"
               placeholder="Home Address"
+              rows={4}
             />
           </div>
 
           {/* Asked Class Type */}
-          <div className="flex flex-col gap-2 p-4 bg-gray-50 rounded-xl border border-gray-100 md:col-span-2">
+          <div className="flex flex-col gap-2 p-4 bg-gray-50 rounded-xl border border-gray-100">
             <label className="text-sm font-semibold text-gray-700">Asked Class Type</label>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 w-full">
               <select
@@ -1859,7 +1873,7 @@ export function StudentForm({ isModal = false, modalStudent = null, modalLead = 
           </div>
 
           {/* Asked Package Type */}
-          <div className="flex flex-col gap-2 p-4 bg-gray-50 rounded-xl border border-gray-100 md:col-span-2">
+          <div className="flex flex-col gap-2 p-4 bg-gray-50 rounded-xl border border-gray-100">
             <label className="text-sm font-semibold text-gray-700">Asked Package Type</label>
             <div className="flex gap-2 w-full">
               <select

@@ -36,6 +36,8 @@ import { motion, AnimatePresence } from 'motion/react';
 import { useNavigate } from 'react-router-dom';
 import { logTransaction } from '../lib/transactions';
 
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
 export function CallTaskForm({ editData, onComplete }: { editData?: CallTask; onComplete?: (updatedTask?: CallTask) => void }) {
   const { user } = useAuth();
   const [loading, setLoading] = useState(false);
@@ -43,7 +45,36 @@ export function CallTaskForm({ editData, onComplete }: { editData?: CallTask; on
   const [packageTypes, setPackageTypes] = useState<PackageItem[]>([]);
   const [joinedBatches, setJoinedBatches] = useState<JoinedBatchItem[]>([]);
   const [selectedClass, setSelectedClass] = useState('');
+  const [selectedMonth, setSelectedMonth] = useState('');
   const [selectedPackage, setSelectedPackage] = useState('');
+
+  // Compute clean, unique base class types (without monthly suffix) for the dropdown selection from the class_item table
+  const baseClassTypes = React.useMemo(() => {
+    return (Array.from(new Set(classTypes.map(c => {
+      const match = MONTHS.find(m => c.class_type.endsWith(` ${m}`) || c.class_type.endsWith(` - ${m}`));
+      if (match) {
+        let idx = c.class_type.lastIndexOf(` - ${match}`);
+        if (idx === -1) {
+          idx = c.class_type.lastIndexOf(` ${match}`);
+        }
+        return c.class_type.substring(0, idx).trim();
+      }
+      return c.class_type;
+    }))) as string[]).filter(Boolean).sort((a: string, b: string) => {
+      const topPriorityClasses = [
+        'Admission',
+        'MaxouT',
+        'Paper Class with Theory Revision',
+        'Paper Class with Theory'
+      ];
+      const idxA = topPriorityClasses.indexOf(a);
+      const idxB = topPriorityClasses.indexOf(b);
+      if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+      if (idxA !== -1) return -1;
+      if (idxB !== -1) return 1;
+      return a.localeCompare(b);
+    });
+  }, [classTypes]);
   
   const [formData, setFormData] = useState({
     pcaid: editData?.pcaid || '',
@@ -259,9 +290,10 @@ export function CallTaskForm({ editData, onComplete }: { editData?: CallTask; on
       // Auto-add selected class/package if not yet added to the list
       let finalAskedClassType = formData.asked_class_type;
       if (selectedClass) {
+        const combined = selectedMonth ? `${selectedClass} ${selectedMonth}` : selectedClass;
         const current = finalAskedClassType ? finalAskedClassType.split(', ') : [];
-        if (!current.includes(selectedClass)) {
-          finalAskedClassType = [...current, selectedClass].join(', ');
+        if (!current.includes(combined)) {
+          finalAskedClassType = [...current, combined].join(', ');
         }
       }
 
@@ -418,19 +450,24 @@ export function CallTaskForm({ editData, onComplete }: { editData?: CallTask; on
       note: '', status: 'Not Sure'
     });
     setSelectedClass('');
+    setSelectedMonth('');
     setSelectedPackage('');
   };
 
   const handleAddClass = () => {
     if (!selectedClass) return;
+    const combinedClass = selectedMonth ? `${selectedClass} ${selectedMonth}` : selectedClass;
+
     const current = formData.asked_class_type ? formData.asked_class_type.split(', ') : [];
-    if (current.includes(selectedClass)) {
+    if (current.includes(combinedClass)) {
       toast.error('Class already added');
       return;
     }
-    const updated = [...current, selectedClass].join(', ');
+
+    const updated = [...current, combinedClass].join(', ');
     setFormData({ ...formData, asked_class_type: updated });
     setSelectedClass('');
+    setSelectedMonth('');
   };
 
   const handleRemoveClass = (val: string) => {
@@ -661,40 +698,41 @@ export function CallTaskForm({ editData, onComplete }: { editData?: CallTask; on
                 <span className="text-xs text-red-500 font-medium mt-0.5">{phoneError}</span>
               )}
             </div>
-            <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-semibold text-gray-700">Address</label>
-              <textarea
-                value={formData.address}
-                onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500/20 h-24"
-                placeholder="Home Address"
-              />
-            </div>
           </div>
 
           {/* Right Column */}
           <div className="space-y-4">
             <div className="flex flex-col gap-4">
               <div className="flex flex-col gap-2 p-4 bg-gray-50 rounded-xl border border-gray-100">
-                <div className="flex items-center justify-between">
-                  <label className="text-sm font-semibold text-gray-700">Asked Class Type</label>
-                </div>
-                <div className="flex gap-2 text-white">
+                <label className="text-sm font-semibold text-gray-700">Asked Class Type</label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 w-full">
                   <select
                     value={selectedClass}
                     onChange={(e) => setSelectedClass(e.target.value)}
-                    className="flex-1 px-4 py-2 bg-white border border-gray-200 rounded-lg focus:outline-none text-gray-700 font-medium"
+                    className="w-full min-w-0 px-4 py-2 bg-white border border-gray-200 rounded-lg focus:outline-none text-gray-700 font-medium"
                   >
-                    <option value="">Select Class</option>
-                    {classTypes.map(ct => <option key={ct.id} value={ct.class_type}>{ct.class_type}</option>)}
+                    <option value="">Select Class Type</option>
+                    {baseClassTypes.map(c => <option key={c} value={c}>{c}</option>)}
                   </select>
-                  <button
-                    type="button"
-                    onClick={handleAddClass}
-                    className="p-2 bg-teal-600 rounded-lg hover:bg-teal-700 transition-colors"
-                  >
-                    <Plus size={20} />
-                  </button>
+
+                  <div className="flex gap-2 min-w-0 w-full">
+                    <select
+                      value={selectedMonth}
+                      onChange={(e) => setSelectedMonth(e.target.value)}
+                      className="flex-1 min-w-0 px-4 py-2 bg-white border border-gray-200 rounded-lg focus:outline-none text-gray-700 font-medium"
+                    >
+                      <option value="">Select Month</option>
+                      {MONTHS.map(m => <option key={m} value={m}>{m}</option>)}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={handleAddClass}
+                      className="p-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 active:scale-95 transition-all cursor-pointer flex items-center justify-center w-10 h-10 shrink-0"
+                      title="Add Class"
+                    >
+                      <Plus size={20} />
+                    </button>
+                  </div>
                 </div>
                 <div className="flex flex-wrap gap-2 mt-2">
                   {formData.asked_class_type.split(', ').filter(Boolean).map(c => (
@@ -824,6 +862,17 @@ export function CallTaskForm({ editData, onComplete }: { editData?: CallTask; on
                 onChange={(e) => setFormData({ ...formData, note: e.target.value })}
                 className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500/20"
                 placeholder="Any special remarks"
+              />
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-semibold text-gray-700">Address</label>
+              <textarea
+                value={formData.address}
+                onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500/20 h-28 resize-y text-sm"
+                placeholder="Home Address"
+                rows={3}
               />
             </div>
           </div>
@@ -1023,7 +1072,6 @@ function normalizeDate(val: any): string | null {
   return null;
 }
 
-const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
 export function CallTaskDisplay() {
   const { user } = useAuth();
@@ -1972,14 +2020,48 @@ export function CallTaskDisplay() {
                   <td className="p-4 text-center text-gray-400 dark:text-gray-500 text-sm sticky left-0 z-10 bg-white dark:bg-gray-900 group-hover:bg-teal-50/30 dark:group-hover:bg-teal-950/20">{idx + 1}</td>
                   <td className="p-4 font-mono font-bold text-teal-600 dark:text-teal-400 text-xs sticky left-[50px] z-10 bg-white dark:bg-gray-900 group-hover:bg-teal-50/30 dark:group-hover:bg-teal-950/20">
                     <div className="flex items-center gap-2">
-                      <span>{task.pcaid || '-'}</span>
-                      {task.pcaid && <button onClick={() => toast.success(copyToClipboard(task.pcaid))} className="text-gray-300 dark:text-gray-600 hover:text-teal-600 dark:hover:text-teal-400"><Copy size={12}/></button>}
+                      {task.pcaid ? (
+                        <span 
+                          onClick={() => setEditingTask(task)}
+                          className="hover:text-teal-700 dark:hover:text-teal-300 cursor-pointer underline decoration-dotted transition-colors"
+                          title="Click to Edit Call Task"
+                        >
+                          {task.pcaid}
+                        </span>
+                      ) : (
+                        <span>-</span>
+                      )}
+                      {task.pcaid && (
+                        <button 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toast.success(copyToClipboard(task.pcaid));
+                          }} 
+                          className="text-gray-300 dark:text-gray-600 hover:text-teal-600 dark:hover:text-teal-400"
+                        >
+                          <Copy size={12}/>
+                        </button>
+                      )}
                     </div>
                   </td>
                   <td className="p-4 font-bold text-gray-900 dark:text-gray-100 sticky left-[170px] z-10 bg-white dark:bg-gray-900 group-hover:bg-teal-50/30 dark:group-hover:bg-teal-950/20 border-r border-gray-100 dark:border-gray-800 shadow-[4px_0_8px_-4px_rgba(0,0,0,0.12)]">
                     <div className="flex items-center gap-2">
-                      <span>{task.name}</span>
-                      <button onClick={() => toast.success(copyToClipboard(task.name))} className="text-gray-300 dark:text-gray-600 hover:text-teal-600 dark:hover:text-teal-400"><Copy size={14}/></button>
+                      <span 
+                        onClick={() => setEditingTask(task)}
+                        className="hover:text-teal-600 dark:hover:text-teal-400 cursor-pointer underline decoration-dotted transition-colors"
+                        title="Click to Edit Call Task"
+                      >
+                        {task.name}
+                      </span>
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toast.success(copyToClipboard(task.name));
+                        }} 
+                        className="text-gray-300 dark:text-gray-600 hover:text-teal-600 dark:hover:text-teal-400"
+                      >
+                        <Copy size={14}/>
+                      </button>
                     </div>
                   </td>
                   <td className="p-4 font-mono text-sm text-gray-600 dark:text-gray-350">
