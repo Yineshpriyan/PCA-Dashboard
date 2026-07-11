@@ -1023,6 +1023,8 @@ function normalizeDate(val: any): string | null {
   return null;
 }
 
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
 export function CallTaskDisplay() {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -1032,6 +1034,7 @@ export function CallTaskDisplay() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [undoingId, setUndoingId] = useState<string | null>(null);
   const [showClassDropdown, setShowClassDropdown] = useState(false);
+  const [showMonthDropdown, setShowMonthDropdown] = useState(false);
   const [showPackageDropdown, setShowPackageDropdown] = useState(false);
   const [classTypes, setClassTypes] = useState<ClassItem[]>([]);
   const [packageTypes, setPackageTypes] = useState<PackageItem[]>([]);
@@ -1055,6 +1058,7 @@ export function CallTaskDisplay() {
     status: '',
     district: '',
     classes: [] as string[],
+    month: '',
     packages: [] as string[],
     properBatch: '',
     joinedBatch: '',
@@ -1063,6 +1067,34 @@ export function CallTaskDisplay() {
     search: '',
     pcaid: ''
   });
+
+  // Compute clean, unique base class types (without monthly suffix) for the dropdown selection from the class_item table
+  const baseClassTypes = React.useMemo(() => {
+    return (Array.from(new Set(classTypes.map(c => {
+      const match = MONTHS.find(m => c.class_type.endsWith(` ${m}`) || c.class_type.endsWith(` - ${m}`));
+      if (match) {
+        let idx = c.class_type.lastIndexOf(` - ${match}`);
+        if (idx === -1) {
+          idx = c.class_type.lastIndexOf(` ${match}`);
+        }
+        return c.class_type.substring(0, idx).trim();
+      }
+      return c.class_type;
+    }))) as string[]).filter(Boolean).sort((a: string, b: string) => {
+      const topPriorityClasses = [
+        'Admission',
+        'MaxouT',
+        'Paper Class with Theory Revision',
+        'Paper Class with Theory'
+      ];
+      const idxA = topPriorityClasses.indexOf(a);
+      const idxB = topPriorityClasses.indexOf(b);
+      if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+      if (idxA !== -1) return -1;
+      if (idxB !== -1) return 1;
+      return a.localeCompare(b);
+    });
+  }, [classTypes]);
 
   useEffect(() => {
     fetchTasks();
@@ -1153,8 +1185,49 @@ export function CallTaskDisplay() {
     
     const matchesStatus = !filters.status || t.status === filters.status;
     const matchesDistrict = !filters.district || t.district === filters.district;
-    const matchesClasses = filters.classes.length === 0 || 
-      (t.asked_class_type && filters.classes.some(c => t.asked_class_type?.toLowerCase().includes(c.toLowerCase())));
+    
+    let matchesClassesAndMonth = true;
+    if (filters.classes.length > 0 || filters.month) {
+      if (!t.asked_class_type) {
+        matchesClassesAndMonth = false;
+      } else {
+        const taskClassTypes = t.asked_class_type.split(',').map(item => item.trim()).filter(Boolean);
+        
+        if (filters.classes.length > 0 && filters.month) {
+          // Both class and month selected: construct appended class types and match exactly
+          matchesClassesAndMonth = taskClassTypes.some(item => {
+            const itemLower = item.toLowerCase();
+            return filters.classes.some(c => {
+              const opt1 = `${c.toLowerCase()} ${filters.month.toLowerCase()}`;
+              const opt2 = `${c.toLowerCase()} - ${filters.month.toLowerCase()}`;
+              return itemLower === opt1 || itemLower === opt2;
+            });
+          });
+        } else if (filters.classes.length > 0) {
+          // Only class selected: strip month from each item and match
+          matchesClassesAndMonth = taskClassTypes.some(item => {
+            let itemBaseClass = item;
+            const match = MONTHS.find(m => item.endsWith(` ${m}`) || item.endsWith(` - ${m}`));
+            if (match) {
+              let idx = item.lastIndexOf(` - ${match}`);
+              if (idx === -1) {
+                idx = item.lastIndexOf(` ${match}`);
+              }
+              itemBaseClass = item.substring(0, idx).trim();
+            }
+            return filters.classes.some(c => itemBaseClass.toLowerCase() === c.toLowerCase());
+          });
+        } else {
+          // Only month selected: check if any item ends with the selected month
+          matchesClassesAndMonth = taskClassTypes.some(item => {
+            const itemLower = item.toLowerCase();
+            const monthLower = filters.month.toLowerCase();
+            return itemLower.endsWith(` ${monthLower}`) || itemLower.endsWith(` - ${monthLower}`);
+          });
+        }
+      }
+    }
+
     const matchesPackages = filters.packages.length === 0 || 
       (t.asked_package_type && filters.packages.some(p => t.asked_package_type?.toLowerCase().includes(p.toLowerCase())));
     const matchesProperBatch = !filters.properBatch || 
@@ -1175,7 +1248,7 @@ export function CallTaskDisplay() {
       matchesDateRange = false;
     }
 
-    return matchesSearch && matchesPcaidSearch && matchesStatus && matchesDistrict && matchesClasses && matchesPackages && matchesProperBatch && matchesJoinedBatch && matchesDateRange;
+    return matchesSearch && matchesPcaidSearch && matchesStatus && matchesDistrict && matchesClassesAndMonth && matchesPackages && matchesProperBatch && matchesJoinedBatch && matchesDateRange;
   });
 
   const handleDelete = async (task: CallTask) => {
@@ -1694,21 +1767,83 @@ export function CallTaskDisplay() {
                         </button>
                       )}
                     </div>
-                    {classTypes.map(c => {
-                      const isSelected = filters.classes.includes(c.class_type);
+                    {baseClassTypes.map(c => {
+                      const isSelected = filters.classes.includes(c);
                       return (
                         <button
-                          key={c.id}
+                          key={c}
                           onClick={(e) => {
                             e.stopPropagation();
                             const newClasses = isSelected 
-                              ? filters.classes.filter(item => item !== c.class_type)
-                              : [...filters.classes, c.class_type];
+                              ? filters.classes.filter(item => item !== c)
+                              : [...filters.classes, c];
                             setFilters({ ...filters, classes: newClasses });
                           }}
                           className={`w-full flex items-center justify-between px-3 py-2 text-xs font-bold transition-colors ${isSelected ? 'bg-teal-50 text-teal-700' : 'text-gray-600 hover:bg-gray-50'}`}
                         >
-                          {c.class_type}
+                          {c}
+                          {isSelected && <Check size={14} />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
+            </div>
+
+            <div className="bg-gray-100 w-px my-1 hidden sm:block" />
+
+            {/* Month Filter */}
+            <div className="relative">
+              <button 
+                onClick={() => setShowMonthDropdown(!showMonthDropdown)}
+                className="flex items-center gap-1 px-3 py-1.5 text-xs font-bold text-gray-600 outline-none bg-transparent min-w-[120px] justify-between cursor-pointer"
+              >
+                <span className="truncate max-w-[90px]">
+                  {filters.month || 'All Months'}
+                </span>
+                <ChevronDown size={14} className={`text-gray-400 transition-transform ${showMonthDropdown ? 'rotate-180' : ''}`} />
+              </button>
+
+              {showMonthDropdown && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setShowMonthDropdown(false)} />
+                  <div className="absolute left-0 mt-2 w-[180px] bg-white rounded-xl shadow-2xl border border-gray-100 py-2 z-50 max-h-[300px] overflow-auto animate-in fade-in zoom-in-95 duration-100">
+                    <div className="px-3 py-1 mb-1 border-b border-gray-50 flex items-center justify-between">
+                      <span className="text-[10px] font-black text-gray-400 uppercase">Select Month</span>
+                      {filters.month && (
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); setFilters({ ...filters, month: '' }); setShowMonthDropdown(false); }}
+                          className="text-[10px] font-bold text-teal-600 hover:text-teal-700"
+                        >
+                          Clear
+                        </button>
+                      )}
+                    </div>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setFilters({ ...filters, month: '' });
+                        setShowMonthDropdown(false);
+                      }}
+                      className={`w-full flex items-center justify-between px-3 py-2 text-xs font-bold transition-colors ${!filters.month ? 'bg-teal-50 text-teal-700' : 'text-gray-600 hover:bg-gray-50'}`}
+                    >
+                      All Months
+                      {!filters.month && <Check size={14} />}
+                    </button>
+                    {MONTHS.map(m => {
+                      const isSelected = filters.month === m;
+                      return (
+                        <button
+                          key={m}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setFilters({ ...filters, month: m });
+                            setShowMonthDropdown(false);
+                          }}
+                          className={`w-full flex items-center justify-between px-3 py-2 text-xs font-bold transition-colors ${isSelected ? 'bg-teal-50 text-teal-700' : 'text-gray-600 hover:bg-gray-50'}`}
+                        >
+                          {m}
                           {isSelected && <Check size={14} />}
                         </button>
                       );
@@ -1798,9 +1933,9 @@ export function CallTaskDisplay() {
             </div>
 
             {/* Clear Filters Button */}
-            {(filters.status || filters.district || filters.classes.length > 0 || filters.packages.length > 0 || filters.properBatch || filters.joinedBatch || filters.startDate || filters.endDate || filters.search || filters.pcaid) && (
+            {(filters.status || filters.district || filters.classes.length > 0 || filters.month || filters.packages.length > 0 || filters.properBatch || filters.joinedBatch || filters.startDate || filters.endDate || filters.search || filters.pcaid) && (
               <button
-                onClick={() => setFilters({ status: '', district: '', classes: [], packages: [], properBatch: '', joinedBatch: '', startDate: '', endDate: '', search: '', pcaid: '' })}
+                onClick={() => setFilters({ status: '', district: '', classes: [], month: '', packages: [], properBatch: '', joinedBatch: '', startDate: '', endDate: '', search: '', pcaid: '' })}
                 className="inline-flex items-center justify-center gap-1 bg-rose-50 hover:bg-rose-100 border border-rose-100 text-rose-600 rounded-lg px-3 py-1 text-xs font-bold transition-all active:scale-95 cursor-pointer ml-auto"
                 title="Clear all filters"
               >

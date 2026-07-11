@@ -2711,7 +2711,20 @@ export function StudentExplorer() {
       return c.class_type.substring(0, idx).trim();
     }
     return c.class_type;
-  })))).filter(Boolean).sort();
+  }))) as string[]).filter(Boolean).sort((a: string, b: string) => {
+    const topPriorityClasses = [
+      'Admission',
+      'MaxouT',
+      'Paper Class with Theory Revision',
+      'Paper Class with Theory'
+    ];
+    const idxA = topPriorityClasses.indexOf(a);
+    const idxB = topPriorityClasses.indexOf(b);
+    if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+    if (idxA !== -1) return -1;
+    if (idxB !== -1) return 1;
+    return a.localeCompare(b);
+  });
 
   // Verification States & Duplicate Check
   const [verifyQuery, setVerifyQuery] = useState('');
@@ -3174,8 +3187,19 @@ export function StudentExplorer() {
         if (!p.class_type) return false;
         const ptLower = p.class_type.toLowerCase();
         
+        // Extract base class name of the payment's class_type by stripping month suffixes
+        let paymentBaseClass = p.class_type;
+        const match = MONTHS.find(m => p.class_type.endsWith(` ${m}`) || p.class_type.endsWith(` - ${m}`));
+        if (match) {
+          let idx = p.class_type.lastIndexOf(` - ${match}`);
+          if (idx === -1) {
+            idx = p.class_type.lastIndexOf(` ${match}`);
+          }
+          paymentBaseClass = p.class_type.substring(0, idx).trim();
+        }
+
         const classMatch = filters.classes.length === 0 || 
-          filters.classes.some(c => ptLower.includes(c.toLowerCase()));
+          filters.classes.some(c => paymentBaseClass.toLowerCase() === c.toLowerCase());
           
         const monthMatch = !filters.month || 
           ptLower.endsWith(` ${filters.month.toLowerCase()}`) || 
