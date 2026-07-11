@@ -2637,11 +2637,12 @@ export function StudentExplorer() {
   const { state: navState } = useLocation();
   const { user } = useAuth();
   const [students, setStudents] = useState<Student[]>([]);
-  const [explorerPayments, setExplorerPayments] = useState<{ pcaid: string; class_type: string | null; type: string }[]>([]);
+  const [explorerPayments, setExplorerPayments] = useState<{ pcaid: string; class_type: string | null; type: string; paid_date: string | null }[]>([]);
   const [loading, setLoading] = useState(true);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [showClassDropdown, setShowClassDropdown] = useState(false);
   const [showMonthDropdown, setShowMonthDropdown] = useState(false);
+  const [showYearDropdown, setShowYearDropdown] = useState(false);
   const [showPackageDropdown, setShowPackageDropdown] = useState(false);
   const [classTypes, setClassTypes] = useState<ClassItem[]>([]);
   const [packageTypes, setPackageTypes] = useState<PackageItem[]>([]);
@@ -2677,12 +2678,27 @@ export function StudentExplorer() {
     joinedBatch: '',
     classes: [] as string[],
     month: '',
+    year: '',
     packages: [] as string[],
     startDate: '',
     endDate: '',
     pcaid: '',
     studentType: ''
   });
+
+  // Dynamically compute clean, unique available years based on payment paid_dates
+  const availableYears = React.useMemo(() => {
+    const yearsSet = new Set<number>();
+    explorerPayments.forEach(p => {
+      if (p.paid_date) {
+        const yearVal = new Date(p.paid_date).getFullYear();
+        if (!isNaN(yearVal)) {
+          yearsSet.add(yearVal);
+        }
+      }
+    });
+    return Array.from(yearsSet).sort((a, b) => b - a);
+  }, [explorerPayments]);
 
   // Compute clean, unique base class types (without monthly suffix) for the dropdown selection from the class_item table
   const baseClassTypes = (Array.from(new Set(classTypes.map(c => {
@@ -2837,11 +2853,10 @@ export function StudentExplorer() {
     const { data } = await query.order('created_at', { ascending: false });
     if (data) setStudents(data as Student[]);
 
-    // Fetch all active class payments to build filter dropdown and perform filtering
+    // Fetch all active payments with paid_date to build filter dropdowns and perform filtering
     const { data: payData } = await supabase
       .from('payment')
-      .select('pcaid, class_type, type')
-      .eq('type', 'class')
+      .select('pcaid, class_type, type, paid_date')
       .is('deleted_at', null);
     if (payData) {
       setExplorerPayments(payData);
@@ -3175,6 +3190,14 @@ export function StudentExplorer() {
     const matchesPackages = filters.packages.length === 0 || 
       (s.asked_package_type ? filters.packages.some(p => s.asked_package_type.toLowerCase().includes(p.toLowerCase())) : false);
     
+    const matchesYear = !filters.year || explorerPayments.some(p => {
+      if (p.pcaid === s.pcaid && p.paid_date) {
+        const pYear = new Date(p.paid_date).getFullYear();
+        return pYear.toString() === filters.year;
+      }
+      return false;
+    });
+    
     // Check if scholarship
     let isScholarship = false;
     if (s.pcaid && s.pcaid.length === 10) {
@@ -3201,7 +3224,7 @@ export function StudentExplorer() {
       matchesDateRange = false;
     }
 
-    return matchesSearch && matchesPcaidSearch && matchesDistrict && matchesProperBatch && matchesJoinedBatch && matchesClasses && matchesPackages && matchesDateRange && matchesStudentType;
+    return matchesSearch && matchesPcaidSearch && matchesDistrict && matchesProperBatch && matchesJoinedBatch && matchesClasses && matchesPackages && matchesDateRange && matchesStudentType && matchesYear;
   });
 
   return (
@@ -3519,6 +3542,68 @@ export function StudentExplorer() {
 
               <div className="bg-gray-100 w-px my-1 hidden sm:block" />
 
+              {/* Year Filter */}
+              <div className="relative">
+                <button 
+                  onClick={() => setShowYearDropdown(!showYearDropdown)}
+                  className="flex items-center gap-1 px-3 py-1.5 text-xs font-bold text-gray-600 outline-none bg-transparent min-w-[110px] justify-between cursor-pointer"
+                >
+                  <span className="truncate max-w-[80px]">
+                    {filters.year || 'All Years'}
+                  </span>
+                  <ChevronDown size={14} className={`text-gray-400 transition-transform ${showYearDropdown ? 'rotate-180' : ''}`} />
+                </button>
+
+                {showYearDropdown && (
+                  <>
+                    <div className="fixed inset-0 z-40" onClick={() => setShowYearDropdown(false)} />
+                    <div className="absolute left-0 mt-2 w-[150px] bg-white rounded-xl shadow-2xl border border-gray-100 py-2 z-50 max-h-[300px] overflow-auto animate-in fade-in zoom-in-95 duration-100">
+                      <div className="px-3 py-1 mb-1 border-b border-gray-50 flex items-center justify-between">
+                        <span className="text-[10px] font-black text-gray-400 uppercase">Select Year</span>
+                        {filters.year && (
+                          <button 
+                            onClick={(e) => { e.stopPropagation(); setFilters({ ...filters, year: '' }); setShowYearDropdown(false); }}
+                            className="text-[10px] font-bold text-teal-600 hover:text-teal-700"
+                          >
+                            Clear
+                          </button>
+                        )}
+                      </div>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setFilters({ ...filters, year: '' });
+                          setShowYearDropdown(false);
+                        }}
+                        className={`w-full flex items-center justify-between px-3 py-2 text-xs font-bold transition-colors ${!filters.year ? 'bg-teal-50 text-teal-700' : 'text-gray-600 hover:bg-gray-50'}`}
+                      >
+                        All Years
+                        {!filters.year && <Check size={14} />}
+                      </button>
+                      {availableYears.map(y => {
+                        const isSelected = filters.year === y.toString();
+                        return (
+                          <button
+                            key={y}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setFilters({ ...filters, year: y.toString() });
+                              setShowYearDropdown(false);
+                            }}
+                            className={`w-full flex items-center justify-between px-3 py-2 text-xs font-bold transition-colors ${isSelected ? 'bg-teal-50 text-teal-700' : 'text-gray-600 hover:bg-gray-50'}`}
+                          >
+                            {y}
+                            {isSelected && <Check size={14} />}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </>
+                )}
+              </div>
+
+              <div className="bg-gray-100 w-px my-1 hidden sm:block" />
+
               {/* Multi-Select Package Filter */}
               <div className="relative">
                 <button 
@@ -3597,11 +3682,11 @@ export function StudentExplorer() {
               </div>
 
               {/* Clear Filters Button */}
-              {(filters.district || filters.classes.length > 0 || filters.packages.length > 0 || filters.startDate || filters.endDate || filters.search || filters.properBatch || filters.joinedBatch || filters.pcaid || filters.studentType) && (
+              {(filters.district || filters.classes.length > 0 || filters.packages.length > 0 || filters.startDate || filters.endDate || filters.search || filters.properBatch || filters.joinedBatch || filters.pcaid || filters.studentType || filters.month || filters.year) && (
                 <>
                   <div className="bg-gray-100 w-px my-1 hidden sm:block" />
                   <button
-                    onClick={() => setFilters({ district: '', classes: [], packages: [], startDate: '', endDate: '', search: '', properBatch: '', joinedBatch: '', pcaid: '', studentType: '' })}
+                    onClick={() => setFilters({ district: '', classes: [], packages: [], startDate: '', endDate: '', search: '', properBatch: '', joinedBatch: '', pcaid: '', studentType: '', month: '', year: '' })}
                     className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg font-bold text-xs transition-colors cursor-pointer whitespace-nowrap border border-red-100 ml-1"
                     title="Clear All Filters"
                   >

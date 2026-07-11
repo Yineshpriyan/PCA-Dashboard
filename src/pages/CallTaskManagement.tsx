@@ -1590,246 +1590,228 @@ export function CallTaskDisplay() {
             </button>
           </div>
           
-          {/* Master Advanced Filters Grid Panel */}
-          <div className="bg-white rounded-3xl border border-gray-100 shadow-sm p-4 space-y-4 w-full">
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
-              
-              {/* 1. Search Lead Name/Phone */}
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
-                  <Search size={14} />
-                </div>
-                <input 
-                  type="text"
-                  placeholder="Search Lead..."
-                  value={filters.search}
-                  onChange={(e) => setFilters({ ...filters, search: e.target.value })}
-                  className="w-full pl-9 pr-3 py-2 bg-gray-50/50 border border-gray-200 rounded-xl text-xs font-semibold text-gray-700 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-teal-500/10 focus:border-teal-500 focus:bg-white transition-all"
-                />
-              </div>
+          {/* Master Advanced Filters Flex Bar */}
+          <div className="flex flex-wrap items-center bg-white rounded-xl shadow-sm border border-gray-100 p-1 gap-1 w-full">
+            {/* Count */}
+            <div className="px-3 py-1 bg-teal-50/50 rounded-lg w-full sm:w-auto text-center order-last sm:order-first">
+               <span className="text-[10px] font-black text-teal-600 uppercase whitespace-nowrap">Count: {filteredTasks.length}</span>
+            </div>
 
-              {/* 2. PCA ID Input */}
-              <div className="relative">
-                <input 
-                  type="text"
-                  placeholder="PCAID..."
-                  value={filters.pcaid}
-                  onChange={(e) => setFilters({ ...filters, pcaid: e.target.value })}
-                  className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 rounded-xl text-xs font-semibold text-gray-700 placeholder:text-gray-400 uppercase focus:outline-none focus:ring-2 focus:ring-teal-500/10 focus:border-teal-500 focus:bg-white transition-all"
-                />
-              </div>
+            {/* Search textbox (Search Lead Name/Phone) */}
+            <div className="relative flex items-center px-3 min-w-[180px] flex-1">
+              <Search size={14} className="text-gray-400 mr-2 flex-shrink-0" />
+              <input 
+                type="text"
+                placeholder="Search Lead..."
+                value={filters.search}
+                onChange={(e) => setFilters({ ...filters, search: e.target.value })}
+                className="w-full text-xs font-bold text-gray-600 border-none outline-none bg-transparent placeholder:text-gray-300 py-1.5"
+              />
+            </div>
 
-              {/* 3. Status Filter Dropdown */}
-              <div>
-                <select 
-                  value={filters.status}
-                  onChange={(e) => setFilters({ ...filters, status: e.target.value })}
-                  className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 rounded-xl text-xs font-semibold text-gray-700 focus:outline-none focus:ring-2 focus:ring-teal-500/10 focus:border-teal-500 focus:bg-white transition-all cursor-pointer"
-                >
-                  <option value="">All Statuses</option>
-                  <option value="Not Sure">Not Sure</option>
-                  <option value="Free">Free</option>
-                  <option value="Joined">Joined</option>
-                  <option value="Not Join">Not Join</option>
-                </select>
-              </div>
+            {/* PCAID Filter */}
+            <div className="flex items-center px-3 border-l border-gray-100">
+              <input 
+                type="text"
+                placeholder="PCAID..."
+                value={filters.pcaid}
+                onChange={(e) => setFilters({ ...filters, pcaid: e.target.value })}
+                className="w-[80px] text-xs font-bold text-gray-600 border-none outline-none bg-transparent placeholder:text-gray-300 py-1.5 uppercase"
+              />
+            </div>
 
-              {/* 4. District Filter Dropdown */}
-              <div>
-                <select 
-                  value={filters.district}
-                  onChange={(e) => setFilters({ ...filters, district: e.target.value })}
-                  className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 rounded-xl text-xs font-semibold text-gray-700 focus:outline-none focus:ring-2 focus:ring-teal-500/10 focus:border-teal-500 focus:bg-white transition-all cursor-pointer"
-                >
-                  <option value="">All Districts</option>
-                  {SRI_LANKAN_DISTRICTS.map(d => <option key={d} value={d}>{d}</option>)}
-                </select>
-              </div>
+            {/* Status Dropdown */}
+            <select 
+              value={filters.status}
+              onChange={(e) => setFilters({ ...filters, status: e.target.value })}
+              className="px-3 py-1.5 text-xs font-bold text-gray-600 border-none outline-none bg-transparent cursor-pointer min-w-[120px] border-l border-gray-100"
+            >
+              <option value="">All Statuses</option>
+              <option value="Not Sure">Not Sure</option>
+              <option value="Free">Free</option>
+              <option value="Joined">Joined</option>
+              <option value="Not Join">Not Join</option>
+            </select>
 
-              {/* 5. Class Multi-Select Dropdown Button */}
-              <div className="relative">
-                <button 
-                  onClick={() => setShowClassDropdown(!showClassDropdown)}
-                  className="w-full flex items-center justify-between px-3 py-2 bg-gray-50/50 border border-gray-200 rounded-xl text-xs font-semibold text-gray-700 focus:outline-none focus:ring-2 focus:ring-teal-500/10 focus:border-teal-500 focus:bg-white transition-all cursor-pointer"
-                >
-                  <span className="truncate">
-                    {filters.classes.length === 0 ? 'All Classes' : 
-                     filters.classes.length === 1 ? filters.classes[0] : 
-                     `${filters.classes.length} Classes`}
-                  </span>
-                  <ChevronDown size={14} className={`text-gray-400 transition-transform ${showClassDropdown ? 'rotate-180' : ''}`} />
-                </button>
+            {/* District Dropdown */}
+            <select 
+              value={filters.district}
+              onChange={(e) => setFilters({ ...filters, district: e.target.value })}
+              className="px-3 py-1.5 text-xs font-bold text-gray-600 border-none outline-none bg-transparent cursor-pointer min-w-[120px] border-l border-gray-100"
+            >
+              <option value="">All Districts</option>
+              {SRI_LANKAN_DISTRICTS.map(d => <option key={d} value={d}>{d}</option>)}
+            </select>
 
-                {showClassDropdown && (
-                  <>
-                    <div className="fixed inset-0 z-40" onClick={() => setShowClassDropdown(false)} />
-                    <div className="absolute left-0 mt-2 w-full bg-white rounded-xl shadow-2xl border border-gray-100 py-2 z-50 max-h-[300px] overflow-auto animate-in fade-in zoom-in-95 duration-100">
-                      <div className="px-3 py-1 mb-1 border-b border-gray-50 flex items-center justify-between">
-                        <span className="text-[10px] font-black text-gray-400 uppercase">Select Classes</span>
-                        {filters.classes.length > 0 && (
-                          <button 
-                            onClick={(e) => { e.stopPropagation(); setFilters({ ...filters, classes: [] }); }}
-                            className="text-[10px] font-bold text-teal-600 hover:text-teal-700"
-                          >
-                            Clear
-                          </button>
-                        )}
-                      </div>
-                      {classTypes.map(c => {
-                        const isSelected = filters.classes.includes(c.class_type);
-                        return (
-                          <button
-                            key={c.id}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              const newClasses = isSelected 
-                                ? filters.classes.filter(item => item !== c.class_type)
-                                : [...filters.classes, c.class_type];
-                              setFilters({ ...filters, classes: newClasses });
-                            }}
-                            className={`w-full flex items-center justify-between px-3 py-2 text-xs font-bold transition-colors ${isSelected ? 'bg-teal-50 text-teal-700' : 'text-gray-600 hover:bg-gray-50'}`}
-                          >
-                            {c.class_type}
-                            {isSelected && <Check size={14} />}
-                          </button>
-                        );
-                      })}
+            <div className="bg-gray-100 w-px my-1 hidden sm:block" />
+
+            {/* Batch Filters */}
+            <div className="flex items-center">
+              <input 
+                type="text"
+                placeholder="Proper Batch..."
+                value={filters.properBatch}
+                onChange={(e) => setFilters({ ...filters, properBatch: e.target.value })}
+                className="px-3 py-1.5 text-xs font-bold text-gray-600 border-none outline-none bg-transparent w-[100px] placeholder:text-gray-300 border-r border-gray-100"
+              />
+              <input 
+                type="text"
+                placeholder="Joined Batch..."
+                value={filters.joinedBatch}
+                onChange={(e) => setFilters({ ...filters, joinedBatch: e.target.value })}
+                className="px-3 py-1.5 text-xs font-bold text-gray-600 border-none outline-none bg-transparent w-[100px] placeholder:text-gray-300"
+              />
+            </div>
+
+            <div className="bg-gray-100 w-px my-1 hidden sm:block" />
+
+            {/* Multi-Select Class Filter */}
+            <div className="relative">
+              <button 
+                onClick={() => setShowClassDropdown(!showClassDropdown)}
+                className="flex items-center gap-1 px-3 py-1.5 text-xs font-bold text-gray-600 outline-none bg-transparent min-w-[130px] justify-between cursor-pointer"
+              >
+                <span className="truncate max-w-[100px]">
+                  {filters.classes.length === 0 ? 'All Classes' : 
+                   filters.classes.length === 1 ? filters.classes[0] : 
+                   `${filters.classes.length} Classes`}
+                </span>
+                <ChevronDown size={14} className={`text-gray-400 transition-transform ${showClassDropdown ? 'rotate-180' : ''}`} />
+              </button>
+
+              {showClassDropdown && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setShowClassDropdown(false)} />
+                  <div className="absolute left-0 mt-2 w-[220px] bg-white rounded-xl shadow-2xl border border-gray-100 py-2 z-50 max-h-[300px] overflow-auto animate-in fade-in zoom-in-95 duration-100">
+                    <div className="px-3 py-1 mb-1 border-b border-gray-50 flex items-center justify-between">
+                      <span className="text-[10px] font-black text-gray-400 uppercase">Select Classes</span>
+                      {filters.classes.length > 0 && (
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); setFilters({ ...filters, classes: [] }); }}
+                          className="text-[10px] font-bold text-teal-600 hover:text-teal-700"
+                        >
+                          Clear
+                        </button>
+                      )}
                     </div>
-                  </>
-                )}
-              </div>
+                    {classTypes.map(c => {
+                      const isSelected = filters.classes.includes(c.class_type);
+                      return (
+                        <button
+                          key={c.id}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const newClasses = isSelected 
+                              ? filters.classes.filter(item => item !== c.class_type)
+                              : [...filters.classes, c.class_type];
+                            setFilters({ ...filters, classes: newClasses });
+                          }}
+                          className={`w-full flex items-center justify-between px-3 py-2 text-xs font-bold transition-colors ${isSelected ? 'bg-teal-50 text-teal-700' : 'text-gray-600 hover:bg-gray-50'}`}
+                        >
+                          {c.class_type}
+                          {isSelected && <Check size={14} />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
+            </div>
 
-              {/* 6. Package Multi-Select Dropdown Button */}
-              <div className="relative">
-                <button 
-                  onClick={() => setShowPackageDropdown(!showPackageDropdown)}
-                  className="w-full flex items-center justify-between px-3 py-2 bg-gray-50/50 border border-gray-200 rounded-xl text-xs font-semibold text-gray-700 focus:outline-none focus:ring-2 focus:ring-teal-500/10 focus:border-teal-500 focus:bg-white transition-all cursor-pointer"
-                >
-                  <span className="truncate">
-                    {filters.packages.length === 0 ? 'All Packages' : 
-                     filters.packages.length === 1 ? filters.packages[0] : 
-                     `${filters.packages.length} Packages`}
-                  </span>
-                  <ChevronDown size={14} className={`text-gray-400 transition-transform ${showPackageDropdown ? 'rotate-180' : ''}`} />
-                </button>
+            <div className="bg-gray-100 w-px my-1 hidden sm:block" />
 
-                {showPackageDropdown && (
-                  <>
-                    <div className="fixed inset-0 z-40" onClick={() => setShowPackageDropdown(false)} />
-                    <div className="absolute left-0 mt-2 w-full bg-white rounded-xl shadow-2xl border border-gray-100 py-2 z-50 max-h-[300px] overflow-auto animate-in fade-in zoom-in-95 duration-100">
-                      <div className="px-3 py-1 mb-1 border-b border-gray-50 flex items-center justify-between">
-                        <span className="text-[10px] font-black text-gray-400 uppercase">Select Packages</span>
-                        {filters.packages.length > 0 && (
-                          <button 
-                            onClick={(e) => { e.stopPropagation(); setFilters({ ...filters, packages: [] }); }}
-                            className="text-[10px] font-bold text-teal-600 hover:text-teal-700"
-                          >
-                            Clear
-                          </button>
-                        )}
-                      </div>
-                      {packageTypes.map(p => {
-                        const isSelected = filters.packages.includes(p.package_type);
-                        return (
-                          <button
-                            key={p.id}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              const newPackages = isSelected 
-                                ? filters.packages.filter(item => item !== p.package_type)
-                                : [...filters.packages, p.package_type];
-                              setFilters({ ...filters, packages: newPackages });
-                            }}
-                            className={`w-full flex items-center justify-between px-3 py-2 text-xs font-bold transition-colors ${isSelected ? 'bg-teal-50 text-teal-700' : 'text-gray-600 hover:bg-gray-50'}`}
-                          >
-                            {p.package_type}
-                            {isSelected && <Check size={14} />}
-                          </button>
-                        );
-                      })}
+            {/* Multi-Select Package Filter */}
+            <div className="relative">
+              <button 
+                onClick={() => setShowPackageDropdown(!showPackageDropdown)}
+                className="flex items-center gap-1 px-3 py-1.5 text-xs font-bold text-gray-600 outline-none bg-transparent min-w-[130px] justify-between cursor-pointer"
+              >
+                <span className="truncate max-w-[100px]">
+                  {filters.packages.length === 0 ? 'All Packages' : 
+                   filters.packages.length === 1 ? filters.packages[0] : 
+                   `${filters.packages.length} Packages`}
+                </span>
+                <ChevronDown size={14} className={`text-gray-400 transition-transform ${showPackageDropdown ? 'rotate-180' : ''}`} />
+              </button>
+
+              {showPackageDropdown && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setShowPackageDropdown(false)} />
+                  <div className="absolute left-0 mt-2 w-[220px] bg-white rounded-xl shadow-2xl border border-gray-100 py-2 z-50 max-h-[300px] overflow-auto animate-in fade-in zoom-in-95 duration-100">
+                    <div className="px-3 py-1 mb-1 border-b border-gray-50 flex items-center justify-between">
+                      <span className="text-[10px] font-black text-gray-400 uppercase">Select Packages</span>
+                      {filters.packages.length > 0 && (
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); setFilters({ ...filters, packages: [] }); }}
+                          className="text-[10px] font-bold text-teal-600 hover:text-teal-700"
+                        >
+                          Clear
+                        </button>
+                      )}
                     </div>
-                  </>
-                )}
-              </div>
+                    {packageTypes.map(p => {
+                      const isSelected = filters.packages.includes(p.package_type);
+                      return (
+                        <button
+                          key={p.id}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const newPackages = isSelected 
+                              ? filters.packages.filter(item => item !== p.package_type)
+                              : [...filters.packages, p.package_type];
+                            setFilters({ ...filters, packages: newPackages });
+                          }}
+                          className={`w-full flex items-center justify-between px-3 py-2 text-xs font-bold transition-colors ${isSelected ? 'bg-teal-50 text-teal-700' : 'text-gray-600 hover:bg-gray-50'}`}
+                        >
+                          {p.package_type}
+                          {isSelected && <Check size={14} />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
+            </div>
 
-              {/* 7. Proper Batch */}
-              <div>
-                <input 
-                  type="text"
-                  placeholder="Proper Batch..."
-                  value={filters.properBatch}
-                  onChange={(e) => setFilters({ ...filters, properBatch: e.target.value })}
-                  className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 rounded-xl text-xs font-semibold text-gray-700 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-teal-500/10 focus:border-teal-500 focus:bg-white transition-all"
-                />
-              </div>
+            <div className="bg-gray-100 w-px my-1 hidden sm:block" />
 
-              {/* 8. Joined Batch */}
-              <div>
-                <input 
-                  type="text"
-                  placeholder="Joined Batch..."
-                  value={filters.joinedBatch}
-                  onChange={(e) => setFilters({ ...filters, joinedBatch: e.target.value })}
-                  className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 rounded-xl text-xs font-semibold text-gray-700 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-teal-500/10 focus:border-teal-500 focus:bg-white transition-all"
-                />
-              </div>
-
-              {/* 9. From Date Picker */}
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
-                  <Calendar size={13} />
-                </div>
+            {/* Date Range Filter */}
+            <div className="flex items-center px-2 py-1.5 w-full sm:w-auto border-t sm:border-t-0 sm:border-l border-gray-100 mt-1 sm:mt-0">
+              <Calendar size={14} className="text-gray-400 mr-2 flex-shrink-0" />
+              <div className="flex items-center gap-1 flex-1">
                 <input 
                   type="date"
                   value={filters.startDate}
                   onChange={(e) => setFilters({ ...filters, startDate: e.target.value })}
-                  className="w-full pl-9 pr-3 py-2 bg-gray-50/50 border border-gray-200 rounded-xl text-xs font-semibold text-gray-700 focus:outline-none focus:ring-2 focus:ring-teal-500/10 focus:border-teal-500 focus:bg-white transition-all cursor-pointer"
+                  className="text-[10px] font-bold text-gray-600 border-none outline-none bg-transparent cursor-pointer flex-1"
                   title="From Date"
                 />
-              </div>
-
-              {/* 10. To Date Picker */}
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
-                  <Calendar size={13} />
-                </div>
+                <span className="text-[10px] text-gray-300 font-bold">to</span>
                 <input 
                   type="date"
                   value={filters.endDate}
                   onChange={(e) => setFilters({ ...filters, endDate: e.target.value })}
-                  className="w-full pl-9 pr-3 py-2 bg-gray-50/50 border border-gray-200 rounded-xl text-xs font-semibold text-gray-700 focus:outline-none focus:ring-2 focus:ring-teal-500/10 focus:border-teal-500 focus:bg-white transition-all cursor-pointer"
+                  className="text-[10px] font-bold text-gray-600 border-none outline-none bg-transparent cursor-pointer flex-1"
                   title="To Date"
                 />
               </div>
-
             </div>
 
-            {/* Tray Status indicators and Reset Button */}
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-t border-gray-100 pt-3 gap-3">
-              <div className="flex items-center gap-2">
-                <span className="inline-flex items-center justify-center px-3 py-1 bg-teal-50 border border-teal-100 text-teal-700 text-xs font-extrabold rounded-lg shadow-sm">
-                  COUNT: {filteredTasks.length}
-                </span>
-                <span className="text-[10px] text-gray-400 font-extrabold uppercase tracking-widest">Tasks Match Active Filters</span>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
-                {(filters.status || filters.district || filters.classes.length > 0 || filters.packages.length > 0 || filters.properBatch || filters.joinedBatch || filters.startDate || filters.endDate || filters.search || filters.pcaid) && (
-                  <button
-                    onClick={() => setFilters({ status: '', district: '', classes: [], packages: [], properBatch: '', joinedBatch: '', startDate: '', endDate: '', search: '', pcaid: '' })}
-                    className="inline-flex items-center justify-center gap-1 bg-rose-50 hover:bg-rose-100 border border-rose-100 text-rose-600 rounded-xl px-4 py-1.5 text-xs font-bold transition-all active:scale-95 cursor-pointer"
-                    title="Clear all filters"
-                  >
-                    <X size={14} />
-                    Clear All Filters
-                  </button>
-                )}
-              </div>
-            </div>
+            {/* Clear Filters Button */}
+            {(filters.status || filters.district || filters.classes.length > 0 || filters.packages.length > 0 || filters.properBatch || filters.joinedBatch || filters.startDate || filters.endDate || filters.search || filters.pcaid) && (
+              <button
+                onClick={() => setFilters({ status: '', district: '', classes: [], packages: [], properBatch: '', joinedBatch: '', startDate: '', endDate: '', search: '', pcaid: '' })}
+                className="inline-flex items-center justify-center gap-1 bg-rose-50 hover:bg-rose-100 border border-rose-100 text-rose-600 rounded-lg px-3 py-1 text-xs font-bold transition-all active:scale-95 cursor-pointer ml-auto"
+                title="Clear all filters"
+              >
+                <X size={14} />
+                Clear
+              </button>
+            )}
           </div>
         </div>
 
-      <div className="max-h-[calc(100vh-260px)] min-h-[450px] overflow-auto bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 relative shadow-md">
+      <div className="max-h-[calc(100vh-180px)] min-h-[450px] overflow-auto bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 relative shadow-md">
         <table className="w-full text-left border-collapse min-w-[1100px]">
           <thead className="sticky top-0 z-30">
             <tr className="bg-teal-600">
