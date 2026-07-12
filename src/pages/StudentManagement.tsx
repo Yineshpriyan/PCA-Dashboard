@@ -3288,22 +3288,20 @@ export function StudentExplorer() {
     // Payment Status Logic
     const allStudentPayments = explorerPayments.filter(p => p.pcaid === s.pcaid);
     const matchesPaymentStatus = !filters.paymentStatus || (
-      allStudentPayments.length === 0 
-        ? filters.paymentStatus === 'pending'
-        : allStudentPayments.some(p => {
-            const totalFee = Number(p.payment || 0);
-            const activeInstallments = (p.installment || p.installments || []).filter((inst: any) => !inst.deleted_at);
-            const totalPaidAmount = activeInstallments.reduce((sum: number, inst: any) => sum + Number(inst.paid_amount || 0), 0);
-            
-            let status = 'paid';
-            if (totalPaidAmount < totalFee) {
-              status = 'pending';
-            } else if (totalPaidAmount > totalFee) {
-              status = 'over paid';
-            }
-            
-            return status === filters.paymentStatus;
-          })
+      allStudentPayments.length > 0 && allStudentPayments.some(p => {
+        const totalFee = Number(p.payment || 0);
+        const activeInstallments = (p.installment || p.installments || []).filter((inst: any) => !inst.deleted_at);
+        const totalPaidAmount = activeInstallments.reduce((sum: number, inst: any) => sum + Number(inst.paid_amount || 0), 0);
+        
+        let status = 'paid';
+        if (totalPaidAmount < totalFee) {
+          status = 'pending';
+        } else if (totalPaidAmount > totalFee) {
+          status = 'over paid';
+        }
+        
+        return status === filters.paymentStatus;
+      })
     );
 
     return matchesSearch && matchesPcaidSearch && matchesDistrict && matchesProperBatch && matchesJoinedBatch && matchesClasses && matchesPackages && matchesDateRange && matchesStudentType && matchesYear && matchesPaymentStatus;
