@@ -2673,7 +2673,7 @@ export function StudentExplorer() {
   const { state: navState } = useLocation();
   const { user } = useAuth();
   const [students, setStudents] = useState<Student[]>([]);
-  const [explorerPayments, setExplorerPayments] = useState<{ pcaid: string; class_type: string | null; type: string; paid_date: string | null }[]>([]);
+  const [explorerPayments, setExplorerPayments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [showClassDropdown, setShowClassDropdown] = useState(false);
@@ -2719,7 +2719,8 @@ export function StudentExplorer() {
     startDate: '',
     endDate: '',
     pcaid: '',
-    studentType: ''
+    studentType: '',
+    paymentStatus: ''
   });
 
   // Dynamically compute clean, unique available years based on payment paid_dates
@@ -2902,10 +2903,10 @@ export function StudentExplorer() {
     const { data } = await query.order('created_at', { ascending: false });
     if (data) setStudents(data as Student[]);
 
-    // Fetch all active payments with paid_date to build filter dropdowns and perform filtering
+    // Fetch all active payments with paid_date and installments to build filter dropdowns and perform filtering
     const { data: payData } = await supabase
       .from('payment')
-      .select('pcaid, class_type, type, paid_date')
+      .select('id, pcaid, class_type, type, paid_date, payment, installment(paid_amount, deleted_at)')
       .is('deleted_at', null);
     if (payData) {
       setExplorerPayments(payData);
@@ -3284,7 +3285,28 @@ export function StudentExplorer() {
       matchesDateRange = false;
     }
 
-    return matchesSearch && matchesPcaidSearch && matchesDistrict && matchesProperBatch && matchesJoinedBatch && matchesClasses && matchesPackages && matchesDateRange && matchesStudentType && matchesYear;
+    // Payment Status Logic
+    const allStudentPayments = explorerPayments.filter(p => p.pcaid === s.pcaid);
+    const matchesPaymentStatus = !filters.paymentStatus || (
+      allStudentPayments.length === 0 
+        ? filters.paymentStatus === 'pending'
+        : allStudentPayments.some(p => {
+            const totalFee = Number(p.payment || 0);
+            const activeInstallments = (p.installment || p.installments || []).filter((inst: any) => !inst.deleted_at);
+            const totalPaidAmount = activeInstallments.reduce((sum: number, inst: any) => sum + Number(inst.paid_amount || 0), 0);
+            
+            let status = 'paid';
+            if (totalPaidAmount < totalFee) {
+              status = 'pending';
+            } else if (totalPaidAmount > totalFee) {
+              status = 'over paid';
+            }
+            
+            return status === filters.paymentStatus;
+          })
+    );
+
+    return matchesSearch && matchesPcaidSearch && matchesDistrict && matchesProperBatch && matchesJoinedBatch && matchesClasses && matchesPackages && matchesDateRange && matchesStudentType && matchesYear && matchesPaymentStatus;
   });
 
   return (
@@ -3461,6 +3483,18 @@ export function StudentExplorer() {
                 <option value="">All Categories</option>
                 <option value="Paid">Paid Students</option>
                 <option value="Scholarship">Scholarship Holders</option>
+              </select>
+
+              {/* Payment Status Dropdown */}
+              <select 
+                value={filters.paymentStatus}
+                onChange={(e) => setFilters({ ...filters, paymentStatus: e.target.value })}
+                className="px-3 py-1.5 text-xs font-bold text-gray-600 border-none outline-none bg-transparent cursor-pointer min-w-[145px] border-l border-gray-100"
+              >
+                <option value="">All Payment Status</option>
+                <option value="pending">Pending</option>
+                <option value="paid">Paid</option>
+                <option value="over paid">Over Paid</option>
               </select>
 
               <div className="bg-gray-100 w-px my-1 hidden sm:block" />
@@ -3742,11 +3776,11 @@ export function StudentExplorer() {
               </div>
 
               {/* Clear Filters Button */}
-              {(filters.district || filters.classes.length > 0 || filters.packages.length > 0 || filters.startDate || filters.endDate || filters.search || filters.properBatch || filters.joinedBatch || filters.pcaid || filters.studentType || filters.month || filters.year) && (
+              {(filters.district || filters.classes.length > 0 || filters.packages.length > 0 || filters.startDate || filters.endDate || filters.search || filters.properBatch || filters.joinedBatch || filters.pcaid || filters.studentType || filters.month || filters.year || filters.paymentStatus) && (
                 <>
                   <div className="bg-gray-100 w-px my-1 hidden sm:block" />
                   <button
-                    onClick={() => setFilters({ district: '', classes: [], packages: [], startDate: '', endDate: '', search: '', properBatch: '', joinedBatch: '', pcaid: '', studentType: '', month: '', year: '' })}
+                    onClick={() => setFilters({ district: '', classes: [], packages: [], startDate: '', endDate: '', search: '', properBatch: '', joinedBatch: '', pcaid: '', studentType: '', month: '', year: '', paymentStatus: '' })}
                     className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg font-bold text-xs transition-colors cursor-pointer whitespace-nowrap border border-red-100 ml-1"
                     title="Clear All Filters"
                   >
