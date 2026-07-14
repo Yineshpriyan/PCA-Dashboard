@@ -178,7 +178,7 @@ export function Sidebar({
                 <Menu size={20} />
               </button>
               <h1 className="text-xl font-black tracking-tight flex items-center gap-2 select-none">
-                <AcademyLogo width={34} height={34} showText={false} />
+                <AcademyLogo width={42} height={42} showText={false} />
                 <span className="text-2xl font-black tracking-wider bg-gradient-to-r from-blue-600 to-white bg-clip-text text-transparent drop-shadow-[0_1px_1.5px_rgba(30,58,138,0.3)] dark:drop-shadow-none">
                   PCA
                 </span>
