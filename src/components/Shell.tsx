@@ -46,7 +46,7 @@ const navSections: NavSection[] = [
   {
     title: 'Overview',
     items: [
-      { label: 'Home', path: '/admin/home', icon: <Home size={18} />, roles: ['admin', 'super_admin'] },
+      { label: 'Dashboard', path: '/admin/home', icon: <Home size={18} />, roles: ['admin', 'super_admin'] },
     ]
   },
   {
@@ -59,15 +59,15 @@ const navSections: NavSection[] = [
   {
     title: 'Lead & Call Tasks',
     items: [
-      { label: 'New Call Task', path: '/admin/call-task/new', icon: <UserPlus size={18} />, roles: ['admin', 'super_admin'] },
-      { label: 'Call Tasks', path: '/admin/call-task/display', icon: <LayoutDashboard size={18} />, roles: ['admin', 'super_admin'] },
+      { label: 'New Lead', path: '/admin/call-task/new', icon: <UserPlus size={18} />, roles: ['admin', 'super_admin'] },
+      { label: 'Leads', path: '/admin/call-task/display', icon: <LayoutDashboard size={18} />, roles: ['admin', 'super_admin'] },
     ]
   },
   {
     title: 'Student Enrolment',
     items: [
       { label: 'New Student', path: '/admin/student-form', icon: <Settings size={18} />, roles: ['admin', 'super_admin'] },
-      { label: 'Student Explorer', path: '/admin/student-explorer', icon: <Users size={18} />, roles: ['admin', 'super_admin'] },
+      { label: 'Students', path: '/admin/student-explorer', icon: <Users size={18} />, roles: ['admin', 'super_admin'] },
     ]
   },
   {
@@ -88,7 +88,7 @@ const navSections: NavSection[] = [
     title: 'Super Admin Area',
     items: [
       { label: 'Issue Fixing', path: '/super-admin/fixing', icon: <Wrench size={18} />, roles: ['super_admin'] },
-      { label: 'Admins List', path: '/super-admin/admins', icon: <Users size={18} />, roles: ['super_admin'] },
+      { label: 'Admins', path: '/super-admin/admins', icon: <Users size={18} />, roles: ['super_admin'] },
       { label: 'Add Items', path: '/super-admin/items', icon: <Settings size={18} />, roles: ['super_admin'] },
       { label: 'New Account', path: '/super-admin/signup', icon: <UserPlus size={18} />, roles: ['super_admin'] },
     ]
@@ -110,6 +110,7 @@ export function Sidebar({
   const location = useLocation();
   const navigate = useNavigate();
   const [isDesktop, setIsDesktop] = React.useState(typeof window !== 'undefined' ? window.innerWidth >= 1024 : true);
+  const [isSidebarProfileExpanded, setIsSidebarProfileExpanded] = React.useState(false);
 
   React.useEffect(() => {
     const handleResize = () => setIsDesktop(window.innerWidth >= 1024);
@@ -176,14 +177,82 @@ export function Sidebar({
               >
                 <Menu size={20} />
               </button>
-              <h1 className="text-xl font-black text-teal-700 tracking-tight flex items-center gap-2 select-none">
+              <h1 className="text-xl font-black tracking-tight flex items-center gap-2 select-none">
                 <AcademyLogo width={34} height={34} showText={false} />
-                <div className="flex flex-col">
-                  <span className="text-sm font-black text-gray-800 dark:text-gray-100 leading-none">PHYSICS CUBE</span>
-                  <span className="text-[10px] font-black uppercase tracking-widest text-teal-600 dark:text-teal-400 leading-none mt-1">Portal</span>
-                </div>
+                <span className="text-2xl font-black tracking-wider bg-gradient-to-r from-blue-600 to-white bg-clip-text text-transparent drop-shadow-[0_1px_1.5px_rgba(30,58,138,0.3)] dark:drop-shadow-none">
+                  PCA
+                </span>
               </h1>
             </div>
+          </div>
+
+          {/* Clickable Profile Card - Placed below logo and above overview */}
+          <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-800">
+            <button
+              type="button"
+              onClick={() => setIsSidebarProfileExpanded(!isSidebarProfileExpanded)}
+              className="w-full flex items-center justify-between p-3 rounded-2xl bg-gray-50 dark:bg-gray-800 border border-gray-100 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-750 transition-all cursor-pointer text-left focus:outline-none focus:ring-2 focus:ring-teal-500/20 group"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-teal-100 dark:bg-teal-950 flex items-center justify-center text-teal-700 dark:text-teal-300 shadow-inner group-hover:scale-105 transition-transform">
+                  <UserIcon size={20} />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm font-bold text-gray-900 dark:text-gray-100 truncate leading-snug">{user?.username}</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 font-medium capitalize leading-none mt-0.5">{user?.admin_type?.replace('_', ' ')}</p>
+                </div>
+              </div>
+              <ChevronDown 
+                size={16} 
+                className={cn(
+                  "text-gray-400 dark:text-gray-500 transition-transform duration-250",
+                  isSidebarProfileExpanded && "rotate-180 text-teal-600 dark:text-teal-400"
+                )} 
+              />
+            </button>
+
+            {/* Collapsible Options panel */}
+            <AnimatePresence initial={false}>
+              {isSidebarProfileExpanded && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0, marginTop: 0 }}
+                  animate={{ height: 'auto', opacity: 1, marginTop: 8 }}
+                  exit={{ height: 0, opacity: 0, marginTop: 0 }}
+                  className="overflow-hidden space-y-1.5"
+                >
+                  {/* Theme Selector */}
+                  <div className="flex items-center justify-between p-2 pl-3 rounded-xl bg-gray-50/50 dark:bg-gray-800/50 border border-gray-100/50 dark:border-gray-700/50">
+                    <span className="text-xs font-bold text-gray-500 dark:text-gray-400">Theme Mode</span>
+                    <button
+                      type="button"
+                      onClick={toggleTheme}
+                      className="p-1 px-2.5 rounded-lg bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-650 hover:bg-gray-50 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 transition-all flex items-center gap-1.5 text-[11px] font-bold shadow-sm cursor-pointer"
+                    >
+                      {theme === 'dark' ? (
+                        <>
+                          <Moon size={12} className="text-teal-400" />
+                          <span>Dark</span>
+                        </>
+                      ) : (
+                        <>
+                          <Sun size={12} className="text-amber-500" />
+                          <span>Light</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  {/* Logout Button */}
+                  <button
+                    onClick={handleLogout}
+                    className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors border border-transparent hover:border-red-100 dark:hover:border-red-900/30 cursor-pointer"
+                  >
+                    <LogOut size={16} />
+                    <span>Sign Out</span>
+                  </button>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
 
           <div className="flex-1 px-3 py-6 space-y-6 overflow-y-auto">
@@ -217,48 +286,6 @@ export function Sidebar({
                 </div>
               </div>
             ))}
-          </div>
-
-          <div className="p-4 border-t border-gray-100 dark:border-gray-800 space-y-2">
-            <div className="flex items-center gap-3 p-3 rounded-lg bg-gray-50 dark:bg-gray-800 border border-gray-100 dark:border-gray-700">
-              <div className="w-10 h-10 rounded-full bg-teal-100 dark:bg-teal-950 flex items-center justify-center text-teal-700 dark:text-teal-300 shadow-inner">
-                <UserIcon size={20} />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-bold text-gray-900 dark:text-gray-100 truncate">{user?.username}</p>
-                <p className="text-xs text-gray-500 dark:text-gray-400 font-medium capitalize">{user?.admin_type?.replace('_', ' ')}</p>
-              </div>
-            </div>
-
-            {/* Sidebar Theme Switcher */}
-            <div className="flex items-center justify-between p-2 rounded-lg bg-gray-50 dark:bg-gray-800 border border-gray-100/50 dark:border-gray-700/50">
-              <span className="text-xs font-bold text-gray-500 dark:text-gray-400 pl-1.5">Theme Mode</span>
-              <button
-                type="button"
-                onClick={toggleTheme}
-                className="p-1 px-2.5 rounded-lg bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-650 hover:bg-gray-50 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 transition-all flex items-center gap-1.5 text-xs font-bold shadow-sm cursor-pointer"
-              >
-                {theme === 'dark' ? (
-                  <>
-                    <Moon size={13} className="text-teal-400" />
-                    <span>Dark Mode</span>
-                  </>
-                ) : (
-                  <>
-                    <Sun size={13} className="text-amber-500" />
-                    <span>Light Mode</span>
-                  </>
-                )}
-              </button>
-            </div>
-            
-            <button
-              onClick={handleLogout}
-              className="lg:hidden w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors"
-            >
-              <LogOut size={20} />
-              Logout
-            </button>
           </div>
         </div>
       </motion.aside>
@@ -302,9 +329,9 @@ export function Topbar({
     if (location.pathname.startsWith('/admin/student-form')) {
       activeLabel = 'Student Form';
     } else if (location.pathname.startsWith('/admin/home')) {
-      activeLabel = 'Home';
+      activeLabel = 'Dashboard';
     } else if (location.pathname === '/admin/student-explorer') {
-      activeLabel = 'Student Explorer';
+      activeLabel = 'Students';
     }
   }
 
@@ -326,68 +353,6 @@ export function Topbar({
             </h2>
           </div>
         )}
-      </div>
-
-      <div className="flex items-center gap-4">
-        <div className="relative">
-          <button
-            onClick={() => setIsProfileOpen(!isProfileOpen)}
-            className="flex items-center gap-2 p-1 pl-2 rounded-full border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-          >
-            <span className="text-sm font-medium text-gray-700 dark:text-gray-300 hidden sm:inline">{user?.username}</span>
-            <div className="w-8 h-8 rounded-full bg-teal-600 flex items-center justify-center text-white">
-              <UserIcon size={16} />
-            </div>
-            <ChevronDown size={14} className={cn("text-gray-500 dark:text-gray-400 transition-transform", isProfileOpen && "rotate-180")} />
-          </button>
-
-          <AnimatePresence>
-            {isProfileOpen && (
-              <>
-                <div className="fixed inset-0 z-10" onClick={() => setIsProfileOpen(false)} />
-                <motion.div
-                  initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                  className="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-lg py-1 z-20"
-                >
-                  <div className="px-4 py-2 border-b border-gray-100 dark:border-gray-700 lg:hidden font-sans">
-                    <p className="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate">{user?.username}</p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 capitalize">{user?.admin_type?.replace('_', ' ')}</p>
-                  </div>
-                  {/* Theme Selector Section */}
-                  <div className="px-4 py-2 flex items-center justify-between border-b border-gray-100 dark:border-gray-700 text-sans">
-                    <span className="text-xs font-bold text-gray-500 dark:text-gray-400">Theme</span>
-                    <button
-                      type="button"
-                      onClick={toggleTheme}
-                      className="p-1 px-2.5 rounded-lg bg-gray-100 dark:bg-gray-700 border border-gray-250 dark:border-gray-600 hover:bg-gray-200 dark:hover:bg-gray-650 text-gray-700 dark:text-gray-200 transition-all flex items-center gap-1 text-xs font-bold shadow-sm cursor-pointer"
-                    >
-                      {theme === 'dark' ? (
-                        <>
-                          <Moon size={11} className="text-teal-400" />
-                          <span>Dark</span>
-                        </>
-                      ) : (
-                        <>
-                          <Sun size={11} className="text-amber-500" />
-                          <span>Light</span>
-                        </>
-                      )}
-                    </button>
-                  </div>
-                  <button
-                    onClick={handleLogout}
-                    className="w-full flex items-center gap-2 px-4 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors text-left cursor-pointer"
-                  >
-                    <LogOut size={16} />
-                    Logout
-                  </button>
-                </motion.div>
-              </>
-            )}
-          </AnimatePresence>
-        </div>
       </div>
     </header>
   );

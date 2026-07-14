@@ -1,5 +1,6 @@
 // File location: /src/pages/Home.tsx
 import React, { useEffect, useState } from "react";
+import { useAuth } from "../hooks/useAuth";
 import { 
   Home as HomeIcon, 
   Users, 
@@ -62,6 +63,7 @@ interface DistrictData {
 }
 
 export default function Home() {
+  const { user } = useAuth();
   const [loading, setLoading] = useState<boolean>(true);
   const [stats, setStats] = useState<DashboardStats>({
     totalStudents: 0,
@@ -306,6 +308,16 @@ export default function Home() {
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-8">
+      {/* Welcome Greeting */}
+      <div className="mb-8 font-sans">
+        <h1 className="text-3xl font-bold text-gray-900 dark:text-white tracking-tight">
+          Welcome back, {user?.username ? user.username.charAt(0).toUpperCase() + user.username.slice(1) : "Admin"}
+        </h1>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1.5 font-medium">
+          Here's what's happening with your business today.
+        </p>
+      </div>
+
       {/* Stats Cards Row */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
         {statCards.map((stat, idx) => (

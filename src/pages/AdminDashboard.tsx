@@ -73,8 +73,6 @@ export function IssueTokenForm() {
 
   return (
     <div className="max-w-xl mx-auto">
-      <h2 className="text-xl font-bold text-gray-900 mb-6 border-l-4 border-teal-600 pl-4">Form</h2>
-      
       <form onSubmit={handleSubmit} className="space-y-4 bg-white p-6 md:p-8 rounded-2xl shadow-sm border border-gray-100">
         <div className="flex flex-col gap-4">
           <div className="flex flex-col md:grid md:grid-cols-[100px_1fr] md:items-center gap-2 md:gap-4">
@@ -273,8 +271,7 @@ export function DisplayTokens() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
-        <h2 className="text-xl md:text-2xl font-bold text-gray-900 border-l-4 border-teal-600 pl-4">Display</h2>
+      <div className="flex flex-col xl:flex-row xl:items-center justify-end gap-4">
         <div className="flex flex-wrap items-center gap-2">
           <div className="relative group flex-1 md:flex-none">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
