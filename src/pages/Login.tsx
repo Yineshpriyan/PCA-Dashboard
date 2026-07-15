@@ -35,13 +35,12 @@ export default function Login() {
 
     setLoading(true);
     try {
-      // Add a timeout for the login request
-      const loginPromise = supabase
-        .from('user')
-        .select('*')
-        .eq('username', username)
-        .eq('password', password)
-        .single();
+      const email = username.includes('@') ? username.trim() : `${username.toLowerCase().trim()}@pca.academy`;
+
+      const loginPromise = supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
 
       const timeoutPromise = new Promise((_, reject) => 
         setTimeout(() => reject(new Error('Request timed out after 10 seconds')), 10000)
@@ -50,21 +49,30 @@ export default function Login() {
       const { data, error } = (await Promise.race([loginPromise, timeoutPromise])) as any;
 
       if (error) {
-        if (error.code === 'PGRST116') {
-          toast.error('Invalid username or password');
-        } else {
-          toast.error(`Database error: ${error.message}`);
-          console.error('Supabase Error:', error);
-        }
+        toast.error(`Authentication error: ${error.message}`);
+        console.error('Supabase Auth Error:', error);
         return;
       }
 
-      if (!data) {
+      if (!data || !data.user) {
         toast.error('Invalid username or password');
         return;
       }
 
-      const userData = data as User;
+      // Fetch user profile from public.user table
+      const { data: profile, error: profileError } = await supabase
+        .from('user')
+        .select('*')
+        .eq('id', data.user.id)
+        .single();
+
+      if (profileError || !profile) {
+        toast.error('User registered in Auth but profile not found in database registry.');
+        console.error('Profile fetch error:', profileError);
+        return;
+      }
+
+      const userData = profile as User;
       login(userData);
       toast.success(`Welcome back, ${userData.username}!`);
       

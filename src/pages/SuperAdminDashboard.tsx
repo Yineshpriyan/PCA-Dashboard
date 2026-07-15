@@ -900,6 +900,7 @@ function ItemList({
 export function SignupView() {
   const [formData, setFormData] = useState({
     username: '',
+    email: '',
     password: '',
     admin_type: 'admin' as AdminType
   });
@@ -908,25 +909,59 @@ export function SignupView() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.username || !formData.password) {
+    if (!formData.username.trim() || !formData.email.trim() || !formData.password) {
       toast.error('All fields are required');
+      return;
+    }
+
+    if (!formData.email.includes('@')) {
+      toast.error('Please enter a valid email address');
       return;
     }
 
     setLoading(true);
     try {
-      const { error } = await supabase.from('user').insert({
-        ...formData,
-        joined_date: new Date().toISOString()
+      const email = formData.email.trim();
+
+      const { data, error: signUpError } = await supabase.auth.signUp({
+        email,
+        password: formData.password,
+        options: {
+          data: {
+            username: formData.username.trim(),
+            admin_type: formData.admin_type
+          }
+        }
       });
 
-      if (error) {
-        if (error.code === '23505') throw new Error('Username already exists');
-        throw error;
+      if (signUpError) {
+        throw signUpError;
+      }
+
+      if (!data?.user) {
+        throw new Error('Account creation failed');
+      }
+
+      // Check if trigger automatically created the profile row, otherwise insert manually
+      await new Promise(resolve => setTimeout(resolve, 500));
+      const { data: profile } = await supabase
+        .from('user')
+        .select('id')
+        .eq('id', data.user.id)
+        .maybeSingle();
+
+      if (!profile) {
+        const { error: insertError } = await supabase.from('user').insert({
+          id: data.user.id,
+          username: formData.username.trim(),
+          admin_type: formData.admin_type,
+          joined_date: new Date().toISOString()
+        });
+        if (insertError) throw insertError;
       }
 
       toast.success('Account created successfully!');
-      setFormData({ username: '', password: '', admin_type: 'admin' });
+      setFormData({ username: '', email: '', password: '', admin_type: 'admin' });
     } catch (err: any) {
       toast.error(err.message || 'Failed to create account');
     } finally {
@@ -936,26 +971,37 @@ export function SignupView() {
 
   return (
     <div className="max-w-xl mx-auto">
-      <form onSubmit={handleSubmit} className="space-y-5 bg-white p-6 md:p-8 rounded-2xl shadow-sm border border-gray-100">
+      <form onSubmit={handleSubmit} className="space-y-5 bg-white p-6 md:p-8 rounded-2xl shadow-sm border border-gray-100 p-6 dark:bg-gray-900 dark:border-gray-800">
         <div className="space-y-4">
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-semibold text-gray-700">Username</label>
+            <label className="text-sm font-semibold text-gray-700 dark:text-gray-300">Username</label>
             <input
               value={formData.username}
               onChange={(e) => setFormData({ ...formData, username: e.target.value })}
-              className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500/20 text-gray-800 font-medium"
+              className="w-full px-4 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500/20 text-gray-800 dark:text-gray-100 font-medium"
               placeholder="Enter username"
             />
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-semibold text-gray-700">Password</label>
+            <label className="text-sm font-semibold text-gray-700 dark:text-gray-300">Email Address</label>
+            <input
+              type="email"
+              value={formData.email}
+              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+              className="w-full px-4 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500/20 text-gray-800 dark:text-gray-100 font-medium"
+              placeholder="e.g. admin@pca.academy"
+            />
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <label className="text-sm font-semibold text-gray-700 dark:text-gray-300">Password</label>
             <div className="relative">
               <input
                 type={showPassword ? "text" : "password"}
                 value={formData.password}
                 onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500/20 text-gray-800 font-medium pr-10"
+                className="w-full px-4 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500/20 text-gray-800 dark:text-gray-100 font-medium pr-10"
                 placeholder="Enter password"
               />
               <button
@@ -969,11 +1015,11 @@ export function SignupView() {
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-semibold text-gray-700">Admin Type</label>
+            <label className="text-sm font-semibold text-gray-700 dark:text-gray-300">Admin Type</label>
             <select
               value={formData.admin_type}
               onChange={(e) => setFormData({ ...formData, admin_type: e.target.value as AdminType })}
-              className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500/20 text-gray-800 font-medium appearance-none bg-[url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2214%22%20height%3D%2214%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22currentColor%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M6%209l6%206%206-6%22%2F%3E%3C%2Fsvg%3E')] bg-[length:14px_14px] bg-[right_1rem_center] bg-no-repeat"
+              className="w-full px-4 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500/20 text-gray-800 dark:text-gray-100 font-medium appearance-none bg-[url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2214%22%20height%3D%2214%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22currentColor%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M6%209l6%206%206-6%22%2F%3E%3C%2Fsvg%3E')] bg-[length:14px_14px] bg-[right_1rem_center] bg-no-repeat"
             >
               <option value="admin">Admin</option>
               <option value="super_admin">Super Admin</option>
@@ -1030,7 +1076,6 @@ export function AdminsView() {
         .from('user')
         .update({
           username: editingUser.username,
-          password: editingUser.password,
           admin_type: editingUser.admin_type
         })
         .eq('id', editingUser.id);
@@ -1060,7 +1105,6 @@ export function AdminsView() {
               <th className="p-4 font-bold text-gray-800 dark:text-amber-100 animate-fade-in">Username</th>
               <th className="p-4 font-bold text-gray-800 dark:text-amber-100">Role</th>
               <th className="p-4 font-bold text-gray-800 dark:text-amber-100">Joined Date</th>
-              <th className="p-4 font-bold text-gray-800 dark:text-amber-100">Password</th>
               <th className="p-4 font-bold text-gray-800 dark:text-amber-100 text-center">Actions</th>
             </tr>
           </thead>
@@ -1087,21 +1131,6 @@ export function AdminsView() {
                   </span>
                 </td>
                 <td className="p-4 text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">{formatDate(userItem.joined_date)}</td>
-                <td className="p-4 font-mono text-sm text-gray-600 dark:text-gray-300">
-                  <div className="flex items-center gap-2">
-                    <span>{userItem.password}</span>
-                    <button 
-                      onClick={() => {
-                        const text = `username: ${userItem.username}\npassword: ${userItem.password}`;
-                        toast.success(copyToClipboard(text, 'Admin credentials'));
-                      }}
-                      className="p-1 text-teal-600 dark:text-teal-400 hover:bg-teal-50 dark:hover:bg-teal-950/40 rounded transition-colors"
-                      title="Copy credentials"
-                    >
-                      <Copy size={16} />
-                    </button>
-                  </div>
-                </td>
                 <td className="p-4 text-center">
                   <div className="flex items-center justify-center gap-1">
                     <button 
@@ -1171,25 +1200,6 @@ export function AdminsView() {
                     onChange={(e) => setEditingUser({ ...editingUser, username: e.target.value })}
                     className="w-full px-4 py-3 bg-gray-50 border-2 border-gray-100 rounded-2xl focus:border-teal-600 outline-none transition-all"
                   />
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-sm font-bold text-gray-700">Password</label>
-                  <div className="relative">
-                    <input
-                      type={showEditPassword ? "text" : "password"}
-                      value={editingUser.password}
-                      onChange={(e) => setEditingUser({ ...editingUser, password: e.target.value })}
-                      className="w-full px-4 py-3 bg-gray-50 border-2 border-gray-100 rounded-2xl focus:border-teal-600 outline-none transition-all pr-12"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowEditPassword(!showEditPassword)}
-                      className="absolute right-4 top-1/2 -translate-y-1/2 text-teal-600 hover:text-teal-700"
-                    >
-                      {showEditPassword ? <EyeOff size={20} /> : <Eye size={20} />}
-                    </button>
-                  </div>
                 </div>
 
                 <div className="space-y-2">

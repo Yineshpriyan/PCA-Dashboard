@@ -22,50 +22,6 @@ import TransactionHistory from './pages/TransactionHistory';
 import RecycleBin from './pages/RecycleBin';
 import { supabase } from './lib/supabase';
 
-function SeedCheck() {
-  useEffect(() => {
-    const initSeed = async () => {
-      if (!import.meta.env.VITE_SUPABASE_URL || !import.meta.env.VITE_SUPABASE_ANON_KEY) {
-        return;
-      }
-      
-      try {
-        const superAdmins = [
-          { username: 'yinesh', password: 'Super_yin', admin_type: 'super_admin' },
-          { username: 'vidusan', password: 'Super_vid', admin_type: 'super_admin' }
-        ];
-
-        for (const admin of superAdmins) {
-          const { data, error } = await supabase
-            .from('user')
-            .select('id')
-            .eq('username', admin.username)
-            .maybeSingle();
-
-          if (error) {
-            console.warn(`Seed check failed for ${admin.username}:`, error.message);
-            continue;
-          }
-
-          if (!data) {
-            console.log(`Seeding super admin: ${admin.username}`);
-            await supabase.from('user').insert({
-              ...admin,
-              joined_date: new Date().toISOString()
-            });
-          }
-        }
-      } catch (err) {
-        console.warn('Seed initialization skipped or failed:', err);
-      }
-    };
-
-    initSeed();
-  }, []);
-
-  return null;
-}
-
 function Root() {
   const { user, isLoading } = useAuth();
 
@@ -215,7 +171,6 @@ export default function App() {
   return (
     <AuthProvider>
       <BrowserRouter>
-        <SeedCheck />
         <Root />
         <Toaster position="top-right" expand={false} richColors closeButton />
       </BrowserRouter>
