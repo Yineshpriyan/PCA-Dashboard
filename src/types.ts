@@ -14,6 +14,7 @@ export const SRI_LANKAN_DISTRICTS = [
 export interface User {
   id: string;
   username: string;
+  email?: string;
   password?: string;
   admin_type: AdminType;
   joined_date: string;

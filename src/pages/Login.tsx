@@ -35,7 +35,23 @@ export default function Login() {
 
     setLoading(true);
     try {
-      const email = username.includes('@') ? username.trim() : `${username.toLowerCase().trim()}@pca.academy`;
+      let email = username.trim();
+
+      if (!username.includes('@')) {
+        // Look up the user's registered email by their username
+        const { data: userProfile, error: profileErr } = await supabase
+          .from('user')
+          .select('*')
+          .eq('username', username.trim())
+          .maybeSingle();
+
+        if (!profileErr && userProfile && 'email' in userProfile && userProfile.email) {
+          email = userProfile.email;
+        } else {
+          // Default backward-compatible fallback format
+          email = `${username.toLowerCase().trim()}@pca.academy`;
+        }
+      }
 
       const loginPromise = supabase.auth.signInWithPassword({
         email,

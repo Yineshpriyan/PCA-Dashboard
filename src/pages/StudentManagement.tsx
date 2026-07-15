@@ -1047,7 +1047,7 @@ export function StudentForm({ isModal = false, modalStudent = null, modalLead = 
       // 1. Save Student
       const payload: any = {
         ...updatedStudentData,
-        admin: editStudent?.admin || leadData?.admin || user?.username || 'system',
+        admin: editStudent?.admin || user?.username || 'system',
         created_at: editStudent?.created_at || new Date().toISOString()
       };
 
@@ -1225,7 +1225,7 @@ export function StudentForm({ isModal = false, modalStudent = null, modalLead = 
         asked_package_type: finalAskedPackageType,
         status: 'Joined',
         stream: studentData.stream || null,
-        admin: editStudent?.admin || leadData?.admin || user?.username || 'system'
+        admin: editStudent?.admin || user?.username || 'system'
       };
 
       // Update task where phone or pcaid matches (ensuring all columns are fully updated with new values)

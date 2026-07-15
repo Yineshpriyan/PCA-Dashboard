@@ -134,7 +134,8 @@ export function FreeClassForm() {
         mail: formData.mail,
         address: formData.address,
         asked_class_type: formData.asked_class_type,
-        status: 'Joined'
+        status: 'Joined',
+        admin: user?.username || 'system'
       };
 
       const { error: taskError } = await supabase

@@ -1,23 +1,25 @@
 import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+const supabaseAnonKey = (import.meta.env.VITE_SUPABASE_ANON_KEY || '').trim();
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+// Only initialize if keys are present to prevent fatal crash on module load
+export const supabase = supabaseUrl && supabaseAnonKey
+  ? createClient(supabaseUrl, supabaseAnonKey)
+  : null as any;
+
+// Secondary client specifically for admin signup to prevent logging out the current super_admin session
+export const authSignUpClient = supabaseUrl && supabaseAnonKey
+  ? createClient(supabaseUrl, supabaseAnonKey, {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+        detectSessionInUrl: false
+      }
+    })
+  : null as any;
 
 if (!supabaseUrl || !supabaseAnonKey) {
-  const errorMsg = 'Supabase environment variables (VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY) are missing. If you have deployed to Vercel, please add them in your Project Settings > Environment Variables.';
+  const errorMsg = 'Supabase environment variables (VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY) are missing. Please add them in your Project Settings > Environment Variables or .env file.';
   console.error(errorMsg);
-  if (typeof window !== 'undefined') {
-    // Show a helpful error on the screen instead of just a white page
-    window.addEventListener('DOMContentLoaded', () => {
-      const root = document.getElementById('root');
-      if (root) {
-        root.innerHTML = `<div style="padding: 20px; color: #721c24; background: #f8d7da; border: 1px solid #f5c6cb; border-radius: 4px; font-family: sans-serif; margin: 20px;">
-          <h2 style="margin-top: 0;">Missing Configuration</h2>
-          <p>${errorMsg}</p>
-        </div>`;
-      }
-    });
-  }
 }

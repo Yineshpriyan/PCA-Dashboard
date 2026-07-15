@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { supabase } from '../lib/supabase';
+import { supabase, authSignUpClient } from '../lib/supabase';
 import { toast } from 'sonner';
 import { 
   Copy, 
@@ -923,7 +923,7 @@ export function SignupView() {
     try {
       const email = formData.email.trim();
 
-      const { data, error: signUpError } = await supabase.auth.signUp({
+      const { data, error: signUpError } = await authSignUpClient.auth.signUp({
         email,
         password: formData.password,
         options: {
@@ -954,10 +954,32 @@ export function SignupView() {
         const { error: insertError } = await supabase.from('user').insert({
           id: data.user.id,
           username: formData.username.trim(),
+          email: email,
           admin_type: formData.admin_type,
           joined_date: new Date().toISOString()
         });
-        if (insertError) throw insertError;
+        
+        if (insertError) {
+          // If the email column doesn't exist yet, retry without it
+          if (insertError.message?.includes('column "email" of relation "user" does not exist') || insertError.code === '42703') {
+            const { error: fallbackError } = await supabase.from('user').insert({
+              id: data.user.id,
+              username: formData.username.trim(),
+              admin_type: formData.admin_type,
+              joined_date: new Date().toISOString()
+            });
+            if (fallbackError) throw fallbackError;
+          } else {
+            throw insertError;
+          }
+        }
+      } else {
+        // If trigger created it, try updating the email column
+        await supabase
+          .from('user')
+          .update({ email })
+          .eq('id', data.user.id)
+          .catch(() => {}); // gracefully ignore if column does not exist
       }
 
       toast.success('Account created successfully!');

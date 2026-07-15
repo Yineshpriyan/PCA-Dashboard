@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { User } from '../types';
 
@@ -14,8 +14,16 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const lastFetchedId = useRef<string | null>(null);
 
   const fetchProfile = async (userId: string, email?: string, userMetadata?: any) => {
+    if (!supabase) return;
+    if (lastFetchedId.current === userId) {
+      // Already fetching or fetched this profile
+      return;
+    }
+    lastFetchedId.current = userId;
+
     try {
       const { data, error } = await supabase
         .from('user')
@@ -69,6 +77,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   useEffect(() => {
+    if (!supabase) {
+      setIsLoading(false);
+      return;
+    }
+
     // Check initial session
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session?.user) {
@@ -76,6 +89,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } else {
         setIsLoading(false);
       }
+    }).catch((err) => {
+      console.error('Error getting initial session:', err);
+      setIsLoading(false);
     });
 
     // Listen for auth state changes
@@ -85,6 +101,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           await fetchProfile(session.user.id, session.user.email, session.user.user_metadata);
         } else {
           setUser(null);
+          lastFetchedId.current = null;
           setIsLoading(false);
         }
       }
@@ -94,6 +111,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       subscription.unsubscribe();
     };
   }, []);
+
 
   const login = (userData: User) => {
     setUser(userData);
