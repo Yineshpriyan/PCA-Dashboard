@@ -36,20 +36,25 @@ export default function Login() {
     setLoading(true);
     try {
       let email = username.trim();
+      let attemptedDefault = false;
+      const cleanUsername = username.trim();
 
       if (!username.includes('@')) {
-        // Look up the user's registered email by their username
-        const { data: userProfile, error: profileErr } = await supabase
-          .from('user')
-          .select('*')
-          .eq('username', username.trim())
-          .maybeSingle();
+        // Check local cache first to avoid a slow roundtrip to the DB
+        let cachedEmail = '';
+        try {
+          const cache = JSON.parse(localStorage.getItem('pca_username_emails') || '{}');
+          cachedEmail = cache[cleanUsername.toLowerCase()];
+        } catch (e) {
+          console.error('Error reading email cache:', e);
+        }
 
-        if (!profileErr && userProfile && 'email' in userProfile && userProfile.email) {
-          email = userProfile.email;
+        if (cachedEmail) {
+          email = cachedEmail;
         } else {
-          // Default backward-compatible fallback format
-          email = `${username.toLowerCase().trim()}@pca.academy`;
+          // Default backward-compatible fallback format (used for 99% of accounts)
+          email = `${cleanUsername.toLowerCase()}@pca.academy`;
+          attemptedDefault = true;
         }
       }
 
@@ -62,7 +67,45 @@ export default function Login() {
         setTimeout(() => reject(new Error('Request timed out after 10 seconds')), 10000)
       );
 
-      const { data, error } = (await Promise.race([loginPromise, timeoutPromise])) as any;
+      let authResult: any;
+      try {
+        authResult = (await Promise.race([loginPromise, timeoutPromise])) as any;
+      } catch (err: any) {
+        authResult = { error: err };
+      }
+
+      let data = authResult?.data;
+      let error = authResult?.error;
+
+      // Fallback: If login failed with default email format, check database for a custom registered email
+      if (error && attemptedDefault) {
+        console.log('Default email format failed or timed out. Checking database for custom registered email...');
+        try {
+          const { data: userProfile, error: profileErr } = await supabase
+            .from('user')
+            .select('*')
+            .eq('username', cleanUsername)
+            .maybeSingle();
+
+          if (!profileErr && userProfile && 'email' in userProfile && userProfile.email && userProfile.email !== email) {
+            // Found a custom registered email! Try signing in with it.
+            const retryLoginPromise = supabase.auth.signInWithPassword({
+              email: userProfile.email,
+              password,
+            });
+            const retryResult = (await Promise.race([retryLoginPromise, timeoutPromise])) as any;
+            if (!retryResult.error && retryResult.data?.user) {
+              data = retryResult.data;
+              error = null;
+              email = userProfile.email; // update email to cache it
+            } else if (retryResult.error) {
+              error = retryResult.error;
+            }
+          }
+        } catch (dbErr) {
+          console.error('Failed to look up custom email during fallback:', dbErr);
+        }
+      }
 
       if (error) {
         toast.error(`Authentication error: ${error.message}`);
@@ -89,17 +132,27 @@ export default function Login() {
       }
 
       const userData = profile as User;
+      
+      // Cache the successful username -> email mapping
+      try {
+        const cache = JSON.parse(localStorage.getItem('pca_username_emails') || '{}');
+        cache[cleanUsername.toLowerCase()] = email;
+        localStorage.setItem('pca_username_emails', JSON.stringify(cache));
+      } catch (e) {
+        console.error('Failed to update email cache:', e);
+      }
+
       login(userData);
       toast.success(`Welcome back, ${userData.username}!`);
       
-      // Log successful login
-      await logTransaction({
+      // Log successful login (non-blocking fire-and-forget for instantaneous redirection)
+      logTransaction({
         admin_username: userData.username,
         action_type: 'LOGIN',
         entity_type: 'admin',
         entity_id: userData.id,
         details: `Logged into the PCA Portal`
-      });
+      }).catch(err => console.error('Failed to log login transaction:', err));
       
       navigate('/admin/home');
     } catch (err: any) {

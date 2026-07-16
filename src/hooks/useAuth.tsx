@@ -173,8 +173,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const logout = async () => {
-    await supabase.auth.signOut();
+    // Immediately clear local state so the UI updates to logged-out state instantly
     updateLocalUser(null);
+    lastFetchedId.current = null;
+    
+    // Forcibly clear any Supabase-specific local storage tokens to guarantee sign-out succeeds locally
+    try {
+      for (let i = localStorage.length - 1; i >= 0; i--) {
+        const key = localStorage.key(i);
+        if (key && (key.startsWith('sb-') || key.includes('supabase.auth'))) {
+          localStorage.removeItem(key);
+        }
+      }
+    } catch (e) {
+      console.error('Error clearing Supabase keys from localStorage:', e);
+    }
+
+    try {
+      await supabase.auth.signOut();
+    } catch (e) {
+      console.error('Error signing out from Supabase:', e);
+    }
   };
 
   return (
