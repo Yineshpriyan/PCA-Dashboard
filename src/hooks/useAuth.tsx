@@ -45,21 +45,39 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const withTimeout = async <T,>(promise: Promise<T>, timeoutMs: number = 8000): Promise<T> => {
+    let timeoutId: any;
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timeoutId = setTimeout(() => {
+        reject(new Error(`Request timed out after ${timeoutMs / 1000} seconds`));
+      }, timeoutMs);
+    });
+    try {
+      return await Promise.race([promise, timeoutPromise]);
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  };
+
   const fetchProfile = async (userId: string, email?: string, userMetadata?: any) => {
     if (!supabase) return;
     if (lastFetchedId.current === userId) {
-      // Already fetching or fetched this profile
+      // Already fetching or fetched this profile. Ensure loading state is unblocked.
+      setIsLoading(false);
       return;
     }
     lastFetchedId.current = userId;
 
     try {
-      // Fetch with a timeout signal if needed, or simply let it run in background
-      const { data, error } = await supabase
-        .from('user')
-        .select('*')
-        .eq('id', userId)
-        .maybeSingle();
+      // Fetch with an 8-second timeout to handle DB cold starts robustly
+      const { data, error } = (await withTimeout(
+        supabase
+          .from('user')
+          .select('*')
+          .eq('id', userId)
+          .maybeSingle(),
+        8000
+      )) as any;
       
       if (data) {
         updateLocalUser(data as User);
@@ -71,40 +89,49 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         let uniqueUsername = baseUsername;
         let attempt = 1;
         while (true) {
-          const { data: existingUser } = await supabase
-            .from('user')
-            .select('id')
-            .eq('username', uniqueUsername)
-            .maybeSingle();
+          const { data: existingUser } = (await withTimeout(
+            supabase
+              .from('user')
+              .select('id')
+              .eq('username', uniqueUsername)
+              .maybeSingle(),
+            5000
+          )) as any;
           if (!existingUser) break;
           uniqueUsername = `${baseUsername}${attempt++}`;
         }
 
-        const { data: newProfile, error: insertError } = await supabase
-          .from('user')
-          .insert({
-            id: userId,
-            username: uniqueUsername,
-            admin_type: 'admin', // Default to admin role
-            joined_date: new Date().toISOString()
-          })
-          .select()
-          .single();
+        const { data: newProfile, error: insertError } = (await withTimeout(
+          supabase
+            .from('user')
+            .insert({
+              id: userId,
+              username: uniqueUsername,
+              admin_type: 'admin', // Default to admin role
+              joined_date: new Date().toISOString()
+            })
+            .select()
+            .single(),
+          5000
+        )) as any;
 
         if (newProfile && !insertError) {
           updateLocalUser(newProfile as User);
         } else {
           console.error('Failed to auto-create user profile:', insertError);
+          lastFetchedId.current = null; // Clear so subsequent attempts can retry
           updateLocalUser(null);
         }
       } else {
         // Database query failed (e.g. network offline, DB timeout). Fail fast to avoid nesting additional slow requests.
         console.error('Error fetching user profile:', error);
+        lastFetchedId.current = null; // Clear so subsequent attempts can retry
         // Do not clear the cached user if it's a network/database temporary timeout error
         if (!user) updateLocalUser(null);
       }
     } catch (e) {
       console.error('Error fetching user profile:', e);
+      lastFetchedId.current = null; // Clear so subsequent attempts can retry
       if (!user) updateLocalUser(null);
     } finally {
       setIsLoading(false);

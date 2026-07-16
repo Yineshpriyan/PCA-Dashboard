@@ -34,13 +34,28 @@ export default function Login() {
     }
 
     setLoading(true);
+
+    // Self-contained wrapper for request timeout
+    const withTimeout = async <T,>(promise: Promise<T>, timeoutMs: number = 15000): Promise<T> => {
+      let timeoutId: any;
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        timeoutId = setTimeout(() => {
+          reject(new Error(`Request timed out after ${timeoutMs / 1000} seconds`));
+        }, timeoutMs);
+      });
+      try {
+        return await Promise.race([promise, timeoutPromise]);
+      } finally {
+        clearTimeout(timeoutId);
+      }
+    };
+
     try {
       let email = username.trim();
-      let attemptedDefault = false;
       const cleanUsername = username.trim();
 
       if (!username.includes('@')) {
-        // Check local cache first to avoid a slow roundtrip to the DB
+        // 1. Check local cache first to avoid a slow roundtrip to the DB
         let cachedEmail = '';
         try {
           const cache = JSON.parse(localStorage.getItem('pca_username_emails') || '{}');
@@ -52,24 +67,45 @@ export default function Login() {
         if (cachedEmail) {
           email = cachedEmail;
         } else {
-          // Default backward-compatible fallback format (used for 99% of accounts)
-          email = `${cleanUsername.toLowerCase()}@pca.academy`;
-          attemptedDefault = true;
+          // 2. Query the database to see if we can find this user's custom email before attempting login
+          try {
+            // Give the database lookup a fast 5-second timeout so we don't delay default fallback if db is slow
+            const { data: userProfile } = (await withTimeout(
+              supabase
+                .from('user')
+                .select('email')
+                .eq('username', cleanUsername)
+                .maybeSingle(),
+              5000
+            )) as any;
+
+            if (userProfile?.email) {
+              email = userProfile.email;
+              console.log('Using resolved database email for login:', email);
+            } else {
+              email = `${cleanUsername.toLowerCase()}@pca.academy`;
+              console.log('No user profile or email found. Defaulting to standard email:', email);
+            }
+          } catch (err) {
+            console.error('Failed or timed out looking up custom email. Defaulting to standard email:', err);
+            email = `${cleanUsername.toLowerCase()}@pca.academy`;
+          }
         }
       }
 
-      const loginPromise = supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
+      console.log('Attempting authentication with:', email);
 
-      const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Request timed out after 10 seconds')), 10000)
-      );
-
+      // 3. Make the sign-in request
       let authResult: any;
       try {
-        authResult = (await Promise.race([loginPromise, timeoutPromise])) as any;
+        const res = (await withTimeout(
+          supabase.auth.signInWithPassword({
+            email,
+            password,
+          }),
+          15000
+        )) as any;
+        authResult = { data: res.data, error: res.error };
       } catch (err: any) {
         authResult = { error: err };
       }
@@ -77,62 +113,66 @@ export default function Login() {
       let data = authResult?.data;
       let error = authResult?.error;
 
-      // Fallback: If login failed with default email format, check database for a custom registered email
-      if (error && attemptedDefault) {
-        console.log('Default email format failed or timed out. Checking database for custom registered email...');
+      // 4. Secondary fallback: if the resolved/cached email failed with "Invalid login credentials",
+      // and we hadn't already tried the default academy email, try the default academy email as a backup.
+      const defaultAcademyEmail = `${cleanUsername.toLowerCase()}@pca.academy`;
+      if (
+        error &&
+        error.message === 'Invalid login credentials' &&
+        !username.includes('@') &&
+        email !== defaultAcademyEmail
+      ) {
+        console.log('Resolved email login failed. Retrying with default academy format...');
         try {
-          const { data: userProfile, error: profileErr } = await supabase
-            .from('user')
-            .select('*')
-            .eq('username', cleanUsername)
-            .maybeSingle();
-
-          if (!profileErr && userProfile && 'email' in userProfile && userProfile.email && userProfile.email !== email) {
-            // Found a custom registered email! Try signing in with it.
-            const retryLoginPromise = supabase.auth.signInWithPassword({
-              email: userProfile.email,
+          const retryRes = (await withTimeout(
+            supabase.auth.signInWithPassword({
+              email: defaultAcademyEmail,
               password,
-            });
-            const retryResult = (await Promise.race([retryLoginPromise, timeoutPromise])) as any;
-            if (!retryResult.error && retryResult.data?.user) {
-              data = retryResult.data;
-              error = null;
-              email = userProfile.email; // update email to cache it
-            } else if (retryResult.error) {
-              error = retryResult.error;
-            }
+            }),
+            15000
+          )) as any;
+          if (!retryRes.error && retryRes.data?.user) {
+            data = retryRes.data;
+            error = null;
+            email = defaultAcademyEmail; // Update resolved email
           }
-        } catch (dbErr) {
-          console.error('Failed to look up custom email during fallback:', dbErr);
+        } catch (retryErr) {
+          console.error('Retry with default academy format failed:', retryErr);
         }
       }
 
       if (error) {
         toast.error(`Authentication error: ${error.message}`);
         console.error('Supabase Auth Error:', error);
+        setLoading(false);
         return;
       }
 
       if (!data || !data.user) {
         toast.error('Invalid username or password');
+        setLoading(false);
         return;
       }
 
-      // Fetch user profile from public.user table
-      const { data: profile, error: profileError } = await supabase
-        .from('user')
-        .select('*')
-        .eq('id', data.user.id)
-        .single();
+      // Fetch user profile from public.user table with an 8-second timeout to handle DB cold starts
+      const { data: profile, error: profileError } = (await withTimeout(
+        supabase
+          .from('user')
+          .select('*')
+          .eq('id', data.user.id)
+          .single(),
+        8000
+      )) as any;
 
       if (profileError || !profile) {
         toast.error('User registered in Auth but profile not found in database registry.');
         console.error('Profile fetch error:', profileError);
+        setLoading(false);
         return;
       }
 
       const userData = profile as User;
-      
+
       // Cache the successful username -> email mapping
       try {
         const cache = JSON.parse(localStorage.getItem('pca_username_emails') || '{}');

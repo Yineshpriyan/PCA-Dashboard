@@ -2877,10 +2877,16 @@ export function StudentExplorer() {
   }, []);
 
   const fetchItems = async () => {
-    const { data: classes } = await supabase.from('class_item').select('*').order('class_type');
-    const { data: packages } = await supabase.from('package_item').select('*').order('package_type');
-    if (classes) setClassTypes(classes);
-    if (packages) setPackageTypes(packages);
+    try {
+      const { data: classes, error: classesErr } = await supabase.from('class_item').select('*').order('class_type');
+      const { data: packages, error: packagesErr } = await supabase.from('package_item').select('*').order('package_type');
+      if (classesErr) throw classesErr;
+      if (packagesErr) throw packagesErr;
+      if (classes) setClassTypes(classes);
+      if (packages) setPackageTypes(packages);
+    } catch (err) {
+      console.error('Error fetching class or package items:', err);
+    }
   };
 
   const fetchAdmins = async () => {
