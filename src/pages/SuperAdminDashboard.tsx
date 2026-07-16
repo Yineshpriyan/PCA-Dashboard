@@ -60,14 +60,27 @@ export function FixingView() {
   }, []);
 
   const fetchTokens = async () => {
-    const { data } = await supabase.from('issue').select('*').order('date', { ascending: false });
-    if (data) setTokens(data as Issue[]);
-    setLoading(false);
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.from('issue').select('*').order('date', { ascending: false });
+      if (error) throw error;
+      if (data) setTokens(data as Issue[]);
+    } catch (err: any) {
+      console.error('Error fetching tokens:', err);
+      toast.error('Failed to load issue tokens: ' + (err.message || err));
+    } finally {
+      setLoading(false);
+    }
   };
 
   const fetchIssueTypes = async () => {
-    const { data } = await supabase.from('issue_item').select('*').order('issue_type');
-    if (data) setIssueTypes(data as IssueType[]);
+    try {
+      const { data, error } = await supabase.from('issue_item').select('*').order('issue_type');
+      if (error) throw error;
+      if (data) setIssueTypes(data as IssueType[]);
+    } catch (err) {
+      console.error('Error fetching issue types:', err);
+    }
   };
 
   const filteredTokens = tokens.filter(token => {
@@ -1074,9 +1087,17 @@ export function AdminsView() {
   }, []);
 
   const fetchUsers = async () => {
-    const { data } = await supabase.from('user').select('*').order('joined_date', { ascending: false });
-    if (data) setUsers(data as User[]);
-    setLoading(false);
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.from('user').select('*').order('joined_date', { ascending: false });
+      if (error) throw error;
+      if (data) setUsers(data as User[]);
+    } catch (err: any) {
+      console.error('Error fetching users:', err);
+      toast.error('Failed to load admin accounts: ' + (err.message || err));
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleDeleteUser = async (userId: string) => {

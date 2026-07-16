@@ -1200,26 +1200,39 @@ export function CallTaskDisplay() {
   };
 
   const fetchItems = async () => {
-    const { data: classes } = await supabase.from('class_item').select('*').order('class_type');
-    const { data: packages } = await supabase.from('package_item').select('*').order('package_type');
-    if (classes) setClassTypes(classes);
-    if (packages) setPackageTypes(packages);
+    try {
+      const { data: classes, error: classesErr } = await supabase.from('class_item').select('*').order('class_type');
+      const { data: packages, error: packagesErr } = await supabase.from('package_item').select('*').order('package_type');
+      if (classesErr) throw classesErr;
+      if (packagesErr) throw packagesErr;
+      if (classes) setClassTypes(classes);
+      if (packages) setPackageTypes(packages);
+    } catch (err) {
+      console.error('Error fetching class or package items:', err);
+    }
   };
 
   const fetchTasks = async () => {
     if (!user) return;
-    
-    let query = supabase.from('calltask').select('*').is('deleted_at', null);
-    
-    // Only filter by admin if the user is NOT a super_admin
-    if (user.admin_type !== 'super_admin') {
-      query = query.eq('admin', user.username);
+    setLoading(true);
+    try {
+      let query = supabase.from('calltask').select('*').is('deleted_at', null);
+      
+      // Only filter by admin if the user is NOT a super_admin
+      if (user.admin_type !== 'super_admin') {
+        query = query.eq('admin', user.username);
+      }
+      
+      const { data, error } = await query.order('created_at', { ascending: false });
+      if (error) throw error;
+      
+      if (data) setTasks(data as CallTask[]);
+    } catch (err: any) {
+      console.error('Error fetching call tasks:', err);
+      toast.error('Failed to load tasks from database: ' + (err.message || err));
+    } finally {
+      setLoading(false);
     }
-    
-    const { data } = await query.order('created_at', { ascending: false });
-    
-    if (data) setTasks(data as CallTask[]);
-    setLoading(false);
   };
 
   const filteredTasks = tasks.filter(t => {

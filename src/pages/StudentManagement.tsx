@@ -2884,35 +2884,47 @@ export function StudentExplorer() {
   };
 
   const fetchAdmins = async () => {
-    const { data } = await supabase.from('user').select('username').order('username');
-    if (data) setAdmins(data);
+    try {
+      const { data, error } = await supabase.from('user').select('username').order('username');
+      if (error) throw error;
+      if (data) setAdmins(data);
+    } catch (err) {
+      console.error('Error fetching admins:', err);
+    }
   };
 
   const fetchStudents = async () => {
     if (!user) return;
     setLoading(true);
-    let query = supabase.from('student').select('*').is('deleted_at', null);
-    
-    if (selectedAdmin) {
-      query = query.eq('admin', selectedAdmin);
-    } else if (user.admin_type !== 'super_admin') {
-      // Safety fallback for non-super admins if selectedAdmin is somehow empty
-      query = query.eq('admin', user.username);
+    try {
+      let query = supabase.from('student').select('*').is('deleted_at', null);
+      
+      if (selectedAdmin) {
+        query = query.eq('admin', selectedAdmin);
+      } else if (user.admin_type !== 'super_admin') {
+        // Safety fallback for non-super admins if selectedAdmin is somehow empty
+        query = query.eq('admin', user.username);
+      }
+
+      const { data, error } = await query.order('created_at', { ascending: false });
+      if (error) throw error;
+      if (data) setStudents(data as Student[]);
+
+      // Fetch all active payments with paid_date and installments to build filter dropdowns and perform filtering
+      const { data: payData, error: payError } = await supabase
+        .from('payment')
+        .select('id, pcaid, class_type, type, paid_date, payment, installment(paid_amount, deleted_at)')
+        .is('deleted_at', null);
+      if (payError) throw payError;
+      if (payData) {
+        setExplorerPayments(payData);
+      }
+    } catch (err: any) {
+      console.error('Error fetching students:', err);
+      toast.error('Failed to load students and payment records from the database: ' + (err.message || err));
+    } finally {
+      setLoading(false);
     }
-
-    const { data } = await query.order('created_at', { ascending: false });
-    if (data) setStudents(data as Student[]);
-
-    // Fetch all active payments with paid_date and installments to build filter dropdowns and perform filtering
-    const { data: payData } = await supabase
-      .from('payment')
-      .select('id, pcaid, class_type, type, paid_date, payment, installment(paid_amount, deleted_at)')
-      .is('deleted_at', null);
-    if (payData) {
-      setExplorerPayments(payData);
-    }
-
-    setLoading(false);
   };
 
   useEffect(() => {
