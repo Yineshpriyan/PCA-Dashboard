@@ -12,9 +12,38 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [user, setUser] = useState<User | null>(() => {
+    try {
+      const cached = localStorage.getItem('pca_cached_user');
+      return cached ? JSON.parse(cached) : null;
+    } catch {
+      return null;
+    }
+  });
+  
+  // If we have a cached user, we can immediately mount the App and verify the session in the background
+  const [isLoading, setIsLoading] = useState(() => {
+    try {
+      return !localStorage.getItem('pca_cached_user');
+    } catch {
+      return true;
+    }
+  });
+
   const lastFetchedId = useRef<string | null>(null);
+
+  const updateLocalUser = (u: User | null) => {
+    setUser(u);
+    try {
+      if (u) {
+        localStorage.setItem('pca_cached_user', JSON.stringify(u));
+      } else {
+        localStorage.removeItem('pca_cached_user');
+      }
+    } catch (e) {
+      console.error('Error writing user session to cache:', e);
+    }
+  };
 
   const fetchProfile = async (userId: string, email?: string, userMetadata?: any) => {
     if (!supabase) return;
@@ -25,16 +54,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     lastFetchedId.current = userId;
 
     try {
+      // Fetch with a timeout signal if needed, or simply let it run in background
       const { data, error } = await supabase
         .from('user')
         .select('*')
         .eq('id', userId)
         .maybeSingle();
       
-      if (data && !error) {
-        setUser(data as User);
-      } else {
-        // If profile not found, let's auto-create it (e.g. for Google Auth or newly registered OAuth users)
+      if (data) {
+        updateLocalUser(data as User);
+      } else if (!error) {
+        // Only attempt auto-creation if there was no DB error and no profile was found
         const baseUsername = userMetadata?.full_name?.replace(/\s+/g, '').toLowerCase() || email?.split('@')[0] || 'user_' + userId.slice(0, 5);
         
         // Let's make sure the username is unique
@@ -62,15 +92,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           .single();
 
         if (newProfile && !insertError) {
-          setUser(newProfile as User);
+          updateLocalUser(newProfile as User);
         } else {
           console.error('Failed to auto-create user profile:', insertError);
-          setUser(null);
+          updateLocalUser(null);
         }
+      } else {
+        // Database query failed (e.g. network offline, DB timeout). Fail fast to avoid nesting additional slow requests.
+        console.error('Error fetching user profile:', error);
+        // Do not clear the cached user if it's a network/database temporary timeout error
+        if (!user) updateLocalUser(null);
       }
     } catch (e) {
       console.error('Error fetching user profile:', e);
-      setUser(null);
+      if (!user) updateLocalUser(null);
     } finally {
       setIsLoading(false);
     }
@@ -82,25 +117,43 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
+    let isMounted = true;
+
+    // Safety timeout: If Supabase connection/auth takes more than 2.5 seconds (due to DB sleep/cold start),
+    // stop blocking the main UI thread and fall back to whatever is cached or show the login screen.
+    const sessionTimeout = setTimeout(() => {
+      if (isMounted) {
+        console.warn('Initial session check taking too long (possible DB sleep). Unblocking load state.');
+        setIsLoading(false);
+      }
+    }, 2500);
+
     // Check initial session
     supabase.auth.getSession().then(({ data: { session } }) => {
+      clearTimeout(sessionTimeout);
+      if (!isMounted) return;
       if (session?.user) {
         fetchProfile(session.user.id, session.user.email, session.user.user_metadata);
       } else {
+        updateLocalUser(null);
         setIsLoading(false);
       }
     }).catch((err) => {
+      clearTimeout(sessionTimeout);
       console.error('Error getting initial session:', err);
-      setIsLoading(false);
+      if (isMounted) {
+        setIsLoading(false);
+      }
     });
 
     // Listen for auth state changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
+        if (!isMounted) return;
         if (session?.user) {
           await fetchProfile(session.user.id, session.user.email, session.user.user_metadata);
         } else {
-          setUser(null);
+          updateLocalUser(null);
           lastFetchedId.current = null;
           setIsLoading(false);
         }
@@ -108,18 +161,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     );
 
     return () => {
+      isMounted = false;
+      clearTimeout(sessionTimeout);
       subscription.unsubscribe();
     };
   }, []);
 
 
   const login = (userData: User) => {
-    setUser(userData);
+    updateLocalUser(userData);
   };
 
   const logout = async () => {
     await supabase.auth.signOut();
-    setUser(null);
+    updateLocalUser(null);
   };
 
   return (

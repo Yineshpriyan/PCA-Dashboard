@@ -25,7 +25,21 @@ import { supabase } from './lib/supabase';
 function Root() {
   const { user, isLoading } = useAuth();
 
-  if (isLoading) return null;
+  if (isLoading) {
+    return (
+      <div className="flex h-screen w-screen flex-col items-center justify-center bg-slate-50 text-slate-800 dark:bg-slate-900 dark:text-slate-100">
+        <div className="flex flex-col items-center max-w-sm p-6 text-center">
+          <div className="relative mb-6">
+            <div className="h-12 w-12 animate-spin rounded-full border-4 border-teal-600 border-t-transparent"></div>
+          </div>
+          <h2 className="text-lg font-semibold tracking-tight">Initializing Session</h2>
+          <p className="mt-2 text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
+            Please wait while we establish a secure connection to the database. This may take a moment during system cold starts.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <Routes>
