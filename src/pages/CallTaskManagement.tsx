@@ -222,14 +222,44 @@ export function CallTaskForm({ editData, onComplete }: { editData?: CallTask; on
       return;
     }
 
+    const cleanQuery = query.toUpperCase();
+    const cleanNoHyphens = cleanQuery.replace(/[-_]/g, '');
+    const digits = query.replace(/\D/g, '');
+    const last9 = digits.length >= 9 ? digits.slice(-9) : (digits.length >= 7 ? digits : '');
+
+    const orConditions = [
+      `pcaid.eq.${query}`,
+      `pcaid.eq.${cleanQuery}`,
+      `pcaid.eq.${cleanNoHyphens}`,
+      `pcaid.ilike.${query}`,
+      `phone.eq.${query}`
+    ];
+
+    if (digits) {
+      orConditions.push(`phone.eq.${digits}`);
+    }
+    if (last9) {
+      orConditions.push(`phone.ilike.%${last9}`);
+    }
+
     // Check by PCA ID or Phone in both calltask and student tables
     // Checking student table is more important for "Joined" check
-    const { data: studentData } = await supabase
+    const { data: studentRows } = await supabase
       .from('student')
       .select('*')
-      .or(`pcaid.eq.${query.toUpperCase()},phone.eq.${query}`)
+      .or(orConditions.join(','))
       .is('deleted_at', null)
-      .maybeSingle();
+      .limit(10);
+
+    let studentData: any = null;
+    if (studentRows && studentRows.length > 0) {
+      studentData = studentRows.find((s: any) => 
+        s.pcaid?.toUpperCase() === cleanQuery || 
+        s.pcaid?.toUpperCase().replace(/[-_]/g, '') === cleanNoHyphens ||
+        s.phone === query ||
+        (digits && s.phone?.replace(/\D/g, '') === digits)
+      ) || studentRows[0];
+    }
 
     if (studentData) {
       setVerificationStatus({ exists: true, student: studentData, lookupDone: true });
@@ -237,12 +267,22 @@ export function CallTaskForm({ editData, onComplete }: { editData?: CallTask; on
     }
 
     // Also check calltask for duplicates
-    const { data: callData } = await supabase
+    const { data: callRows } = await supabase
       .from('calltask')
       .select('*')
-      .or(`pcaid.eq.${query.toUpperCase()},phone.eq.${query}`)
+      .or(orConditions.join(','))
       .is('deleted_at', null)
-      .maybeSingle();
+      .limit(10);
+
+    let callData: any = null;
+    if (callRows && callRows.length > 0) {
+      callData = callRows.find((s: any) => 
+        s.pcaid?.toUpperCase() === cleanQuery || 
+        s.pcaid?.toUpperCase().replace(/[-_]/g, '') === cleanNoHyphens ||
+        s.phone === query ||
+        (digits && s.phone?.replace(/\D/g, '') === digits)
+      ) || callRows[0];
+    }
 
     if (callData) {
       setVerificationStatus({ exists: true, student: callData, lookupDone: true });
@@ -518,9 +558,19 @@ export function CallTaskForm({ editData, onComplete }: { editData?: CallTask; on
                 value={verifyQuery}
                 onChange={(e) => setVerifyQuery(e.target.value)}
                 placeholder="Verify PCA ID or Phone Availability..."
-                className="block w-full pl-10 pr-10 py-2.5 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 text-sm transition-all shadow-sm"
+                className="block w-full pl-10 pr-12 py-2.5 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 text-sm transition-all shadow-sm"
               />
-              <div className="absolute inset-y-0 right-0 pr-3 flex items-center">
+              <div className="absolute inset-y-0 right-0 pr-3 flex items-center gap-2">
+                {verifyQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setVerifyQuery('')}
+                    className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-all cursor-pointer"
+                    title="Clear search"
+                  >
+                    <X size={14} />
+                  </button>
+                )}
                 {verificationStatus.lookupDone && (
                   verificationStatus.exists ? (
                     <div className="flex items-center gap-1.5 text-red-500 bg-red-50 px-2.5 py-1 rounded-full border border-red-100 shadow-sm animate-in fade-in slide-in-from-right-2">
@@ -1171,13 +1221,32 @@ export function CallTaskDisplay() {
       return;
     }
 
+    const cleanQuery = query.toUpperCase();
+    const cleanNoHyphens = cleanQuery.replace(/[-_]/g, '');
+    const orConditions = [
+      `pcaid.eq.${query}`,
+      `pcaid.eq.${cleanQuery}`,
+      `pcaid.eq.${cleanNoHyphens}`,
+      `pcaid.ilike.${query}`,
+      `phone.eq.${query}`
+    ];
+
     // Checking student table is more important for "Joined" check
-    const { data: studentData } = await supabase
+    const { data: studentRows } = await supabase
       .from('student')
       .select('*')
-      .or(`pcaid.eq.${query.toUpperCase()},phone.eq.${query}`)
+      .or(orConditions.join(','))
       .is('deleted_at', null)
-      .maybeSingle();
+      .limit(10);
+
+    let studentData: any = null;
+    if (studentRows && studentRows.length > 0) {
+      studentData = studentRows.find((s: any) => 
+        s.pcaid?.toUpperCase() === cleanQuery || 
+        s.pcaid?.toUpperCase().replace(/[-_]/g, '') === cleanNoHyphens ||
+        s.phone === query
+      ) || studentRows[0];
+    }
 
     if (studentData) {
       setVerificationStatus({ exists: true, student: studentData, lookupDone: true });
@@ -1185,12 +1254,21 @@ export function CallTaskDisplay() {
     }
 
     // Also check calltask for duplicates
-    const { data: callData } = await supabase
+    const { data: callRows } = await supabase
       .from('calltask')
       .select('*')
-      .or(`pcaid.eq.${query.toUpperCase()},phone.eq.${query}`)
+      .or(orConditions.join(','))
       .is('deleted_at', null)
-      .maybeSingle();
+      .limit(10);
+
+    let callData: any = null;
+    if (callRows && callRows.length > 0) {
+      callData = callRows.find((s: any) => 
+        s.pcaid?.toUpperCase() === cleanQuery || 
+        s.pcaid?.toUpperCase().replace(/[-_]/g, '') === cleanNoHyphens ||
+        s.phone === query
+      ) || callRows[0];
+    }
 
     if (callData) {
       setVerificationStatus({ exists: true, student: callData, lookupDone: true });
@@ -1666,9 +1744,19 @@ export function CallTaskDisplay() {
                   value={verifyQuery}
                   onChange={(e) => setVerifyQuery(e.target.value)}
                   placeholder="Verify PCA ID / Phone Availability..."
-                  className="block w-full pl-9 pr-24 py-2 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 text-xs transition-all font-semibold text-gray-700 shadow-sm"
+                  className="block w-full pl-9 pr-28 py-2 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 text-xs transition-all font-semibold text-gray-700 shadow-sm"
                 />
-                <div className="absolute inset-y-0 right-0 pr-2.5 flex items-center">
+                <div className="absolute inset-y-0 right-0 pr-2.5 flex items-center gap-2">
+                  {verifyQuery && (
+                    <button
+                      type="button"
+                      onClick={() => setVerifyQuery('')}
+                      className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-all cursor-pointer"
+                      title="Clear search"
+                    >
+                      <X size={12} />
+                    </button>
+                  )}
                   {verificationStatus.lookupDone && (
                     verificationStatus.exists ? (
                       <div className="flex items-center gap-1 text-red-500 bg-red-50 px-2 py-0.5 rounded-full border border-red-100 shadow-sm animate-in fade-in duration-200">
@@ -1741,6 +1829,16 @@ export function CallTaskDisplay() {
                 onChange={(e) => setFilters({ ...filters, search: e.target.value })}
                 className="w-full text-xs font-bold text-gray-600 border-none outline-none bg-transparent placeholder:text-gray-300 py-1.5"
               />
+              {filters.search && (
+                <button
+                  type="button"
+                  onClick={() => setFilters({ ...filters, search: '' })}
+                  className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-all cursor-pointer ml-1 flex-shrink-0"
+                  title="Clear search"
+                >
+                  <X size={12} />
+                </button>
+              )}
             </div>
 
             {/* PCAID Filter */}

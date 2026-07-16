@@ -559,17 +559,48 @@ export function StudentForm({ isModal = false, modalStudent = null, modalLead = 
       return;
     }
 
+    const cleanQuery = query.toUpperCase();
+    const cleanNoHyphens = cleanQuery.replace(/[-_]/g, '');
+    const digits = query.replace(/\D/g, '');
+    const last9 = digits.length >= 9 ? digits.slice(-9) : (digits.length >= 7 ? digits : '');
+
+    const orConditions = [
+      `pcaid.eq.${query}`,
+      `pcaid.eq.${cleanQuery}`,
+      `pcaid.eq.${cleanNoHyphens}`,
+      `pcaid.ilike.${query}`,
+      `phone.eq.${query}`
+    ];
+
+    if (digits) {
+      orConditions.push(`phone.eq.${digits}`);
+    }
+    if (last9) {
+      orConditions.push(`phone.ilike.%${last9}`);
+    }
+
     // Check by PCA ID or Phone
     const { data } = await supabase
       .from('student')
       .select('*')
-      .or(`pcaid.eq.${query.toUpperCase()},phone.eq.${query}`)
+      .or(orConditions.join(','))
       .is('deleted_at', null)
-      .maybeSingle();
+      .limit(10);
+
+    let selectedStudent: Student | undefined;
+    if (data && data.length > 0) {
+      // Find exact or closest match
+      selectedStudent = data.find((s: any) => 
+        s.pcaid?.toUpperCase() === cleanQuery || 
+        s.pcaid?.toUpperCase().replace(/[-_]/g, '') === cleanNoHyphens ||
+        s.phone === query ||
+        (digits && s.phone?.replace(/\D/g, '') === digits)
+      ) || data[0];
+    }
 
     setVerificationStatus({
-      exists: !!data,
-      student: data as Student || undefined,
+      exists: !!selectedStudent,
+      student: selectedStudent || undefined,
       lookupDone: true
     });
   };
@@ -604,7 +635,10 @@ export function StudentForm({ isModal = false, modalStudent = null, modalLead = 
       } else {
         setStudentType('Paid');
       }
-      toast.success('Details grabbed successfully!');
+      if (s.pcaid) {
+        fetchExistingPayments(s.pcaid);
+      }
+      toast.success('Details and payment records grabbed successfully!');
     }
   };
 
@@ -1510,10 +1544,20 @@ export function StudentForm({ isModal = false, modalStudent = null, modalLead = 
                 type="text"
                 value={verifyQuery}
                 onChange={(e) => setVerifyQuery(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 bg-white border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all shadow-sm"
+                className="w-full pl-10 pr-10 py-2 bg-white border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all shadow-sm"
                 placeholder="Verify PCA ID or Phone Number..."
               />
               <div className="absolute inset-y-0 right-0 flex items-center py-1.5 pr-1.5 gap-2">
+                {verifyQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setVerifyQuery('')}
+                    className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-all cursor-pointer mr-1"
+                    title="Clear search"
+                  >
+                    <X size={14} />
+                  </button>
+                )}
                 {verificationStatus.lookupDone && (
                   <div className="flex items-center gap-2">
                     <div className={cn(
@@ -2790,17 +2834,48 @@ export function StudentExplorer() {
       return;
     }
 
+    const cleanQuery = query.toUpperCase();
+    const cleanNoHyphens = cleanQuery.replace(/[-_]/g, '');
+    const digits = query.replace(/\D/g, '');
+    const last9 = digits.length >= 9 ? digits.slice(-9) : (digits.length >= 7 ? digits : '');
+
+    const orConditions = [
+      `pcaid.eq.${query}`,
+      `pcaid.eq.${cleanQuery}`,
+      `pcaid.eq.${cleanNoHyphens}`,
+      `pcaid.ilike.${query}`,
+      `phone.eq.${query}`
+    ];
+
+    if (digits) {
+      orConditions.push(`phone.eq.${digits}`);
+    }
+    if (last9) {
+      orConditions.push(`phone.ilike.%${last9}`);
+    }
+
     // Check by PCA ID or Phone
     const { data } = await supabase
       .from('student')
       .select('*')
-      .or(`pcaid.eq.${query.toUpperCase()},phone.eq.${query}`)
+      .or(orConditions.join(','))
       .is('deleted_at', null)
-      .maybeSingle();
+      .limit(10);
+
+    let selectedStudent: Student | undefined;
+    if (data && data.length > 0) {
+      // Find exact or closest match
+      selectedStudent = data.find((s: any) => 
+        s.pcaid?.toUpperCase() === cleanQuery || 
+        s.pcaid?.toUpperCase().replace(/[-_]/g, '') === cleanNoHyphens ||
+        s.phone === query ||
+        (digits && s.phone?.replace(/\D/g, '') === digits)
+      ) || data[0];
+    }
 
     setVerificationStatus({
-      exists: !!data,
-      student: data as Student || undefined,
+      exists: !!selectedStudent,
+      student: selectedStudent || undefined,
       lookupDone: true
     });
   };
@@ -3362,10 +3437,20 @@ export function StudentExplorer() {
             type="text"
             value={verifyQuery}
             onChange={(e) => setVerifyQuery(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 bg-white border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all shadow-sm placeholder:text-gray-400 font-bold"
+            className="w-full pl-10 pr-10 py-2 bg-white border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all shadow-sm placeholder:text-gray-400 font-bold"
             placeholder="Verify PCA ID or Phone Number..."
           />
           <div className="absolute inset-y-0 right-0 flex items-center py-1.5 pr-1.5 gap-2">
+            {verifyQuery && (
+              <button
+                type="button"
+                onClick={() => setVerifyQuery('')}
+                className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-all cursor-pointer mr-1"
+                title="Clear search"
+              >
+                <X size={14} />
+              </button>
+            )}
             {verificationStatus.lookupDone && (
               <div className="flex items-center gap-2">
                 <div className={cn(
@@ -3467,6 +3552,16 @@ export function StudentExplorer() {
                   onChange={(e) => setFilters({ ...filters, search: e.target.value })}
                   className="w-full text-xs font-bold text-gray-600 border-none outline-none bg-transparent placeholder:text-gray-300 py-1.5"
                 />
+                {filters.search && (
+                  <button
+                    type="button"
+                    onClick={() => setFilters({ ...filters, search: '' })}
+                    className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-all cursor-pointer ml-1 flex-shrink-0"
+                    title="Clear search"
+                  >
+                    <X size={12} />
+                  </button>
+                )}
               </div>
 
               {/* PCAID Filter */}
