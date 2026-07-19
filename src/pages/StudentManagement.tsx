@@ -23,7 +23,14 @@ import {
   ShieldCheck,
   ShieldAlert,
   AlertTriangle,
-  MessageCircle
+  MessageCircle,
+  Video,
+  Loader2,
+  XCircle,
+  Sparkles,
+  User,
+  ArrowRight,
+  Mail
 } from 'lucide-react';
 import { 
   Student, 
@@ -37,6 +44,7 @@ import { cn, copyToClipboard, formatDate, exportToExcel } from '../lib/utils';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { logTransaction } from '../lib/transactions';
+import { motion, AnimatePresence } from 'motion/react';
 
 const DISTRICT_NUMBERS: Record<string, string> = {
   'Colombo': '01',
@@ -194,6 +202,104 @@ export function StudentForm({ isModal = false, modalStudent = null, modalLead = 
     student?: Student;
     lookupDone: boolean;
   }>({ exists: false, lookupDone: false });
+
+  // Zoom Registration State
+  const [showZoomReg, setShowZoomReg] = useState(false);
+  const [zoomWebinarId, setZoomWebinarId] = useState(() => localStorage.getItem('zoom_last_webinar_id') || '');
+  const [zoomIsRunning, setZoomIsRunning] = useState(false);
+  const [zoomResult, setZoomResult] = useState<{ email: string; status: "Success" | "Failed"; joinUrl?: string; error?: string } | null>(null);
+  const [zoomCopied, setZoomCopied] = useState(false);
+
+  const handleZoomRegister = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const cleanWebinarId = zoomWebinarId.trim();
+    const cleanEmail = (studentData.mail || '').trim();
+    const cleanFirstName = (studentData.pcaid || '').trim();
+    const cleanLastName = (studentData.name || '').trim();
+
+    if (!cleanWebinarId) {
+      toast.error("Please enter a valid Zoom Webinar ID.");
+      return;
+    }
+    if (!cleanFirstName) {
+      toast.error("PCA ID is required for first name registration on Zoom.");
+      return;
+    }
+    if (!cleanLastName) {
+      toast.error("Student Name is required for last name registration on Zoom.");
+      return;
+    }
+    if (!cleanEmail) {
+      toast.error("Student Email is required for registration on Zoom.");
+      return;
+    }
+
+    setZoomIsRunning(true);
+    setZoomResult(null);
+
+    try {
+      const response = await fetch("/api/register-batch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          webinarId: cleanWebinarId,
+          students: [
+            {
+              firstName: cleanFirstName,
+              lastName: cleanLastName,
+              email: cleanEmail
+            }
+          ] 
+        }),
+      });
+
+      let data: any;
+      const contentType = response.headers.get("content-type") || "";
+      if (contentType.includes("application/json")) {
+        data = await response.json();
+      } else {
+        const text = await response.text();
+        if (text.includes("<!DOCTYPE html") || response.status === 404) {
+          throw new Error("API endpoint not active in local dev server. Vercel Serverless Functions only run on Vercel deployments. Configure your Zoom environment variables in Vercel and deploy to test!");
+        }
+        throw new Error(`Invalid server response: ${response.statusText || response.status}`);
+      }
+
+      if (response.ok && data.results && data.results.length > 0) {
+        const resObj = data.results[0];
+        setZoomResult(resObj);
+        if (resObj.status === "Success") {
+          toast.success("Student successfully registered on Zoom!");
+          localStorage.setItem('zoom_last_webinar_id', cleanWebinarId);
+        } else {
+          toast.error(resObj.error || "Zoom registration failed.");
+        }
+      } else {
+        throw new Error(data.error || "Webinar registration failure");
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unknown registration error";
+      setZoomResult({
+        email: cleanEmail,
+        status: "Failed",
+        error: message
+      });
+      toast.error(message);
+    } finally {
+      setZoomIsRunning(false);
+    }
+  };
+
+  const handleZoomCopy = async (url: string) => {
+    try {
+      await navigator.clipboard.writeText(url);
+      setZoomCopied(true);
+      toast.success("Join URL copied to clipboard!");
+      setTimeout(() => setZoomCopied(false), 2000);
+    } catch (err) {
+      toast.error("Failed to copy URL");
+    }
+  };
 
   // Student Data
   const [studentData, setStudentData] = useState(() => {
@@ -2664,6 +2770,192 @@ export function StudentForm({ isModal = false, modalStudent = null, modalLead = 
             </table>
           </div>
         </div>
+
+      {/* Zoom registration toggle header / drop box */}
+      <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-5 mt-6 shadow-sm transition-all">
+        <button
+          type="button"
+          onClick={() => setShowZoomReg(!showZoomReg)}
+          className="w-full flex items-center justify-between text-left focus:outline-none select-none cursor-pointer group"
+        >
+          <div className="flex items-start gap-3">
+            <div className="p-2.5 bg-teal-50 dark:bg-teal-950/20 text-teal-650 dark:text-teal-400 rounded-xl">
+              <Video size={20} className={showZoomReg ? "animate-pulse" : ""} />
+            </div>
+            <div>
+              <span className="text-sm font-black text-gray-850 dark:text-gray-100 flex items-center gap-1.5 uppercase tracking-wider">
+                Register this student on Zoom
+              </span>
+              <span className="block text-xs text-gray-450 dark:text-gray-500 mt-1">
+                Click to expand and register this student for a Zoom Webinar before saving their record.
+              </span>
+            </div>
+          </div>
+          <div className={`p-1.5 rounded-lg bg-gray-50 dark:bg-gray-800 text-gray-400 dark:text-gray-550 group-hover:text-gray-700 dark:group-hover:text-gray-300 transition-all ${showZoomReg ? 'rotate-180 bg-teal-50/50 dark:bg-teal-950/10 text-teal-600' : ''}`}>
+            <ChevronDown size={18} className="transition-transform duration-300" />
+          </div>
+        </button>
+
+        {showZoomReg && (
+          <div className="mt-6 pt-6 border-t border-gray-150 dark:border-gray-800 space-y-5 animate-in fade-in slide-in-from-top-3 duration-200">
+            {/* Zoom Webinar Form Details */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              {/* Webinar ID */}
+              <div className="md:col-span-2">
+                <label className="block text-xs font-black text-gray-400 dark:text-gray-550 uppercase tracking-widest mb-2 flex items-center gap-1.5">
+                  <Video size={14} className="text-teal-650" />
+                  Zoom Webinar ID <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={zoomWebinarId}
+                  onChange={(e) => setZoomWebinarId(e.target.value)}
+                  placeholder="e.g., 86249455017"
+                  disabled={zoomIsRunning}
+                  className="w-full px-4 py-2.5 bg-gray-50 dark:bg-gray-850 border border-gray-200 dark:border-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500/20 text-gray-850 dark:text-gray-200 font-bold text-sm transition-all"
+                />
+              </div>
+
+              {/* First Name (from PCA ID) */}
+              <div>
+                <label className="block text-xs font-black text-gray-400 dark:text-gray-550 uppercase tracking-widest mb-2 flex items-center gap-1.5">
+                  <User size={14} className="text-teal-650" />
+                  First Name (from PCA ID)
+                </label>
+                <input
+                  type="text"
+                  readOnly
+                  value={studentData.pcaid || ''}
+                  className="w-full px-4 py-2.5 bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-gray-500 dark:text-gray-450 font-bold text-sm select-none cursor-not-allowed"
+                  title="First name automatically uses PCA ID"
+                />
+              </div>
+
+              {/* Last Name (from Name) */}
+              <div>
+                <label className="block text-xs font-black text-gray-400 dark:text-gray-550 uppercase tracking-widest mb-2 flex items-center gap-1.5">
+                  <User size={14} className="text-teal-650" />
+                  Last Name (from Name)
+                </label>
+                <input
+                  type="text"
+                  readOnly
+                  value={studentData.name || ''}
+                  className="w-full px-4 py-2.5 bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-gray-500 dark:text-gray-450 font-bold text-sm select-none cursor-not-allowed"
+                  title="Last name automatically uses Student Name"
+                />
+              </div>
+
+              {/* Email Address (from Email) */}
+              <div className="md:col-span-2">
+                <label className="block text-xs font-black text-gray-400 dark:text-gray-550 uppercase tracking-widest mb-2 flex items-center gap-1.5">
+                  <Mail size={14} className="text-teal-650" />
+                  Email Address (from Email)
+                </label>
+                <input
+                  type="email"
+                  readOnly
+                  value={studentData.mail || ''}
+                  className="w-full px-4 py-2.5 bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-gray-500 dark:text-gray-450 font-bold text-sm select-none cursor-not-allowed"
+                  title="Email automatically uses Student Email"
+                />
+                {!studentData.mail && (
+                  <p className="text-[11px] text-amber-600 font-bold mt-1.5 flex items-center gap-1">
+                    <AlertTriangle size={12} /> Email is empty. Please enter an email address in the Personal Details section to enable Zoom registration.
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {/* Submit registration button */}
+            <div className="flex justify-end pt-2">
+              <button
+                type="button"
+                onClick={() => handleZoomRegister()}
+                disabled={zoomIsRunning || !zoomWebinarId || !studentData.pcaid || !studentData.name || !studentData.mail}
+                className="flex items-center gap-2 px-6 py-3 bg-teal-600 hover:bg-teal-700 text-white font-black rounded-xl text-xs shadow-sm hover:shadow transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer animate-fade-in"
+              >
+                {zoomIsRunning ? (
+                  <>
+                    <Loader2 size={14} className="animate-spin" />
+                    <span>Registering on Zoom...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>REGISTER ON ZOOM NOW</span>
+                    <ArrowRight size={14} />
+                  </>
+                )}
+              </button>
+            </div>
+
+            {/* Results */}
+            <AnimatePresence mode="wait">
+              {zoomResult && (
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  className="bg-gray-50 dark:bg-gray-850 rounded-xl border border-gray-200 dark:border-gray-800 p-5 mt-4"
+                >
+                  <div className="flex items-start gap-3">
+                    {zoomResult.status === "Success" ? (
+                      <div className="p-2 bg-green-50 dark:bg-green-950/20 text-green-600 dark:text-green-400 rounded-lg">
+                        <CheckCircle2 size={20} />
+                      </div>
+                    ) : (
+                      <div className="p-2 bg-red-50 dark:bg-red-950/20 text-red-500 dark:text-red-400 rounded-lg">
+                        <XCircle size={20} />
+                      </div>
+                    )}
+
+                    <div className="flex-1 min-w-0">
+                      <h4 className="text-sm font-bold text-gray-900 dark:text-white flex items-center gap-1.5">
+                        {zoomResult.status === "Success" ? "Registration Successful" : "Registration Failed"}
+                        {zoomResult.status === "Success" && (
+                          <Sparkles size={14} className="text-amber-500 animate-pulse" />
+                        )}
+                      </h4>
+                      <p className="text-[11px] text-gray-400 dark:text-gray-550 mt-0.5">
+                        Result for: <span className="font-semibold text-gray-600 dark:text-gray-300">{zoomResult.email}</span>
+                      </p>
+
+                      {zoomResult.status === "Success" && zoomResult.joinUrl ? (
+                        <div className="mt-4 space-y-2">
+                          <p className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">
+                            Student Join URL:
+                          </p>
+                          <div className="flex items-center gap-2 bg-white dark:bg-gray-900 p-2 rounded-lg border border-gray-150 dark:border-gray-800">
+                            <span className="text-[11px] font-mono text-teal-600 dark:text-teal-400 truncate flex-1 select-all">
+                              {zoomResult.joinUrl}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => zoomResult.joinUrl && handleZoomCopy(zoomResult.joinUrl)}
+                              className="p-1.5 bg-gray-50 hover:bg-gray-100 dark:bg-gray-850 dark:hover:bg-gray-800 text-gray-500 hover:text-gray-850 dark:hover:text-gray-200 rounded-md border border-gray-200 dark:border-gray-750 transition-colors cursor-pointer"
+                              title="Copy link"
+                            >
+                              {zoomCopied ? <Check size={12} className="text-green-500" /> : <Copy size={12} />}
+                            </button>
+                          </div>
+                          <p className="text-[10px] text-gray-400 italic">
+                            Success! The Join URL is saved and can be shared with the student directly.
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="mt-3 bg-red-50/50 dark:bg-red-950/10 border border-red-100/50 dark:border-red-900/10 rounded-lg p-3 text-xs text-red-600 dark:text-red-400">
+                          <strong>Error:</strong> {zoomResult.error || "Unknown Error Response from Zoom"}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        )}
+      </div>
 
       {/* Save Button */}
       <div className="flex justify-end pt-6">
