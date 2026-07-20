@@ -203,6 +203,10 @@ export function StudentForm({ isModal = false, modalStudent = null, modalLead = 
     lookupDone: boolean;
   }>({ exists: false, lookupDone: false });
 
+  // Edit Modal State
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [editModalStudent, setEditModalStudent] = useState<Student | null>(null);
+
   // Zoom Registration State
   const [showZoomReg, setShowZoomReg] = useState(false);
   const [zoomWebinarId, setZoomWebinarId] = useState(() => localStorage.getItem('zoom_last_webinar_id') || '');
@@ -1695,7 +1699,14 @@ export function StudentForm({ isModal = false, modalStudent = null, modalLead = 
                         </button>
                         
                         <button
-                          onClick={() => navigate('/admin/student-explorer', { state: { search: verifyQuery } })}
+                          onClick={() => {
+                            if (verificationStatus.student) {
+                              setEditModalStudent(verificationStatus.student);
+                              setEditModalOpen(true);
+                            } else {
+                              toast.error("No student data available to view.");
+                            }
+                          }}
                           className="flex items-center gap-1.5 px-3 h-[30px] bg-orange-500 text-white rounded-lg text-[10px] font-black uppercase tracking-wider hover:bg-orange-600 transition-colors shadow-sm animate-in zoom-in duration-300"
                           title="View student details in directory"
                         >
@@ -1713,11 +1724,16 @@ export function StudentForm({ isModal = false, modalStudent = null, modalLead = 
             {verificationStatus.exists && verificationStatus.student && (
               <div className="absolute mt-2 z-10 animate-in fade-in slide-in-from-top-1 duration-200">
                  <button 
-                  onClick={() => navigate('/admin/student-explorer', { state: { search: verificationStatus.student?.pcaid } })}
+                  onClick={() => {
+                    if (verificationStatus.student) {
+                      setEditModalStudent(verificationStatus.student);
+                      setEditModalOpen(true);
+                    }
+                  }}
                   className="flex items-center gap-2 px-3 py-1 bg-teal-900 text-white rounded-full text-[10px] font-bold hover:bg-black transition-colors shadow-lg"
                 >
                   <ExternalLink size={10}/>
-                  View {verificationStatus.student.name} in Explorer
+                  View & Edit {verificationStatus.student.name}
                 </button>
               </div>
             )}
@@ -2965,7 +2981,7 @@ export function StudentForm({ isModal = false, modalStudent = null, modalLead = 
           className="flex items-center gap-2 px-10 py-4 bg-teal-600 text-white font-black text-lg rounded-2xl hover:bg-teal-700 transition-all active:scale-95 shadow-xl shadow-teal-600/30 disabled:opacity-50"
         >
           {loading ? <RefreshCw className="animate-spin" size={24}/> : <Save size={24}/>}
-          {loading ? 'Processing...' : 'SAVE DATA'}
+          {loading ? 'Processing...' : (editStudent ? 'Update' : 'Save')}
         </button>
       </div>
 
@@ -2996,6 +3012,40 @@ export function StudentForm({ isModal = false, modalStudent = null, modalLead = 
               >
                 OK, Got It
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Student Form Modal Pop-up */}
+      {editModalOpen && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs z-[100] flex items-center justify-center p-4 overflow-y-auto" id="student-edit-modal-overlay">
+          <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-gray-100 dark:border-gray-800 w-full max-w-5xl flex flex-col max-h-[90vh] relative animate-in fade-in zoom-in-95 duration-200">
+            {/* Sticky Header with Close button in the top left corner */}
+            <div className="sticky top-0 z-30 flex items-center h-14 px-6 border-b border-gray-100 dark:border-gray-800 bg-white/95 dark:bg-gray-900/95 backdrop-blur-xs rounded-t-2xl shrink-0">
+              <button
+                onClick={() => setEditModalOpen(false)}
+                className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 rounded-full transition-all duration-150 shadow-sm cursor-pointer flex items-center justify-center"
+                title="Close Form"
+              >
+                <X size={18} />
+              </button>
+              <span className="ml-4 text-sm font-bold text-gray-550 dark:text-gray-450 uppercase tracking-wider">Edit Student: {editModalStudent?.name}</span>
+            </div>
+
+            {/* The form itself - scrollable body */}
+            <div className="flex-1 overflow-y-auto p-8">
+              <StudentForm
+                key={editModalStudent?.id || 'new'}
+                isModal={true}
+                modalStudent={editModalStudent}
+                onClose={(shouldRefresh = true) => {
+                  setEditModalOpen(false);
+                  if (shouldRefresh) {
+                    verifyStudent();
+                  }
+                }}
+              />
             </div>
           </div>
         </div>
