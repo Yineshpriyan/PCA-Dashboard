@@ -413,13 +413,31 @@ export function ItemsView() {
   const [lastTempId, setLastTempId] = useState<string>('');
   const [tempIdLoading, setTempIdLoading] = useState<boolean>(false);
 
+  // Webinar ID Configurator States
+  const [webinarItems, setWebinarItems] = useState<any[]>([]);
+  const [newWebinar, setNewWebinar] = useState({ webinar_name: '', webinar_id: '' });
+  const [editingWebinar, setEditingWebinar] = useState<{ id: any; webinar_name: string; webinar_id: string } | null>(null);
+  const [confirmDeleteWebinarId, setConfirmDeleteWebinarId] = useState<any | null>(null);
+  const [webinarLoading, setWebinarLoading] = useState(false);
+
   useEffect(() => {
     fetchIssueItems();
     fetchClassItems();
     fetchPackageItems();
     fetchJoinedBatchItems();
     fetchLastTemporaryId();
+    fetchWebinarItems();
   }, []);
+
+  const fetchWebinarItems = async () => {
+    try {
+      const { data, error } = await supabase.from('webinar_id').select('*').order('created_at', { ascending: false });
+      if (error) throw error;
+      if (data) setWebinarItems(data);
+    } catch (err) {
+      console.warn("webinar_id fetch warning:", err);
+    }
+  };
 
   const fetchIssueItems = async () => {
     const { data } = await supabase.from('issue_item').select('*').order('issue_type');
@@ -623,6 +641,77 @@ export function ItemsView() {
     }
   };
 
+  const handleAddWebinar = async () => {
+    if (!newWebinar.webinar_name.trim() || !newWebinar.webinar_id.trim()) {
+      toast.error('Both Webinar Name and Webinar ID are required');
+      return;
+    }
+    setWebinarLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('webinar_id')
+        .insert({
+          webinar_name: newWebinar.webinar_name.trim(),
+          webinar_id: newWebinar.webinar_id.trim()
+        })
+        .select()
+        .single();
+      if (error) throw error;
+      toast.success('Webinar added successfully!');
+      setNewWebinar({ webinar_name: '', webinar_id: '' });
+      if (data) {
+        setWebinarItems(prev => [data, ...prev]);
+      }
+    } catch (err: any) {
+      console.error('Failed to add Webinar ID:', err);
+      toast.error(err.message || 'Failed to add Webinar ID.');
+    } finally {
+      setWebinarLoading(false);
+    }
+  };
+
+  const handleUpdateWebinar = async () => {
+    if (!editingWebinar) return;
+    if (!editingWebinar.webinar_name.trim() || !editingWebinar.webinar_id.trim()) {
+      toast.error('Both Webinar Name and Webinar ID are required');
+      return;
+    }
+    setWebinarLoading(true);
+    try {
+      const { error } = await supabase
+        .from('webinar_id')
+        .update({
+          webinar_name: editingWebinar.webinar_name.trim(),
+          webinar_id: editingWebinar.webinar_id.trim()
+        })
+        .eq('id', editingWebinar.id);
+      if (error) throw error;
+      toast.success('Webinar updated successfully!');
+      setWebinarItems(prev => prev.map(w => w.id === editingWebinar.id ? editingWebinar : w));
+      setEditingWebinar(null);
+    } catch (err: any) {
+      console.error('Failed to update Webinar ID:', err);
+      toast.error(err.message || 'Failed to update Webinar ID.');
+    } finally {
+      setWebinarLoading(false);
+    }
+  };
+
+  const handleDeleteWebinar = async (id: any) => {
+    setWebinarLoading(true);
+    try {
+      const { error } = await supabase.from('webinar_id').delete().eq('id', id);
+      if (error) throw error;
+      toast.success('Webinar deleted successfully!');
+      setWebinarItems(prev => prev.filter(w => w.id !== id));
+    } catch (err: any) {
+      console.error('Failed to delete Webinar ID:', err);
+      toast.error(err.message || 'Failed to delete Webinar ID.');
+    } finally {
+      setWebinarLoading(false);
+    }
+  };
+
   return (
     <div className="space-y-8">
       {/* Section 1: Management Items Configuration */}
@@ -722,11 +811,9 @@ export function ItemsView() {
                 Configure the baseline sequence/ID (e.g. <span className="font-mono text-gray-500 dark:text-gray-400 font-semibold bg-gray-50 dark:bg-gray-900 px-1 py-0.5 rounded border border-gray-100 dark:border-gray-800">PCA-0500</span>) used as the starting/last reference point for generating brand new PCA IDs on call tasks.
               </p>
             </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-3 items-center pt-2">
+          </div>          <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-3 items-center pt-2">
             <div className="relative">
-              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[9px] font-black text-gray-400 dark:text-gray-500 uppercase font-mono bg-gray-50 dark:bg-gray-900 px-2 py-0.5 rounded border border-gray-100 dark:border-gray-800 select-none">
+              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[9px] font-black text-gray-400 dark:text-gray-550 uppercase font-mono bg-gray-50 dark:bg-gray-900 px-2 py-0.5 rounded border border-gray-100 dark:border-gray-800 select-none">
                 CURRENT BASE
               </span>
               <input
@@ -745,6 +832,181 @@ export function ItemsView() {
               <Save size={18} />
               {tempIdLoading ? 'Updating...' : 'Update ID'}
             </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Section 3: Webinar ID Configuration */}
+      <div className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-3xl p-6 md:p-8 shadow-md space-y-6">
+        <label className="text-sm font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest block">
+          Zoom Webinar Configurations
+        </label>
+        
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_2fr] gap-8">
+          {/* Create Form */}
+          <div className="bg-slate-50/50 dark:bg-slate-900/30 border border-slate-100 dark:border-slate-800/60 rounded-2xl p-5 shadow-sm space-y-4">
+            <h3 className="font-bold text-gray-800 dark:text-gray-200 text-sm">
+              {editingWebinar ? 'Edit Webinar' : 'Add New Webinar'}
+            </h3>
+            
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-1">
+                  Webinar Name
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g., Biology Revision Batch A"
+                  value={editingWebinar ? editingWebinar.webinar_name : newWebinar.webinar_name}
+                  onChange={(e) => {
+                    if (editingWebinar) {
+                      setEditingWebinar({ ...editingWebinar, webinar_name: e.target.value });
+                    } else {
+                      setNewWebinar({ ...newWebinar, webinar_name: e.target.value });
+                    }
+                  }}
+                  className="w-full px-3 py-2 bg-white dark:bg-gray-800 border-2 border-gray-100 dark:border-gray-700 rounded-xl focus:border-teal-600 focus:outline-none text-sm text-gray-800 dark:text-gray-200"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-1">
+                  Webinar ID
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g., 86249455017"
+                  value={editingWebinar ? editingWebinar.webinar_id : newWebinar.webinar_id}
+                  onChange={(e) => {
+                    if (editingWebinar) {
+                      setEditingWebinar({ ...editingWebinar, webinar_id: e.target.value });
+                    } else {
+                      setNewWebinar({ ...newWebinar, webinar_id: e.target.value });
+                    }
+                  }}
+                  className="w-full px-3 py-2 bg-white dark:bg-gray-800 border-2 border-gray-100 dark:border-gray-700 rounded-xl focus:border-teal-600 focus:outline-none text-sm font-mono text-gray-800 dark:text-gray-200"
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-2 pt-2">
+              {editingWebinar ? (
+                <>
+                  <button
+                    onClick={handleUpdateWebinar}
+                    disabled={webinarLoading}
+                    className="flex-1 py-2 bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white rounded-xl font-bold text-xs transition-all flex items-center justify-center gap-1.5"
+                  >
+                    <Save size={14} />
+                    Save
+                  </button>
+                  <button
+                    onClick={() => setEditingWebinar(null)}
+                    className="px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-750 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700 rounded-xl font-bold text-xs transition-all"
+                  >
+                    Cancel
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={handleAddWebinar}
+                  disabled={webinarLoading}
+                  className="w-full py-2.5 bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white rounded-xl font-bold text-xs transition-all flex items-center justify-center gap-1.5"
+                >
+                  <Plus size={14} />
+                  Add Webinar
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* List of Webinars */}
+          <div className="space-y-3">
+            <h3 className="font-bold text-gray-800 dark:text-gray-200 text-sm">
+              Registered Webinars ({webinarItems.length})
+            </h3>
+
+            <div className="overflow-hidden border border-gray-100 dark:border-gray-800 rounded-2xl">
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-100 dark:divide-gray-800">
+                  <thead className="bg-gray-50/50 dark:bg-gray-900/50">
+                    <tr>
+                      <th scope="col" className="px-4 py-3 text-left text-xs font-black text-gray-400 uppercase tracking-wider">
+                        Webinar Name
+                      </th>
+                      <th scope="col" className="px-4 py-3 text-left text-xs font-black text-gray-400 uppercase tracking-wider font-mono">
+                        Webinar ID
+                      </th>
+                      <th scope="col" className="relative px-4 py-3">
+                        <span className="sr-only">Actions</span>
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 dark:divide-gray-800 bg-white dark:bg-gray-900/30">
+                    {webinarItems.map((webinar) => (
+                      <tr key={webinar.id} className="hover:bg-gray-50/30 dark:hover:bg-gray-800/10 transition-colors">
+                        <td className="px-4 py-3.5 text-sm font-semibold text-gray-800 dark:text-gray-200">
+                          {webinar.webinar_name}
+                        </td>
+                        <td className="px-4 py-3.5 text-sm font-mono text-gray-500 dark:text-gray-400">
+                          {webinar.webinar_id}
+                        </td>
+                        <td className="px-4 py-3.5 text-right text-sm font-medium whitespace-nowrap">
+                          {confirmDeleteWebinarId === webinar.id ? (
+                            <div className="flex items-center justify-end gap-1.5 animate-in fade-in zoom-in-95 duration-150">
+                              <span className="text-xs text-red-600 font-black mr-1 uppercase tracking-wider">Are you sure?</span>
+                              <button
+                                onClick={() => {
+                                  handleDeleteWebinar(webinar.id);
+                                  setConfirmDeleteWebinarId(null);
+                                }}
+                                className="px-2.5 py-1 text-xs font-semibold bg-red-600 hover:bg-red-700 text-white rounded-lg shadow-sm transition-all whitespace-nowrap"
+                              >
+                                Delete
+                              </button>
+                              <button
+                                onClick={() => setConfirmDeleteWebinarId(null)}
+                                className="px-2.5 py-1 text-xs font-semibold bg-gray-100 hover:bg-gray-200 text-gray-750 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700 rounded-lg transition-all whitespace-nowrap"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="flex justify-end gap-1.5">
+                              <button
+                                onClick={() => setEditingWebinar({
+                                  id: webinar.id,
+                                  webinar_name: webinar.webinar_name,
+                                  webinar_id: webinar.webinar_id
+                                })}
+                                className="p-1.5 text-gray-400 hover:text-teal-600 hover:bg-teal-50 dark:hover:bg-teal-950/20 rounded-lg transition-colors"
+                                title="Edit"
+                              >
+                                <Edit size={14} />
+                              </button>
+                              <button
+                                onClick={() => setConfirmDeleteWebinarId(webinar.id)}
+                                className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20 rounded-lg transition-colors"
+                                title="Delete"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                    {webinarItems.length === 0 && (
+                      <tr>
+                        <td colSpan={3} className="px-4 py-8 text-center text-sm text-gray-400 dark:text-gray-550">
+                          No webinars configured. Create one using the form on the left!
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
           </div>
         </div>
       </div>

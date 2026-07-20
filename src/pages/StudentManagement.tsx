@@ -163,6 +163,7 @@ export function StudentForm({ isModal = false, modalStudent = null, modalLead = 
   const [classTypes, setClassTypes] = useState<ClassItem[]>([]);
   const [packageTypes, setPackageTypes] = useState<PackageItem[]>([]);
   const [joinedBatches, setJoinedBatches] = useState<JoinedBatchItem[]>([]);
+  const [webinars, setWebinars] = useState<{ id: number; webinar_name: string; webinar_id: string }[]>([]);
   const [selectedClass, setSelectedClass] = useState('');
   const [selectedMonth, setSelectedMonth] = useState('');
   const [selectedPackage, setSelectedPackage] = useState('');
@@ -772,9 +773,11 @@ export function StudentForm({ isModal = false, modalStudent = null, modalLead = 
     const { data: classes } = await supabase.from('class_item').select('*').order('class_type');
     const { data: packages } = await supabase.from('package_item').select('*').order('package_type');
     const { data: batches } = await supabase.from('joined_batch_item').select('*').order('joined_batch', { ascending: false });
+    const { data: webinarsData } = await supabase.from('webinar_id').select('*').order('created_at', { ascending: false });
     if (classes) setClassTypes(classes);
     if (packages) setPackageTypes(packages);
     if (batches) setJoinedBatches(batches);
+    if (webinarsData) setWebinars(webinarsData as any);
   };
   const handleAddPayment = () => {
     let finalClassType = '';
@@ -2853,17 +2856,27 @@ export function StudentForm({ isModal = false, modalStudent = null, modalLead = 
               <div className="md:col-span-2">
                 <label className="block text-xs font-black text-gray-400 dark:text-gray-550 uppercase tracking-widest mb-2 flex items-center gap-1.5">
                   <Video size={14} className="text-teal-650" />
-                  Zoom Webinar ID <span className="text-red-500">*</span>
+                  Zoom Webinar <span className="text-red-500">*</span>
                 </label>
-                <input
-                  type="text"
+                <select
                   required
                   value={zoomWebinarId}
                   onChange={(e) => setZoomWebinarId(e.target.value)}
-                  placeholder="e.g., 86249455017"
                   disabled={zoomIsRunning}
                   className="w-full px-4 py-2.5 bg-gray-50 dark:bg-gray-850 border border-gray-200 dark:border-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500/20 text-gray-850 dark:text-gray-200 font-bold text-sm transition-all"
-                />
+                >
+                  <option value="">Select a Webinar...</option>
+                  {webinars.map((w) => (
+                    <option key={w.id} value={w.webinar_id}>
+                      {w.webinar_name} ({w.webinar_id})
+                    </option>
+                  ))}
+                </select>
+                {webinars.length === 0 && (
+                  <p className="text-xs text-amber-500 font-medium mt-1.5">
+                    No webinars found. Please add webinars in "Add Items" configuration screen.
+                  </p>
+                )}
               </div>
 
               {/* First Name (from PCA ID) */}
