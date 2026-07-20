@@ -131,13 +131,15 @@ export function CallTaskForm({ editData, onComplete }: { editData?: CallTask; on
       setMailError('');
       return;
     }
-    const isInvalid = mailVal === '@gmail.com' || 
-                      !mailVal.endsWith('@gmail.com') || 
+    const endsWithAllowed = mailVal.endsWith('@gmail.com') || mailVal.endsWith('@icloud.com');
+    const isInvalid = !endsWithAllowed ||
+                      mailVal === '@gmail.com' || 
+                      mailVal === '@icloud.com' ||
                       mailVal.startsWith('@') ||
                       mailVal.split('@')[0].includes(' ') ||
                       mailVal.split('@')[0].includes('@');
     if (isInvalid) {
-      setMailError('Invalid Gmail username');
+      setMailError('Invalid Gmail or iCloud username');
     } else {
       setMailError('');
     }
@@ -313,14 +315,17 @@ export function CallTaskForm({ editData, onComplete }: { editData?: CallTask; on
       return;
     }
 
-    if (formData.mail) {
-      const isInvalid = formData.mail === '@gmail.com' || 
-                        !formData.mail.endsWith('@gmail.com') || 
-                        formData.mail.startsWith('@') ||
-                        formData.mail.split('@')[0].includes(' ') ||
-                        formData.mail.split('@')[0].includes('@');
+    const cleanMail = (formData.mail === '@gmail.com' || formData.mail === '@icloud.com') ? '' : formData.mail;
+    if (cleanMail) {
+      const endsWithAllowed = cleanMail.endsWith('@gmail.com') || cleanMail.endsWith('@icloud.com');
+      const isInvalid = !endsWithAllowed ||
+                        cleanMail === '@gmail.com' || 
+                        cleanMail === '@icloud.com' ||
+                        cleanMail.startsWith('@') ||
+                        cleanMail.split('@')[0].includes(' ') ||
+                        cleanMail.split('@')[0].includes('@');
       if (isInvalid) {
-        toast.error('Please enter a valid Gmail username');
+        toast.error('Please enter a valid Gmail or iCloud username');
         return;
       }
     }
@@ -345,8 +350,10 @@ export function CallTaskForm({ editData, onComplete }: { editData?: CallTask; on
         }
       }
 
+      const cleanMail = (formData.mail === '@gmail.com' || formData.mail === '@icloud.com') ? '' : formData.mail;
       const dataToSave = {
         ...formData,
+        mail: cleanMail,
         asked_class_type: finalAskedClassType,
         asked_package_type: finalAskedPackageType,
         first_call_date: formData.first_call_date || null,
@@ -381,7 +388,7 @@ export function CallTaskForm({ editData, onComplete }: { editData?: CallTask; on
           joined_batch: formData.joined_batch,
           school: formData.school,
           district: formData.district,
-          mail: formData.mail,
+          mail: cleanMail,
           address: formData.address,
           asked_class_type: finalAskedClassType,
           stream: formData.stream || null
@@ -686,7 +693,7 @@ export function CallTaskForm({ editData, onComplete }: { editData?: CallTask; on
                 {SRI_LANKAN_DISTRICTS.map(d => <option key={d} value={d}>{d}</option>)}
               </select>
             </div>
-            <div className="flex flex-col gap-1.5">
+             <div className="flex flex-col gap-1.5">
               <label className="text-sm font-semibold text-gray-700">Mail</label>
               <div className={cn(
                 "relative flex items-center border bg-gray-50 dark:bg-gray-900 rounded-lg overflow-hidden focus-within:ring-2 transition-all",
@@ -696,20 +703,46 @@ export function CallTaskForm({ editData, onComplete }: { editData?: CallTask; on
               )}>
                 <input
                   type="text"
-                  value={formData.mail.endsWith('@gmail.com') ? formData.mail.slice(0, -10) : formData.mail}
+                  value={
+                    formData.mail.endsWith('@icloud.com')
+                      ? formData.mail.slice(0, -11)
+                      : formData.mail.endsWith('@gmail.com')
+                      ? formData.mail.slice(0, -10)
+                      : formData.mail
+                  }
                   onChange={(e) => {
                     const val = e.target.value.trim();
                     const cleanVal = val.replace(/[^a-zA-Z0-9._-]/g, '');
-                    setFormData({ ...formData, mail: cleanVal ? `${cleanVal}@gmail.com` : '' });
+                    const currentDomain = formData.mail.endsWith('@icloud.com') ? '@icloud.com' : '@gmail.com';
+                    setFormData({ ...formData, mail: cleanVal ? `${cleanVal}${currentDomain}` : currentDomain });
                     if (mailError) setMailError('');
                   }}
                   onBlur={() => handleMailBlur(formData.mail)}
                   className="w-full px-3 py-2 bg-transparent focus:outline-none text-sm text-gray-800 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
                   placeholder="username"
                 />
-                <div className="px-3 py-2 bg-gray-100/80 dark:bg-gray-800/80 border-l border-gray-200 dark:border-gray-700 select-none text-sm font-semibold text-gray-500 dark:text-gray-400">
-                  @gmail.com
-                </div>
+                <select
+                  value={formData.mail.endsWith('@icloud.com') ? '@icloud.com' : '@gmail.com'}
+                  onChange={(e) => {
+                    const newDomain = e.target.value;
+                    const currentEmail = formData.mail || '';
+                    let username = '';
+                    if (currentEmail.endsWith('@gmail.com')) {
+                      username = currentEmail.slice(0, -10);
+                    } else if (currentEmail.endsWith('@icloud.com')) {
+                      username = currentEmail.slice(0, -11);
+                    } else {
+                      username = currentEmail.split('@')[0];
+                    }
+                    const cleanUsername = username.replace(/[^a-zA-Z0-9._-]/g, '');
+                    setFormData({ ...formData, mail: cleanUsername ? `${cleanUsername}${newDomain}` : newDomain });
+                    if (mailError) setMailError('');
+                  }}
+                  className="px-3 py-2 bg-gray-100 dark:bg-gray-800 border-l border-gray-200 dark:border-gray-700 text-sm font-semibold text-gray-650 dark:text-gray-300 focus:outline-none focus:ring-0 cursor-pointer hover:bg-gray-250 dark:hover:bg-gray-750 transition-colors"
+                >
+                  <option value="@gmail.com">@gmail.com</option>
+                  <option value="@icloud.com">@icloud.com</option>
+                </select>
               </div>
               {mailError && (
                 <span className="text-xs text-red-500 font-medium mt-0.5">{mailError}</span>
