@@ -1249,21 +1249,48 @@ export function SignupView() {
           }
         }
       } else {
-        // If trigger created it, try updating the email column
-        await supabase
-          .from('user')
-          .update({ email })
-          .eq('id', data.user.id)
-          .catch(() => {}); // gracefully ignore if column does not exist
+        // If trigger created it, try updating the profile fields safely
+        try {
+          const { error: updateError } = await supabase
+            .from('user')
+            .update({
+              username: formData.username.trim(),
+              email: email,
+              admin_type: formData.admin_type
+            })
+            .eq('id', data.user.id);
+          if (updateError) {
+            // If email column doesn't exist in user table, fallback to updating without email
+            if (updateError.message?.includes('column "email" of relation "user" does not exist') || updateError.code === '42703') {
+              await supabase
+                .from('user')
+                .update({
+                  username: formData.username.trim(),
+                  admin_type: formData.admin_type
+                })
+                .eq('id', data.user.id);
+            } else {
+              console.warn('Profile update warning:', updateError.message);
+            }
+          }
+        } catch (e) {
+          // gracefully ignore unexpected errors
+        }
       }
 
       toast.success('Account created successfully!');
       setFormData({ username: '', email: '', password: '', admin_type: 'admin' });
+      setShowPassword(false);
     } catch (err: any) {
       toast.error(err.message || 'Failed to create account');
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleClear = () => {
+    setFormData({ username: '', email: '', password: '', admin_type: 'admin' });
+    setShowPassword(false);
   };
 
   return (
@@ -1324,13 +1351,23 @@ export function SignupView() {
           </div>
         </div>
 
-        <button
-          type="submit"
-          disabled={loading}
-          className="w-full py-2.5 bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white rounded-lg font-bold text-sm transition-all shadow-md active:scale-95 flex items-center justify-center gap-2"
-        >
-          {loading ? 'Creating...' : 'Signup'}
-        </button>
+        <div className="flex gap-3 pt-2">
+          <button
+            type="submit"
+            disabled={loading}
+            className="flex-1 py-2.5 bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white rounded-lg font-bold text-sm transition-all shadow-md active:scale-95 flex items-center justify-center gap-2"
+          >
+            {loading ? 'Creating...' : 'Signup'}
+          </button>
+          <button
+            type="button"
+            onClick={handleClear}
+            disabled={loading}
+            className="px-5 py-2.5 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg font-semibold text-sm transition-all active:scale-95"
+          >
+            Clear
+          </button>
+        </div>
       </form>
     </div>
   );
