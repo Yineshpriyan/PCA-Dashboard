@@ -53,7 +53,7 @@ export default function RegisterIndividualStudent() {
     const cleanLastName = lastName.trim();
 
     if (!cleanWebinarId) {
-      toast.error("Please enter a valid Zoom Webinar ID.");
+      toast.error("Please enter a valid Zoom Webinar or Meeting ID.");
       return;
     }
     if (!cleanFirstName || !cleanLastName) {
@@ -137,18 +137,18 @@ export default function RegisterIndividualStudent() {
           >
             <form onSubmit={handleRegister} className="space-y-6">
               
-              {/* Webinar ID Field */}
+              {/* Webinar / Meeting ID Field */}
               <div>
                 <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-1.5">
                   <Video size={16} className="text-teal-600" />
-                  Zoom Webinar ID <span className="text-red-500">*</span>
+                  Zoom Webinar / Meeting ID <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="text"
                   required
                   value={webinarId}
                   onChange={(e) => setWebinarId(e.target.value)}
-                  placeholder="e.g., 86249455017"
+                  placeholder="Webinar or Meeting ID, e.g., 86249455017"
                   disabled={isRunning}
                   className="w-full px-4 py-2.5 bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500/20 text-gray-850 dark:text-gray-200 font-medium text-sm transition-all"
                 />
@@ -303,11 +303,11 @@ export default function RegisterIndividualStudent() {
               Setup Info
             </h3>
             <p className="text-xs text-teal-700/80 dark:text-teal-400/80 mb-4 leading-relaxed">
-              Quickly register an individual student for a specific Zoom Webinar.
+              Quickly register an individual student for a specific Zoom Webinar or Meeting.
             </p>
             <ul className="space-y-3 text-xs text-teal-700/90 dark:text-teal-400/90 leading-relaxed">
               <li>
-                <strong>Webinar ID:</strong> Find this ID in your Zoom Web portal under the list of scheduled Webinars.
+                <strong>Webinar / Meeting ID:</strong> Find this ID in your Zoom Web portal under scheduled Webinars or Meetings.
               </li>
               <li>
                 <strong>Verification:</strong> Zoom requires first name, last name, and a valid email structure for student candidate creation.

@@ -73,7 +73,7 @@ const navSections: NavSection[] = [
     ]
   },
   {
-    title: 'Zoom Webinars',
+    title: 'Zoom Webinars / Meetings',
     items: [
       { label: 'Bulk Register', path: '/admin/zoom-register', icon: <Video size={18} />, roles: ['admin', 'super_admin'] },
       { label: 'Individual Register', path: '/admin/zoom-register-individual', icon: <UserPlus size={18} />, roles: ['admin', 'super_admin'] },

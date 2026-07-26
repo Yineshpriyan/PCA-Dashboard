@@ -836,23 +836,23 @@ export function ItemsView() {
         </div>
       </div>
 
-      {/* Section 3: Webinar ID Configuration */}
+      {/* Section 3: Webinar & Meeting ID Configuration */}
       <div className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-3xl p-6 md:p-8 shadow-md space-y-6">
         <label className="text-sm font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest block">
-          Zoom Webinar Configurations
+          Zoom Webinar / Meeting Configurations
         </label>
         
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_2fr] gap-8">
           {/* Create Form */}
           <div className="bg-slate-50/50 dark:bg-slate-900/30 border border-slate-100 dark:border-slate-800/60 rounded-2xl p-5 shadow-sm space-y-4">
             <h3 className="font-bold text-gray-800 dark:text-gray-200 text-sm">
-              {editingWebinar ? 'Edit Webinar' : 'Add New Webinar'}
+              {editingWebinar ? 'Edit Webinar / Meeting' : 'Add New Webinar / Meeting'}
             </h3>
             
             <div className="space-y-3">
               <div>
                 <label className="block text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-1">
-                  Webinar Name
+                  Webinar / Meeting Name
                 </label>
                 <input
                   type="text"
@@ -871,7 +871,7 @@ export function ItemsView() {
 
               <div>
                 <label className="block text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-1">
-                  Webinar ID
+                  Webinar / Meeting ID
                 </label>
                 <input
                   type="text"
@@ -914,7 +914,7 @@ export function ItemsView() {
                   className="w-full py-2.5 bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white rounded-xl font-bold text-xs transition-all flex items-center justify-center gap-1.5"
                 >
                   <Plus size={14} />
-                  Add Webinar
+                  Add Item
                 </button>
               )}
             </div>
@@ -923,7 +923,7 @@ export function ItemsView() {
           {/* List of Webinars */}
           <div className="space-y-3">
             <h3 className="font-bold text-gray-800 dark:text-gray-200 text-sm">
-              Registered Webinars ({webinarItems.length})
+              Registered Webinars & Meetings ({webinarItems.length})
             </h3>
 
             <div className="overflow-hidden border border-gray-100 dark:border-gray-800 rounded-2xl">
@@ -932,10 +932,10 @@ export function ItemsView() {
                   <thead className="bg-gray-50/50 dark:bg-gray-900/50">
                     <tr>
                       <th scope="col" className="px-4 py-3 text-left text-xs font-black text-gray-400 uppercase tracking-wider">
-                        Webinar Name
+                        Name
                       </th>
                       <th scope="col" className="px-4 py-3 text-left text-xs font-black text-gray-400 uppercase tracking-wider font-mono">
-                        Webinar ID
+                        Webinar / Meeting ID
                       </th>
                       <th scope="col" className="relative px-4 py-3">
                         <span className="sr-only">Actions</span>
@@ -999,7 +999,7 @@ export function ItemsView() {
                     {webinarItems.length === 0 && (
                       <tr>
                         <td colSpan={3} className="px-4 py-8 text-center text-sm text-gray-400 dark:text-gray-550">
-                          No webinars configured. Create one using the form on the left!
+                          No webinars or meetings configured. Create one using the form on the left!
                         </td>
                       </tr>
                     )}

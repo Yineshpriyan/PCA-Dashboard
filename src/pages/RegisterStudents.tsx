@@ -492,11 +492,11 @@ export default function RegisterStudents() {
           {/* Main Card */}
           <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-6 md:p-8 shadow-sm">
             
-            {/* Step 1: Webinar ID Input */}
+            {/* Step 1: Webinar / Meeting ID Input */}
             <div className="mb-6">
               <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-1.5">
                 <Video size={16} className="text-teal-600" />
-                Zoom Webinar ID <span className="text-red-500">*</span>
+                Zoom Webinar / Meeting ID <span className="text-red-500">*</span>
               </label>
               <div className="relative">
                 <input
@@ -775,7 +775,7 @@ export default function RegisterStudents() {
               Setup Guide
             </h3>
             <p className="text-xs text-teal-700/80 dark:text-teal-400/80 mb-4 leading-relaxed">
-              Upload a student list CSV to register candidates on Zoom Webinars in controlled batches.
+              Upload a student list CSV to register candidates on Zoom Webinars or Meetings in controlled batches.
             </p>
             <ul className="space-y-2.5 text-xs text-teal-700/90 dark:text-teal-400/90 leading-relaxed">
               <li>
@@ -857,14 +857,14 @@ export default function RegisterStudents() {
             </div>
           </div>
           
-          {/* Webinar ID input right in Option 2 */}
+          {/* Webinar / Meeting ID input right in Option 2 */}
           <div className="flex items-center gap-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-1.5 min-w-[280px]">
             <Video size={16} className="text-teal-650" />
             <input
               type="text"
               value={webinarId}
               onChange={(e) => setWebinarId(e.target.value)}
-              placeholder="Webinar ID, e.g., 86249455017"
+              placeholder="Webinar / Meeting ID, e.g., 86249455017"
               disabled={isGridRunning}
               className="w-full bg-transparent text-xs font-bold text-gray-800 dark:text-gray-200 placeholder-gray-400 focus:outline-none"
             />

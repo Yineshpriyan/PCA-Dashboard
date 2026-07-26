@@ -2839,7 +2839,7 @@ export function StudentForm({ isModal = false, modalStudent = null, modalLead = 
                 Register this student on Zoom
               </span>
               <span className="block text-xs text-gray-450 dark:text-gray-500 mt-1">
-                Click to expand and register this student for a Zoom Webinar before saving their record.
+                Click to expand and register this student for a Zoom Webinar or Meeting before saving their record.
               </span>
             </div>
           </div>
@@ -2850,13 +2850,13 @@ export function StudentForm({ isModal = false, modalStudent = null, modalLead = 
 
         {showZoomReg && (
           <div className="mt-6 pt-6 border-t border-gray-150 dark:border-gray-800 space-y-5 animate-in fade-in slide-in-from-top-3 duration-200">
-            {/* Zoom Webinar Form Details */}
+            {/* Zoom Webinar / Meeting Form Details */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-              {/* Webinar ID */}
+              {/* Webinar / Meeting ID */}
               <div className="md:col-span-2">
                 <label className="block text-xs font-black text-gray-400 dark:text-gray-550 uppercase tracking-widest mb-2 flex items-center gap-1.5">
                   <Video size={14} className="text-teal-650" />
-                  Zoom Webinar <span className="text-red-500">*</span>
+                  Zoom Webinar / Meeting <span className="text-red-500">*</span>
                 </label>
                 <select
                   required
@@ -2865,7 +2865,7 @@ export function StudentForm({ isModal = false, modalStudent = null, modalLead = 
                   disabled={zoomIsRunning}
                   className="w-full px-4 py-2.5 bg-gray-50 dark:bg-gray-850 border border-gray-200 dark:border-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500/20 text-gray-850 dark:text-gray-200 font-bold text-sm transition-all"
                 >
-                  <option value="">Select a Webinar...</option>
+                  <option value="">Select a Webinar or Meeting...</option>
                   {webinars.map((w) => (
                     <option key={w.id} value={w.webinar_id}>
                       {w.webinar_name} ({w.webinar_id})
@@ -2874,7 +2874,7 @@ export function StudentForm({ isModal = false, modalStudent = null, modalLead = 
                 </select>
                 {webinars.length === 0 && (
                   <p className="text-xs text-amber-500 font-medium mt-1.5">
-                    No webinars found. Please add webinars in "Add Items" configuration screen.
+                    No webinars or meetings found. Please add items in "Add Items" configuration screen.
                   </p>
                 )}
               </div>
