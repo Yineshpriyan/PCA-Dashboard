@@ -3101,8 +3101,8 @@ export function StudentForm({ isModal = false, modalStudent = null, modalLead = 
 }
 
 export function StudentExplorer() {
-  const navigate = useNavigate();
-  const { state: navState } = useLocation();
+  const location = useLocation();
+  const { state: navState } = location;
   const { user } = useAuth();
   const [students, setStudents] = useState<Student[]>([]);
   const [explorerPayments, setExplorerPayments] = useState<any[]>([]);
@@ -3154,6 +3154,27 @@ export function StudentExplorer() {
     studentType: '',
     paymentStatus: ''
   });
+
+  // Reset filters when navigating back to StudentExplorer from other menus
+  useEffect(() => {
+    if (!location.state?.search && !location.state?.student) {
+      setFilters({
+        search: '',
+        district: '',
+        properBatch: '',
+        joinedBatch: '',
+        classes: [],
+        month: '',
+        year: '',
+        packages: [],
+        startDate: '',
+        endDate: '',
+        pcaid: '',
+        studentType: '',
+        paymentStatus: ''
+      });
+    }
+  }, [location.pathname, location.key]);
 
   // Dynamically compute clean, unique available years based on payment paid_dates
   const availableYears = React.useMemo(() => {

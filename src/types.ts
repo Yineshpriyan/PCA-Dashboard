@@ -148,3 +148,33 @@ export interface TransactionLog {
   created_at: string;
 }
 
+export interface AppFolder {
+  id: string;
+  name: string;
+  description?: string;
+  parent_id: string | null;
+  created_at: string;
+  is_active: boolean;
+  order_index?: number;
+}
+
+export interface AppResource {
+  id: string;
+  folder_id: string;
+  title: string;
+  type: 'video' | 'pdf' | 'link' | 'note';
+  url: string;
+  duration?: string;
+  file_size?: string;
+  description?: string;
+  created_at: string;
+}
+
+export interface StudentFolderAccess {
+  id: string;
+  student_pcaid: string;
+  folder_id: string;
+  is_enabled: boolean;
+  updated_at: string;
+}
+

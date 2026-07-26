@@ -16,6 +16,7 @@ import { StudentForm, StudentExplorer } from './pages/StudentManagement';
 import { FreeClassForm } from './pages/FreeClassManagement';
 import RegisterStudents from './pages/RegisterStudents';
 import RegisterIndividualStudent from './pages/RegisterIndividualStudent';
+import AppActivation from './pages/AppActivation';
 import Home from './pages/Home';
 import { FixingView, ItemsView, SignupView, AdminsView } from './pages/SuperAdminDashboard';
 import TransactionHistory from './pages/TransactionHistory';
@@ -106,6 +107,13 @@ function Root() {
         <ProtectedRoute allowedRoles={['admin', 'super_admin']}>
           <Shell>
             <StudentExplorer />
+          </Shell>
+        </ProtectedRoute>
+      } />
+      <Route path="/admin/app-activation" element={
+        <ProtectedRoute allowedRoles={['admin', 'super_admin']}>
+          <Shell>
+            <AppActivation />
           </Shell>
         </ProtectedRoute>
       } />

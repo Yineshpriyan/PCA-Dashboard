@@ -19,7 +19,8 @@ import {
   Moon,
   Video,
   Home,
-  Trash2
+  Trash2,
+  Smartphone
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { logTransaction } from '../lib/transactions';
@@ -68,6 +69,7 @@ const navSections: NavSection[] = [
     items: [
       { label: 'New Student', path: '/admin/student-form', icon: <Settings size={18} />, roles: ['admin', 'super_admin'] },
       { label: 'Students', path: '/admin/student-explorer', icon: <Users size={18} />, roles: ['admin', 'super_admin'] },
+      { label: 'App Activation', path: '/admin/app-activation', icon: <Smartphone size={18} />, roles: ['admin', 'super_admin'] },
     ]
   },
   {

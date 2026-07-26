@@ -311,7 +311,7 @@ export default function Home() {
       {/* Welcome Greeting */}
       <div className="mb-8 font-sans">
         <h1 className="text-3xl font-bold text-gray-900 dark:text-white tracking-tight">
-          Welcome back
+          Welcome back{user?.username ? `, ${user.username}` : ''}
         </h1>
         <p className="text-sm text-gray-500 dark:text-gray-400 mt-1.5 font-medium">
           Here's what's happening with your business today.
