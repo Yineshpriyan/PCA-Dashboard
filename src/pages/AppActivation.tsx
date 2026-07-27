@@ -35,7 +35,10 @@ import {
   Users,
   Filter,
   Save,
-  Loader2
+  Loader2,
+  Clock,
+  Calendar,
+  Timer
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { AppFolder, AppResource, StudentFolderAccess, Student } from '../types';
@@ -125,10 +128,143 @@ const INITIAL_RESOURCES: AppResource[] = [
   }
 ];
 
+export const DURATION_PRESETS = [
+  { id: '1_day', label: '1 Day', days: 1 },
+  { id: '2_days', label: '2 Days', days: 2 },
+  { id: '1_week', label: '1 Week (7 Days)', days: 7 },
+  { id: '1_month', label: '1 Month (30 Days)', days: 30 },
+  { id: '2_months', label: '2 Months (60 Days)', days: 60 },
+  { id: '3_months', label: '3 Months (90 Days)', days: 90 },
+  { id: '6_months', label: '6 Months (180 Days)', days: 180 },
+  { id: '1_year', label: '1 Year (365 Days)', days: 365 },
+  { id: 'unlimited', label: 'Unlimited (No Expiration)', days: null },
+];
+
+export function computeExpiresAt(preset: string | null): string | null {
+  if (!preset || preset === 'unlimited') return null;
+  const opt = DURATION_PRESETS.find(o => o.id === preset);
+  if (!opt) return null;
+  if (opt.days === 0) return new Date().toISOString();
+  if (!opt.days) return null;
+  const target = new Date();
+  target.setDate(target.getDate() + opt.days);
+  return target.toISOString();
+}
+
+export function getAccessExpirationInfo(record?: StudentFolderAccess) {
+  if (!record || !record.is_enabled) return { status: 'disabled', label: 'Disabled' };
+  if (!record.expires_at) return { status: 'unlimited', label: 'Unlimited' };
+
+  const expiresDate = new Date(record.expires_at);
+  const now = new Date();
+
+  if (expiresDate < now) {
+    return { status: 'expired', label: `Expired (${expiresDate.toLocaleDateString()})`, expiresDate };
+  }
+
+  const daysLeft = Math.ceil((expiresDate.getTime() - now.getTime()) / (1000 * 3600 * 24));
+  return {
+    status: 'active',
+    label: `${daysLeft}d left (${expiresDate.toLocaleDateString()})`,
+    expiresDate,
+    daysLeft
+  };
+}
+
+export function syncParentFolderAccess(records: StudentFolderAccess[], folders: AppFolder[]): StudentFolderAccess[] {
+  let updated = [...records];
+  if (folders.length === 0) return updated;
+
+  const folderMap = new Map<string, AppFolder>();
+  folders.forEach(f => folderMap.set(f.id, f));
+
+  const getDepth = (fId: string): number => {
+    let d = 0;
+    let curr = folderMap.get(fId);
+    while (curr && curr.parent_id && folderMap.has(curr.parent_id)) {
+      d++;
+      curr = folderMap.get(curr.parent_id);
+    }
+    return d;
+  };
+
+  // Sort folders from deepest subfolders up to top-level root folders
+  const sortedFolders = [...folders].sort((a, b) => getDepth(b.id) - getDepth(a.id));
+  const studentPcaids = Array.from(new Set(updated.map(r => r.student_pcaid)));
+
+  for (const pcaid of studentPcaids) {
+    for (const parentFolder of sortedFolders) {
+      const directChildren = folders.filter(f => f.parent_id === parentFolder.id);
+      if (directChildren.length === 0) continue; // Skip leaf folders
+
+      const activeChildRecords = directChildren
+        .map(child => updated.find(r => r.student_pcaid === pcaid && r.folder_id === child.id))
+        .filter((r): r is StudentFolderAccess => !!r && r.is_enabled);
+
+      const parentIndex = updated.findIndex(r => r.student_pcaid === pcaid && r.folder_id === parentFolder.id);
+
+      if (activeChildRecords.length > 0) {
+        let isUnlimited = false;
+        let maxExpiresAt: string | null = null;
+        let chosenPreset = activeChildRecords[0].duration_preset || 'unlimited';
+
+        for (const childRec of activeChildRecords) {
+          if (!childRec.expires_at || childRec.duration_preset === 'unlimited') {
+            isUnlimited = true;
+            break;
+          }
+          if (!maxExpiresAt || new Date(childRec.expires_at) > new Date(maxExpiresAt)) {
+            maxExpiresAt = childRec.expires_at;
+            chosenPreset = childRec.duration_preset;
+          }
+        }
+
+        const finalExpiresAt = isUnlimited ? null : maxExpiresAt;
+        const finalPreset = isUnlimited ? 'unlimited' : chosenPreset;
+
+        if (parentIndex >= 0) {
+          updated[parentIndex] = {
+            ...updated[parentIndex],
+            is_enabled: true,
+            duration_preset: finalPreset,
+            expires_at: finalExpiresAt,
+            updated_at: new Date().toISOString()
+          };
+        } else {
+          updated.push({
+            id: `acc-${parentFolder.id}-${pcaid}`,
+            student_pcaid: pcaid,
+            folder_id: parentFolder.id,
+            is_enabled: true,
+            duration_preset: finalPreset,
+            expires_at: finalExpiresAt,
+            updated_at: new Date().toISOString()
+          });
+        }
+      } else {
+        if (parentIndex >= 0) {
+          updated[parentIndex] = {
+            ...updated[parentIndex],
+            is_enabled: false,
+            duration_preset: '0',
+            expires_at: null,
+            updated_at: new Date().toISOString()
+          };
+        }
+      }
+    }
+  }
+
+  return updated;
+}
+
 export default function AppActivation() {
   const { user } = useAuth();
   const location = useLocation();
   const [activeTab, setActiveTab] = useState<'folders' | 'student-access' | 'api-docs'>('folders');
+
+  // Duration preset state
+  const [selectedDurationPreset, setSelectedDurationPreset] = useState<string>('unlimited');
 
   // Folders & Resources State
   const [folders, setFolders] = useState<AppFolder[]>([]);
@@ -754,7 +890,7 @@ export default function AppActivation() {
   // Student Access Controls
   const isFolderEnabledForStudent = (studentPcaid: string, folderId: string) => {
     const record = accessRecords.find(a => a.student_pcaid === studentPcaid && a.folder_id === folderId);
-    if (!record) return true; // Default enabled unless explicitly disabled
+    if (!record) return false; // Default disabled if no record in database
     return record.is_enabled;
   };
 
@@ -762,6 +898,7 @@ export default function AppActivation() {
     const targetFolderIds = cascade ? getAllDescendantFolderIds(folderId, folders) : [folderId];
     const currentStatus = isFolderEnabledForStudent(studentPcaid, folderId);
     const newStatus = !currentStatus;
+    const computedExpires = newStatus ? computeExpiresAt(selectedDurationPreset) : null;
 
     let updated = [...accessRecords];
 
@@ -771,6 +908,8 @@ export default function AppActivation() {
         updated[existingIndex] = {
           ...updated[existingIndex],
           is_enabled: newStatus,
+          duration_preset: newStatus ? selectedDurationPreset : '0',
+          expires_at: newStatus ? computedExpires : null,
           updated_at: new Date().toISOString()
         };
       } else {
@@ -779,16 +918,20 @@ export default function AppActivation() {
           student_pcaid: studentPcaid,
           folder_id: fId,
           is_enabled: newStatus,
+          duration_preset: newStatus ? selectedDurationPreset : '0',
+          expires_at: newStatus ? computedExpires : null,
           updated_at: new Date().toISOString()
         });
       }
     }
 
-    syncAccessState(updated);
+    syncAccessState(syncParentFolderAccess(updated, folders));
   };
 
   const setAllFoldersAccessForStudent = (studentPcaid: string, enable: boolean) => {
     const otherRecords = accessRecords.filter(a => a.student_pcaid !== studentPcaid);
+    const computedExpires = enable ? computeExpiresAt(selectedDurationPreset) : null;
+
     const newStudentRecords: StudentFolderAccess[] = folders.map(f => {
       const existing = accessRecords.find(a => a.student_pcaid === studentPcaid && a.folder_id === f.id);
       return {
@@ -796,13 +939,14 @@ export default function AppActivation() {
         student_pcaid: studentPcaid,
         folder_id: f.id,
         is_enabled: enable,
+        duration_preset: enable ? selectedDurationPreset : '0',
+        expires_at: enable ? computedExpires : null,
         updated_at: new Date().toISOString()
       };
     });
 
     const updated = [...otherRecords, ...newStudentRecords];
-    syncAccessState(updated);
-    toast.info(`${enable ? 'Enabled' : 'Disabled'} all folders for student.`);
+    syncAccessState(syncParentFolderAccess(updated, folders));
   };
 
   const areAllFoldersDisabledForStudent = (studentPcaid: string) => {
@@ -862,6 +1006,7 @@ export default function AppActivation() {
     const targetFolderIds = getAllDescendantFolderIds(folderId, folders);
     const currentStatus = getBulkFolderStatus(folderId);
     const newStatus = currentStatus !== 'all';
+    const computedExpires = newStatus ? computeExpiresAt(selectedDurationPreset) : null;
 
     let updated = [...accessRecords];
 
@@ -872,6 +1017,8 @@ export default function AppActivation() {
           updated[existingIndex] = {
             ...updated[existingIndex],
             is_enabled: newStatus,
+            duration_preset: newStatus ? selectedDurationPreset : '0',
+            expires_at: newStatus ? computedExpires : null,
             updated_at: new Date().toISOString()
           };
         } else {
@@ -880,13 +1027,15 @@ export default function AppActivation() {
             student_pcaid: pcaid,
             folder_id: fId,
             is_enabled: newStatus,
+            duration_preset: newStatus ? selectedDurationPreset : '0',
+            expires_at: newStatus ? computedExpires : null,
             updated_at: new Date().toISOString()
           });
         }
       }
     }
 
-    syncAccessState(updated);
+    syncAccessState(syncParentFolderAccess(updated, folders));
   };
 
   const bulkSetAllFoldersAccess = (enable: boolean) => {
@@ -894,6 +1043,7 @@ export default function AppActivation() {
 
     const pcaidSet = new Set(selectedStudentPcaids);
     const otherRecords = accessRecords.filter(a => !pcaidSet.has(a.student_pcaid));
+    const computedExpires = enable ? computeExpiresAt(selectedDurationPreset) : null;
 
     const newRecords: StudentFolderAccess[] = [];
 
@@ -905,14 +1055,15 @@ export default function AppActivation() {
           student_pcaid: pcaid,
           folder_id: f.id,
           is_enabled: enable,
+          duration_preset: enable ? selectedDurationPreset : '0',
+          expires_at: enable ? computedExpires : null,
           updated_at: new Date().toISOString()
         });
       }
     }
 
     const updated = [...otherRecords, ...newRecords];
-    syncAccessState(updated);
-    toast.info(`${enable ? 'Enabled' : 'Disabled'} all folders for ${selectedStudentPcaids.length} students.`);
+    syncAccessState(syncParentFolderAccess(updated, folders));
   };
 
   const areAllFoldersDisabledForBulk = () => {
@@ -928,14 +1079,21 @@ export default function AppActivation() {
     setSavingAccess(true);
 
     try {
-      const studentRecords = accessRecords.filter(a => a.student_pcaid === student.pcaid);
+      const currentSynced = syncParentFolderAccess(accessRecords, folders);
+      const studentRecords = currentSynced.filter(a => a.student_pcaid === student.pcaid);
       const upsertRows = folders.map(f => {
         const existing = studentRecords.find(a => a.folder_id === f.id);
+        const isEnabled = existing ? existing.is_enabled : false;
+        const preset = isEnabled ? (existing?.duration_preset && existing.duration_preset !== '0' ? existing.duration_preset : selectedDurationPreset) : '0';
+        const expiresAt = isEnabled ? (existing?.expires_at !== undefined ? existing.expires_at : computeExpiresAt(preset)) : null;
+
         return {
           id: existing?.id || crypto.randomUUID(),
           student_pcaid: student.pcaid,
           folder_id: f.id,
-          is_enabled: existing ? existing.is_enabled : true,
+          is_enabled: isEnabled,
+          duration_preset: preset,
+          expires_at: expiresAt,
           updated_at: new Date().toISOString()
         };
       });
@@ -949,8 +1107,8 @@ export default function AppActivation() {
           if (retry.error) throw retry.error;
         }
 
-        const otherRecords = accessRecords.filter(a => a.student_pcaid !== student.pcaid);
-        syncAccessState([...otherRecords, ...upsertRows]);
+        const otherRecords = currentSynced.filter(a => a.student_pcaid !== student.pcaid);
+        syncAccessState(syncParentFolderAccess([...otherRecords, ...upsertRows], folders));
       }
 
       if (user) {
@@ -976,16 +1134,23 @@ export default function AppActivation() {
     setSavingAccess(true);
 
     try {
+      const currentSynced = syncParentFolderAccess(accessRecords, folders);
       const pcaidSet = new Set(selectedStudentPcaids);
       const upsertRows: any[] = [];
       for (const pcaid of selectedStudentPcaids) {
         for (const f of folders) {
-          const existing = accessRecords.find(a => a.student_pcaid === pcaid && a.folder_id === f.id);
+          const existing = currentSynced.find(a => a.student_pcaid === pcaid && a.folder_id === f.id);
+          const isEnabled = existing ? existing.is_enabled : false;
+          const preset = isEnabled ? (existing?.duration_preset && existing.duration_preset !== '0' ? existing.duration_preset : selectedDurationPreset) : '0';
+          const expiresAt = isEnabled ? (existing?.expires_at !== undefined ? existing.expires_at : computeExpiresAt(preset)) : null;
+
           upsertRows.push({
             id: existing?.id || crypto.randomUUID(),
             student_pcaid: pcaid,
             folder_id: f.id,
-            is_enabled: existing ? existing.is_enabled : true,
+            is_enabled: isEnabled,
+            duration_preset: preset,
+            expires_at: expiresAt,
             updated_at: new Date().toISOString()
           });
         }
@@ -1000,8 +1165,8 @@ export default function AppActivation() {
           if (retry.error) throw retry.error;
         }
 
-        const otherRecords = accessRecords.filter(a => !pcaidSet.has(a.student_pcaid));
-        syncAccessState([...otherRecords, ...upsertRows]);
+        const otherRecords = currentSynced.filter(a => !pcaidSet.has(a.student_pcaid));
+        syncAccessState(syncParentFolderAccess([...otherRecords, ...upsertRows], folders));
       }
 
       if (user) {
@@ -1039,9 +1204,15 @@ export default function AppActivation() {
 
     let isEnabled = false;
     let bulkStatus: 'all' | 'none' | 'mixed' = 'none';
+    let singleRecord: StudentFolderAccess | undefined;
+    let expInfo: ReturnType<typeof getAccessExpirationInfo> = { status: 'disabled', label: 'Disabled' };
 
     if (isSingle) {
+      singleRecord = accessRecords.find(a => a.student_pcaid === selectedStudents[0].pcaid && a.folder_id === f.id);
       isEnabled = isFolderEnabledForStudent(selectedStudents[0].pcaid, f.id);
+      if (isEnabled) {
+        expInfo = getAccessExpirationInfo(singleRecord);
+      }
     } else if (isBulk) {
       bulkStatus = getBulkFolderStatus(f.id);
       isEnabled = bulkStatus === 'all';
@@ -1053,7 +1224,9 @@ export default function AppActivation() {
           className={`p-3.5 rounded-xl border transition-all flex items-center justify-between ${
             isSingle
               ? isEnabled
-                ? 'bg-white dark:bg-gray-800/90 border-gray-200 dark:border-gray-700 shadow-2xs'
+                ? expInfo.status === 'expired'
+                  ? 'bg-red-50/80 dark:bg-red-950/40 border-red-200 dark:border-red-900/60 shadow-2xs'
+                  : 'bg-white dark:bg-gray-800/90 border-gray-200 dark:border-gray-700 shadow-2xs'
                 : 'bg-gray-50/70 dark:bg-gray-900/40 border-gray-100 dark:border-gray-800/80 opacity-70'
               : bulkStatus === 'all'
                 ? 'bg-emerald-50/80 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800/80 shadow-2xs'
@@ -1083,7 +1256,11 @@ export default function AppActivation() {
             <div
               className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
                 isSingle
-                  ? isEnabled ? 'bg-amber-100 text-amber-600 dark:bg-amber-950/60' : 'bg-gray-200 text-gray-400 dark:bg-gray-800'
+                  ? isEnabled 
+                    ? expInfo.status === 'expired'
+                      ? 'bg-red-100 text-red-600 dark:bg-red-950/60'
+                      : 'bg-amber-100 text-amber-600 dark:bg-amber-950/60' 
+                    : 'bg-gray-200 text-gray-400 dark:bg-gray-800'
                   : bulkStatus === 'all'
                     ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/70'
                     : bulkStatus === 'mixed'
@@ -1099,6 +1276,19 @@ export default function AppActivation() {
                 <h4 className={`text-xs text-gray-900 dark:text-white truncate ${depth === 0 ? 'font-bold text-sm' : 'font-semibold'}`}>
                   {f.name}
                 </h4>
+
+                {isSingle && isEnabled && (
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 ${
+                    expInfo.status === 'expired'
+                      ? 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300 border border-red-200'
+                      : expInfo.status === 'active'
+                        ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border border-amber-200'
+                        : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-200'
+                  }`}>
+                    <Clock size={10} />
+                    <span>{expInfo.label}</span>
+                  </span>
+                )}
 
                 {isBulk && (
                   <span className={`text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider ${
@@ -1124,8 +1314,92 @@ export default function AppActivation() {
             </div>
           </div>
 
-          {/* Toggle Switch */}
+          {/* Controls: Duration Selector & Toggle Switch */}
           <div className="flex items-center gap-2 shrink-0">
+            {isSingle && isEnabled && (
+              <select
+                value={singleRecord?.duration_preset || 'unlimited'}
+                onChange={(e) => {
+                  e.stopPropagation();
+                  const preset = e.target.value;
+                  const targetFolderIds = getAllDescendantFolderIds(f.id, folders);
+                  const newExpiresAt = computeExpiresAt(preset);
+                  const studentPcaid = selectedStudents[0].pcaid;
+
+                  let updated = [...accessRecords];
+                  for (const targetId of targetFolderIds) {
+                    const idx = updated.findIndex(a => a.student_pcaid === studentPcaid && a.folder_id === targetId);
+                    if (idx >= 0) {
+                      updated[idx] = {
+                        ...updated[idx],
+                        is_enabled: true,
+                        duration_preset: preset,
+                        expires_at: newExpiresAt,
+                        updated_at: new Date().toISOString()
+                      };
+                    } else {
+                      updated.push({
+                        id: `acc-${targetId}-${studentPcaid}`,
+                        student_pcaid: studentPcaid,
+                        folder_id: targetId,
+                        is_enabled: true,
+                        duration_preset: preset,
+                        expires_at: newExpiresAt,
+                        updated_at: new Date().toISOString()
+                      });
+                    }
+                  }
+                  syncAccessState(syncParentFolderAccess(updated, folders));
+                }}
+                className="text-[11px] font-semibold bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1 text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-1 focus:ring-teal-500 cursor-pointer"
+                title="Change activation duration for this folder"
+              >
+                {DURATION_PRESETS.map(preset => (
+                  <option key={preset.id} value={preset.id}>
+                    {preset.label}
+                  </option>
+                ))}
+              </select>
+            )}
+
+            {isBulk && bulkStatus !== 'none' && (
+              <select
+                onChange={(e) => {
+                  e.stopPropagation();
+                  const preset = e.target.value;
+                  const targetFolderIds = getAllDescendantFolderIds(f.id, folders);
+                  const newExpiresAt = computeExpiresAt(preset);
+
+                  let updated = [...accessRecords];
+                  for (const pcaid of selectedStudentPcaids) {
+                    for (const targetId of targetFolderIds) {
+                      const idx = updated.findIndex(a => a.student_pcaid === pcaid && a.folder_id === targetId);
+                      if (idx >= 0) {
+                        updated[idx] = {
+                          ...updated[idx],
+                          duration_preset: preset,
+                          expires_at: newExpiresAt,
+                          updated_at: new Date().toISOString()
+                        };
+                      }
+                    }
+                  }
+                  syncAccessState(syncParentFolderAccess(updated, folders));
+                  toast.info(`Updated duration preset to "${DURATION_PRESETS.find(p=>p.id===preset)?.label}" for selected folder.`);
+                }}
+                defaultValue=""
+                className="text-[11px] font-semibold bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1 text-gray-700 dark:text-gray-300 focus:outline-none cursor-pointer"
+                title="Set duration preset across selected students for this folder"
+              >
+                <option value="" disabled>Set Duration...</option>
+                {DURATION_PRESETS.map(preset => (
+                  <option key={preset.id} value={preset.id}>
+                    {preset.label}
+                  </option>
+                ))}
+              </select>
+            )}
+
             <button
               type="button"
               onClick={() => {
@@ -1787,14 +2061,11 @@ export default function AppActivation() {
                   </div>
                 </div>
 
+
+
                 {/* Folder Permissions Tree */}
                 <div className="flex-1 overflow-y-auto space-y-3 pr-1 custom-scrollbar">
-                  <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50 rounded-xl p-3 text-xs text-amber-800 dark:text-amber-200 flex items-start gap-2 mb-4">
-                    <Info size={16} className="shrink-0 mt-0.5 text-amber-600" />
-                    <span>
-                      Toggle folders below to grant or revoke mobile app video access for <strong>{selectedStudents[0].name}</strong>. Enabled folders stream immediately on their mobile app.
-                    </span>
-                  </div>
+
 
                   {rootFolders.length === 0 ? (
                     <div className="text-center py-10 text-xs text-gray-400">
@@ -1880,12 +2151,14 @@ export default function AppActivation() {
                 </div>
 
                 {/* Info Notice */}
-                <div className="bg-teal-50 dark:bg-teal-950/40 border border-teal-200 dark:border-teal-800 rounded-xl p-3 text-xs text-teal-900 dark:text-teal-200 flex items-start gap-2 mb-4">
+                <div className="bg-teal-50 dark:bg-teal-950/40 border border-teal-200 dark:border-teal-800 rounded-xl p-3 text-xs text-teal-900 dark:text-teal-200 flex items-start gap-2 mb-3">
                   <Sparkles size={16} className="shrink-0 mt-0.5 text-teal-600" />
                   <span>
                     <strong>Bulk Management Active:</strong> Toggling any folder in the tree structure below will grant or revoke access for all <strong>{selectedStudents.length} selected students</strong> at once.
                   </span>
                 </div>
+
+
 
                 {/* Folder Permissions Tree in Bulk Mode */}
                 <div className="flex-1 overflow-y-auto space-y-3 pr-1 custom-scrollbar">

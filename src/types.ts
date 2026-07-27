@@ -175,6 +175,8 @@ export interface StudentFolderAccess {
   student_pcaid: string;
   folder_id: string;
   is_enabled: boolean;
+  expires_at?: string | null;
+  duration_preset?: string | null;
   updated_at: string;
 }
 
