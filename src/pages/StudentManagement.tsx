@@ -30,7 +30,16 @@ import {
   Sparkles,
   User,
   ArrowRight,
-  Mail
+  ArrowLeft,
+  Mail,
+  ChevronRight,
+  Folder,
+  FolderCheck,
+  Smartphone,
+  CheckSquare,
+  Square,
+  KeyRound,
+  Clock
 } from 'lucide-react';
 import { 
   Student, 
@@ -38,8 +47,17 @@ import {
   ClassItem, 
   PackageItem, 
   JoinedBatchItem,
-  SRI_LANKAN_DISTRICTS 
+  SRI_LANKAN_DISTRICTS,
+  AppFolder,
+  StudentFolderAccess
 } from '../types';
+import { 
+  DURATION_PRESETS, 
+  computeExpiresAt, 
+  getAccessExpirationInfo, 
+  syncParentFolderAccess, 
+  getAllDescendantFolderIds 
+} from './AppActivation';
 import { cn, copyToClipboard, formatDate, exportToExcel } from '../lib/utils';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
@@ -78,18 +96,36 @@ const DISTRICT_NUMBERS: Record<string, string> = {
 
 const DURATIONS = [
   { label: '0', value: 0 },
+  { label: '1 day', value: 1 },
+  { label: '2 days', value: 2 },
   { label: '1 week', value: 7 },
   { label: '2 weeks', value: 14 },
   { label: '1 month', value: 30 },
+  { label: '2 months', value: 60 },
   { label: '3 months', value: 90 },
   { label: '6 months', value: 180 },
-  { label: '1 year', value: 365 }
+  { label: '1 year', value: 365 },
+  { label: '2 years', value: 730 },
+  { label: 'unlimited', value: null }
 ];
 
 const calculateExpiry = (activationDate: string, durationLabel: string) => {
+  if (!activationDate) return '';
   const date = new Date(activationDate);
-  const found = DURATIONS.find(d => d.label === durationLabel);
-  const duration = found !== undefined ? found.value : 30;
+  if (isNaN(date.getTime())) return '';
+
+  const cleanLabel = (durationLabel || '').trim().toLowerCase();
+  if (cleanLabel === 'unlimited' || cleanLabel === 'no expiration') {
+    date.setFullYear(date.getFullYear() + 100);
+    return date.toISOString().split('T')[0];
+  }
+
+  const found = DURATIONS.find(d => {
+    const l = d.label.toLowerCase();
+    return l === cleanLabel || l.replace(/\s+/g, '') === cleanLabel.replace(/\s+/g, '');
+  });
+
+  const duration = (found !== undefined && found.value !== null) ? found.value : 30;
   date.setDate(date.getDate() + duration);
   return date.toISOString().split('T')[0];
 };
@@ -207,6 +243,9 @@ export function StudentForm({ isModal = false, modalStudent = null, modalLead = 
   // Edit Modal State
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [editModalStudent, setEditModalStudent] = useState<Student | null>(null);
+
+  // Tabbed Layout State inside Student Form
+  const [formActiveTab, setFormActiveTab] = useState<'personal' | 'zoom' | 'activation'>('personal');
 
   // Zoom Registration State
   const [showZoomReg, setShowZoomReg] = useState(false);
@@ -327,6 +366,318 @@ export function StudentForm({ isModal = false, modalStudent = null, modalLead = 
       gender: editStudent?.gender || leadData?.gender || ''
     };
   });
+
+  // App Activation Folder Access State inside Student Form
+  const [appFolders, setAppFolders] = useState<AppFolder[]>([]);
+  const [appResources, setAppResources] = useState<{ id: string; folder_id: string }[]>([]);
+  const [studentAccessRecords, setStudentAccessRecords] = useState<StudentFolderAccess[]>([]);
+  const [loadingAppAccess, setLoadingAppAccess] = useState(false);
+  const [savingAppAccess, setSavingAppAccess] = useState(false);
+  const [activationDurationPreset, setActivationDurationPreset] = useState<string>('1_month');
+  const [expandedActivationFolders, setExpandedActivationFolders] = useState<Record<string, boolean>>({});
+
+  const fetchStudentAppAccess = async (pcaid: string) => {
+    if (!pcaid) return;
+    setLoadingAppAccess(true);
+    try {
+      const [foldersRes, accessRes, resourcesRes] = await Promise.all([
+        supabase.from('app_folder').select('*').order('created_at', { ascending: true }),
+        supabase.from('student_folder_access').select('*').eq('student_pcaid', pcaid),
+        supabase.from('app_resource').select('id, folder_id')
+      ]);
+      if (foldersRes.data) setAppFolders(foldersRes.data as AppFolder[]);
+      if (accessRes.data) setStudentAccessRecords(accessRes.data as StudentFolderAccess[]);
+      if (resourcesRes.data) setAppResources(resourcesRes.data as any[]);
+    } catch (err: any) {
+      console.error('Failed to fetch student app access:', err);
+    } finally {
+      setLoadingAppAccess(false);
+    }
+  };
+
+  useEffect(() => {
+    if (formActiveTab === 'activation' && studentData.pcaid) {
+      fetchStudentAppAccess(studentData.pcaid);
+    }
+  }, [formActiveTab, studentData.pcaid]);
+
+  const isFolderEnabledForCurrentStudent = (folderId: string) => {
+    const rec = studentAccessRecords.find(a => a.student_pcaid === studentData.pcaid && a.folder_id === folderId);
+    return !!rec?.is_enabled;
+  };
+
+  const toggleStudentFolderAccess = (folderId: string, cascade = true) => {
+    const pcaid = studentData.pcaid;
+    if (!pcaid) return;
+
+    const targetIds = cascade ? getAllDescendantFolderIds(folderId, appFolders) : [folderId];
+    const currentStatus = isFolderEnabledForCurrentStudent(folderId);
+    const newStatus = !currentStatus;
+    const computedExpires = newStatus ? computeExpiresAt(activationDurationPreset) : null;
+
+    let updated = [...studentAccessRecords];
+
+    for (const fId of targetIds) {
+      const idx = updated.findIndex(a => a.student_pcaid === pcaid && a.folder_id === fId);
+      if (idx >= 0) {
+        updated[idx] = {
+          ...updated[idx],
+          is_enabled: newStatus,
+          duration_preset: newStatus ? activationDurationPreset : '0',
+          expires_at: newStatus ? computedExpires : null,
+          updated_at: new Date().toISOString()
+        };
+      } else {
+        updated.push({
+          id: `acc-${fId}-${pcaid}`,
+          student_pcaid: pcaid,
+          folder_id: fId,
+          is_enabled: newStatus,
+          duration_preset: newStatus ? activationDurationPreset : '0',
+          expires_at: newStatus ? computedExpires : null,
+          updated_at: new Date().toISOString()
+        });
+      }
+    }
+
+    setStudentAccessRecords(syncParentFolderAccess(updated, appFolders));
+  };
+
+  const setAllFoldersAccessForCurrentStudent = (enable: boolean) => {
+    const pcaid = studentData.pcaid;
+    if (!pcaid) return;
+
+    const computedExpires = enable ? computeExpiresAt(activationDurationPreset) : null;
+
+    const newRecords: StudentFolderAccess[] = appFolders.map(f => {
+      const existing = studentAccessRecords.find(a => a.student_pcaid === pcaid && a.folder_id === f.id);
+      return {
+        id: existing?.id || crypto.randomUUID(),
+        student_pcaid: pcaid,
+        folder_id: f.id,
+        is_enabled: enable,
+        duration_preset: enable ? activationDurationPreset : '0',
+        expires_at: enable ? computedExpires : null,
+        updated_at: new Date().toISOString()
+      };
+    });
+
+    setStudentAccessRecords(syncParentFolderAccess(newRecords, appFolders));
+  };
+
+  const handleSaveStudentAppAccess = async () => {
+    const pcaid = studentData.pcaid;
+    if (!pcaid) {
+      toast.error('PCA ID is required to save App Activation permissions.');
+      return;
+    }
+
+    setSavingAppAccess(true);
+    try {
+      const upsertRows = appFolders.map(f => {
+        const existing = studentAccessRecords.find(a => a.student_pcaid === pcaid && a.folder_id === f.id);
+        const isEnabled = existing ? existing.is_enabled : false;
+        const preset = isEnabled ? (existing?.duration_preset && existing.duration_preset !== '0' ? existing.duration_preset : '1_month') : '0';
+        const expiresAt = isEnabled ? (existing?.expires_at ? existing.expires_at : computeExpiresAt(preset)) : null;
+
+        return {
+          id: (existing?.id && !existing.id.startsWith('acc-')) ? existing.id : crypto.randomUUID(),
+          student_pcaid: pcaid,
+          folder_id: f.id,
+          is_enabled: isEnabled,
+          duration_preset: preset,
+          expires_at: expiresAt,
+          updated_at: new Date().toISOString()
+        };
+      });
+
+      if (upsertRows.length > 0) {
+        let { error } = await supabase.from('student_folder_access').upsert(upsertRows, { onConflict: 'student_pcaid,folder_id' });
+        if (error) {
+          console.warn('Upsert failed, falling back to delete and insert:', error.message);
+          await supabase.from('student_folder_access').delete().eq('student_pcaid', pcaid);
+          const retry = await supabase.from('student_folder_access').insert(upsertRows);
+          if (retry.error) throw retry.error;
+        }
+      }
+
+      await fetchStudentAppAccess(pcaid);
+
+      if (user) {
+        logTransaction({
+          admin_username: user.username,
+          action_type: 'UPDATE_STUDENT_FOLDER_ACCESS',
+          entity_type: 'student_folder_access',
+          entity_id: pcaid,
+          details: `Updated App Activation module access for student ${studentData.name || pcaid}`
+        });
+      }
+
+      toast.success(`App Activation permissions saved for ${studentData.name || pcaid}!`);
+    } catch (err: any) {
+      console.error('Error saving app access:', err);
+      toast.error('Failed to save access permissions: ' + (err.message || 'Unknown error'));
+    } finally {
+      setSavingAppAccess(false);
+    }
+  };
+
+  const renderActivationFolderTree = (f: AppFolder, depth = 0): React.ReactNode => {
+    const subfolders = appFolders.filter(sub => sub.parent_id === f.id);
+    const hasSubfolders = subfolders.length > 0;
+    const isExpanded = expandedActivationFolders[f.id] !== false;
+    const isEnabled = isFolderEnabledForCurrentStudent(f.id);
+    const record = studentAccessRecords.find(a => a.student_pcaid === studentData.pcaid && a.folder_id === f.id);
+    const expInfo = getAccessExpirationInfo(record);
+    const folderResCount = appResources.filter(r => r.folder_id === f.id).length;
+
+    return (
+      <div key={f.id} className="space-y-2">
+        <div
+          className={cn(
+            "p-3.5 rounded-2xl border transition-all flex items-center justify-between gap-3",
+            isEnabled
+              ? expInfo.status === 'expired'
+                ? "bg-red-50/80 dark:bg-red-950/40 border-red-200 dark:border-red-900/60 shadow-2xs"
+                : "bg-white dark:bg-gray-800/90 border-gray-200 dark:border-gray-700 shadow-2xs"
+              : "bg-gray-50/70 dark:bg-gray-900/40 border-gray-100 dark:border-gray-800/80 opacity-70"
+          )}
+        >
+          <div className="flex items-center gap-2.5 min-w-0 flex-1 pr-2">
+            {hasSubfolders ? (
+              <button
+                type="button"
+                onClick={() => setExpandedActivationFolders(prev => ({ ...prev, [f.id]: !isExpanded }))}
+                className="p-1 hover:bg-teal-100 dark:hover:bg-teal-900/50 rounded transition-colors text-gray-500 hover:text-teal-600 shrink-0 cursor-pointer"
+                title={isExpanded ? "Collapse Subfolders" : "Expand Subfolders"}
+              >
+                {isExpanded ? <ChevronDown size={16} className="text-teal-600 dark:text-teal-400" /> : <ChevronRight size={16} />}
+              </button>
+            ) : (
+              <div className="w-6 shrink-0" />
+            )}
+
+            <div className={cn(
+              "w-9 h-9 rounded-xl flex items-center justify-center shrink-0",
+              isEnabled
+                ? expInfo.status === 'expired'
+                  ? "bg-red-100 text-red-600 dark:bg-red-950/60"
+                  : "bg-amber-100 text-amber-600 dark:bg-amber-950/60"
+                : "bg-gray-200 text-gray-400 dark:bg-gray-800"
+            )}>
+              <Folder size={18} />
+            </div>
+
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h4 className={cn(
+                  "text-gray-900 dark:text-white truncate",
+                  depth === 0 ? "font-bold text-sm" : "font-semibold text-xs"
+                )}>
+                  {f.name}
+                </h4>
+
+                {hasSubfolders && (
+                  <span className="text-[10px] bg-teal-50 dark:bg-teal-950/60 text-teal-700 dark:text-teal-300 px-2 py-0.5 rounded-md font-bold border border-teal-200/50 dark:border-teal-800/50">
+                    {subfolders.length} subfolder{subfolders.length > 1 ? 's' : ''}
+                  </span>
+                )}
+
+                {isEnabled && (
+                  <span className={cn(
+                    "text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1",
+                    expInfo.status === 'expired'
+                      ? "bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300 border border-red-200"
+                      : expInfo.status === 'active'
+                        ? "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border border-amber-200"
+                        : "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-200"
+                  )}>
+                    <Clock size={10} />
+                    <span>{expInfo.label}</span>
+                  </span>
+                )}
+              </div>
+
+              <p className="text-[11px] text-gray-400 truncate mt-0.5">
+                {f.description || `${folderResCount} content items`}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0">
+            {isEnabled && (
+              <select
+                value={record?.duration_preset || '1_month'}
+                onChange={(e) => {
+                  e.stopPropagation();
+                  const preset = e.target.value;
+                  const targetFolderIds = getAllDescendantFolderIds(f.id, appFolders);
+                  const newExpiresAt = computeExpiresAt(preset);
+                  const pcaid = studentData.pcaid;
+                  if (!pcaid) return;
+
+                  let updated = [...studentAccessRecords];
+                  for (const targetId of targetFolderIds) {
+                    const idx = updated.findIndex(a => a.student_pcaid === pcaid && a.folder_id === targetId);
+                    if (idx >= 0) {
+                      updated[idx] = {
+                        ...updated[idx],
+                        is_enabled: true,
+                        duration_preset: preset,
+                        expires_at: newExpiresAt,
+                        updated_at: new Date().toISOString()
+                      };
+                    } else {
+                      updated.push({
+                        id: `acc-${targetId}-${pcaid}`,
+                        student_pcaid: pcaid,
+                        folder_id: targetId,
+                        is_enabled: true,
+                        duration_preset: preset,
+                        expires_at: newExpiresAt,
+                        updated_at: new Date().toISOString()
+                      });
+                    }
+                  }
+                  setStudentAccessRecords(syncParentFolderAccess(updated, appFolders));
+                }}
+                className="text-[11px] font-semibold bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1 text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-1 focus:ring-teal-500 cursor-pointer"
+                title="Change activation duration for this folder"
+              >
+                {DURATION_PRESETS.map(preset => (
+                  <option key={preset.id} value={preset.id}>
+                    {preset.label}
+                  </option>
+                ))}
+              </select>
+            )}
+
+            <button
+              type="button"
+              onClick={() => toggleStudentFolderAccess(f.id)}
+              className={cn(
+                "relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none",
+                isEnabled ? "bg-teal-600" : "bg-gray-300 dark:bg-gray-700"
+              )}
+            >
+              <span
+                className={cn(
+                  "pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-xs ring-0 transition duration-200 ease-in-out",
+                  isEnabled ? "translate-x-5" : "translate-x-0"
+                )}
+              />
+            </button>
+          </div>
+        </div>
+
+        {isExpanded && hasSubfolders && (
+          <div className="pl-4 space-y-2 border-l-2 border-teal-100 dark:border-teal-900/40 ml-4 my-1">
+            {subfolders.map(sub => renderActivationFolderTree(sub, depth + 1))}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   // Temporary ID generator state & function
   const [isGeneratingTempId, setIsGeneratingTempId] = useState(false);
@@ -1645,9 +1996,60 @@ export function StudentForm({ isModal = false, modalStudent = null, modalLead = 
   };
 
   return (
-    <div className="max-w-5xl mx-auto space-y-8 pb-12">
-      {/* SECTION 1: STUDENT DATA */}
-      <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100">
+    <div className="max-w-5xl mx-auto space-y-6 pb-12">
+      {/* THREE TAB NAVIGATION BAR */}
+      <div className={cn(
+        "bg-white/95 dark:bg-gray-900/95 p-2.5 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-md flex items-center gap-2 overflow-x-auto z-30 backdrop-blur-md sticky transition-all",
+        isModal ? "top-0" : "top-16"
+      )}>
+        <button
+          type="button"
+          onClick={() => setFormActiveTab('personal')}
+          className={cn(
+            "flex-1 flex items-center justify-center gap-2 px-5 py-3 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer whitespace-nowrap",
+            formActiveTab === 'personal'
+              ? "bg-teal-600 text-white shadow-md shadow-teal-600/20"
+              : "bg-gray-50 dark:bg-gray-800/60 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
+          )}
+        >
+          <UserIcon size={16} />
+          <span>1. Personal Details & Payment</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setFormActiveTab('zoom')}
+          className={cn(
+            "flex-1 flex items-center justify-center gap-2 px-5 py-3 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer whitespace-nowrap",
+            formActiveTab === 'zoom'
+              ? "bg-teal-600 text-white shadow-md shadow-teal-600/20"
+              : "bg-gray-50 dark:bg-gray-800/60 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
+          )}
+        >
+          <Video size={16} />
+          <span>2. Zoom</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setFormActiveTab('activation')}
+          className={cn(
+            "flex-1 flex items-center justify-center gap-2 px-5 py-3 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer whitespace-nowrap",
+            formActiveTab === 'activation'
+              ? "bg-teal-600 text-white shadow-md shadow-teal-600/20"
+              : "bg-gray-50 dark:bg-gray-800/60 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
+          )}
+        >
+          <Smartphone size={16} />
+          <span>3. App Activation</span>
+        </button>
+      </div>
+
+      {/* TAB 1: PERSONAL DETAILS & PAYMENT */}
+      {formActiveTab === 'personal' && (
+        <div className="space-y-8 animate-in fade-in duration-200">
+          {/* SECTION 1: STUDENT DATA */}
+          <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
           <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">
             <UserIcon size={20} className="text-teal-600"/>
@@ -2823,213 +3225,317 @@ export function StudentForm({ isModal = false, modalStudent = null, modalLead = 
           </div>
         </div>
 
-      {/* Zoom registration toggle header / drop box */}
-      <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-5 mt-6 shadow-sm transition-all">
-        <button
-          type="button"
-          onClick={() => setShowZoomReg(!showZoomReg)}
-          className="w-full flex items-center justify-between text-left focus:outline-none select-none cursor-pointer group"
-        >
-          <div className="flex items-start gap-3">
-            <div className="p-2.5 bg-teal-50 dark:bg-teal-950/20 text-teal-650 dark:text-teal-400 rounded-xl">
-              <Video size={20} className={showZoomReg ? "animate-pulse" : ""} />
+          {/* Save Button & Navigation for Personal Details & Payment */}
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-6 border-t border-gray-100 dark:border-gray-800">
+            <span className="text-xs text-gray-500 font-medium">
+              Section 1 & 2: Personal Details & Payment Logging
+            </span>
+            <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
+              <button
+                type="button"
+                onClick={handleSaveAll}
+                disabled={loading}
+                className="flex items-center gap-2 px-8 py-3.5 bg-teal-600 text-white font-bold text-sm rounded-xl hover:bg-teal-700 transition-all active:scale-95 shadow-md shadow-teal-600/20 disabled:opacity-50 cursor-pointer"
+              >
+                {loading ? <RefreshCw className="animate-spin" size={18}/> : <Save size={18}/>}
+                {loading ? 'Processing...' : (editStudent ? 'Update Details' : 'Save Details')}
+              </button>
+              <button
+                type="button"
+                onClick={() => setFormActiveTab('zoom')}
+                className="flex items-center gap-2 px-5 py-3.5 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-200 font-bold text-sm rounded-xl hover:bg-gray-200 dark:hover:bg-gray-700 transition-all cursor-pointer border border-gray-200 dark:border-gray-700"
+              >
+                <span>Next: Zoom</span>
+                <ArrowRight size={16} />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 2: ZOOM REGISTRATION */}
+      {formActiveTab === 'zoom' && (
+        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-6 shadow-sm space-y-6 animate-in fade-in duration-200">
+          <div className="pb-4 border-b border-gray-150 dark:border-gray-800 flex items-center gap-3">
+            <div className="p-3 bg-teal-50 dark:bg-teal-950/40 text-teal-600 dark:text-teal-400 rounded-xl">
+              <Video size={22} />
             </div>
             <div>
-              <span className="text-sm font-black text-gray-850 dark:text-gray-100 flex items-center gap-1.5 uppercase tracking-wider">
-                Register this student on Zoom
-              </span>
-              <span className="block text-xs text-gray-450 dark:text-gray-500 mt-1">
-                Click to expand and register this student for a Zoom Webinar or Meeting before saving their record.
-              </span>
+              <h3 className="text-base font-bold text-gray-900 dark:text-white">Zoom Webinar / Meeting Registration</h3>
+              <p className="text-xs text-gray-500 mt-0.5">Register this student for Zoom webinars and retrieve join URLs</p>
             </div>
           </div>
-          <div className={`p-1.5 rounded-lg bg-gray-50 dark:bg-gray-800 text-gray-400 dark:text-gray-550 group-hover:text-gray-700 dark:group-hover:text-gray-300 transition-all ${showZoomReg ? 'rotate-180 bg-teal-50/50 dark:bg-teal-950/10 text-teal-600' : ''}`}>
-            <ChevronDown size={18} className="transition-transform duration-300" />
-          </div>
-        </button>
 
-        {showZoomReg && (
-          <div className="mt-6 pt-6 border-t border-gray-150 dark:border-gray-800 space-y-5 animate-in fade-in slide-in-from-top-3 duration-200">
-            {/* Zoom Webinar / Meeting Form Details */}
+          <div className="space-y-5">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-              {/* Webinar / Meeting ID */}
+              {/* Webinar Selection */}
               <div className="md:col-span-2">
-                <label className="block text-xs font-black text-gray-400 dark:text-gray-550 uppercase tracking-widest mb-2 flex items-center gap-1.5">
-                  <Video size={14} className="text-teal-650" />
-                  Zoom Webinar / Meeting <span className="text-red-500">*</span>
+                <label className="block text-xs font-black text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-2">
+                  Select Active Webinar / Meeting ID <span className="text-red-500">*</span>
                 </label>
-                <select
-                  required
-                  value={zoomWebinarId}
-                  onChange={(e) => setZoomWebinarId(e.target.value)}
-                  disabled={zoomIsRunning}
-                  className="w-full px-4 py-2.5 bg-gray-50 dark:bg-gray-850 border border-gray-200 dark:border-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500/20 text-gray-850 dark:text-gray-200 font-bold text-sm transition-all"
-                >
-                  <option value="">Select a Webinar or Meeting...</option>
-                  {webinars.map((w) => (
-                    <option key={w.id} value={w.webinar_id}>
-                      {w.webinar_name} ({w.webinar_id})
-                    </option>
-                  ))}
-                </select>
-                {webinars.length === 0 && (
-                  <p className="text-xs text-amber-500 font-medium mt-1.5">
-                    No webinars or meetings found. Please add items in "Add Items" configuration screen.
-                  </p>
+                {webinars.length > 0 ? (
+                  <select
+                    value={zoomWebinarId}
+                    onChange={(e) => setZoomWebinarId(e.target.value)}
+                    disabled={zoomIsRunning}
+                    className="w-full px-4 py-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm font-bold text-gray-800 dark:text-gray-200 focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all shadow-2xs"
+                  >
+                    <option value="">-- Select Webinar / Meeting --</option>
+                    {webinars.map(w => (
+                      <option key={w.id} value={w.webinar_id}>
+                        {w.webinar_name} ({w.webinar_id})
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    type="text"
+                    value={zoomWebinarId}
+                    onChange={(e) => setZoomWebinarId(e.target.value)}
+                    placeholder="Enter Zoom Webinar / Meeting ID (e.g. 84930219481)"
+                    className="w-full px-4 py-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm font-bold text-gray-800 dark:text-gray-200 focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all shadow-2xs"
+                  />
                 )}
               </div>
 
-              {/* First Name (from PCA ID) */}
+              {/* Prefilled First Name (from PCA ID) */}
               <div>
-                <label className="block text-xs font-black text-gray-400 dark:text-gray-550 uppercase tracking-widest mb-2 flex items-center gap-1.5">
-                  <User size={14} className="text-teal-650" />
+                <label className="block text-xs font-bold text-gray-600 dark:text-gray-400 uppercase tracking-wider mb-1">
                   First Name (from PCA ID)
                 </label>
                 <input
                   type="text"
                   readOnly
                   value={studentData.pcaid || ''}
-                  className="w-full px-4 py-2.5 bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-gray-500 dark:text-gray-450 font-bold text-sm select-none cursor-not-allowed"
-                  title="First name automatically uses PCA ID"
+                  className="w-full px-4 py-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-mono font-bold text-gray-700 dark:text-gray-300 cursor-not-allowed"
                 />
               </div>
 
-              {/* Last Name (from Name) */}
+              {/* Prefilled Last Name (from Student Name) */}
               <div>
-                <label className="block text-xs font-black text-gray-400 dark:text-gray-550 uppercase tracking-widest mb-2 flex items-center gap-1.5">
-                  <User size={14} className="text-teal-650" />
-                  Last Name (from Name)
+                <label className="block text-xs font-bold text-gray-600 dark:text-gray-400 uppercase tracking-wider mb-1">
+                  Last Name (from Student Name)
                 </label>
                 <input
                   type="text"
                   readOnly
                   value={studentData.name || ''}
-                  className="w-full px-4 py-2.5 bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-gray-500 dark:text-gray-450 font-bold text-sm select-none cursor-not-allowed"
-                  title="Last name automatically uses Student Name"
+                  className="w-full px-4 py-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-bold text-gray-700 dark:text-gray-300 cursor-not-allowed"
                 />
               </div>
 
-              {/* Email Address (from Email) */}
+              {/* Student Email */}
               <div className="md:col-span-2">
-                <label className="block text-xs font-black text-gray-400 dark:text-gray-550 uppercase tracking-widest mb-2 flex items-center gap-1.5">
-                  <Mail size={14} className="text-teal-650" />
-                  Email Address (from Email)
+                <label className="block text-xs font-bold text-gray-600 dark:text-gray-400 uppercase tracking-wider mb-1">
+                  Student Email
                 </label>
                 <input
                   type="email"
-                  readOnly
                   value={studentData.mail || ''}
-                  className="w-full px-4 py-2.5 bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-gray-500 dark:text-gray-450 font-bold text-sm select-none cursor-not-allowed"
-                  title="Email automatically uses Student Email"
+                  onChange={(e) => setStudentData(prev => ({ ...prev, mail: e.target.value }))}
+                  placeholder="Enter email address"
+                  className="w-full px-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-bold text-gray-800 dark:text-gray-200"
                 />
                 {!studentData.mail && (
                   <p className="text-[11px] text-amber-600 font-bold mt-1.5 flex items-center gap-1">
-                    <AlertTriangle size={12} /> Email is empty. Please enter an email address in the Personal Details section to enable Zoom registration.
+                    <AlertTriangle size={12} /> Email is empty. Please enter an email address to enable Zoom registration.
                   </p>
                 )}
               </div>
             </div>
 
-            {/* Submit registration button */}
+            {/* Submit button */}
             <div className="flex justify-end pt-2">
               <button
                 type="button"
                 onClick={() => handleZoomRegister()}
                 disabled={zoomIsRunning || !zoomWebinarId || !studentData.pcaid || !studentData.name || !studentData.mail}
-                className="flex items-center gap-2 px-6 py-3 bg-teal-600 hover:bg-teal-700 text-white font-black rounded-xl text-xs shadow-sm hover:shadow transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer animate-fade-in"
+                className="flex items-center gap-2 px-8 py-3.5 bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs rounded-xl transition-all shadow-md active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
               >
                 {zoomIsRunning ? (
                   <>
-                    <Loader2 size={14} className="animate-spin" />
-                    <span>Registering on Zoom...</span>
+                    <Loader2 size={16} className="animate-spin" />
+                    <span>REGISTERING ON ZOOM...</span>
                   </>
                 ) : (
                   <>
                     <span>REGISTER ON ZOOM NOW</span>
-                    <ArrowRight size={14} />
+                    <ArrowRight size={16} />
                   </>
                 )}
               </button>
             </div>
 
-            {/* Results */}
-            <AnimatePresence mode="wait">
-              {zoomResult && (
-                <motion.div
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -10 }}
-                  className="bg-gray-50 dark:bg-gray-850 rounded-xl border border-gray-200 dark:border-gray-800 p-5 mt-4"
-                >
-                  <div className="flex items-start gap-3">
-                    {zoomResult.status === "Success" ? (
-                      <div className="p-2 bg-green-50 dark:bg-green-950/20 text-green-600 dark:text-green-400 rounded-lg">
-                        <CheckCircle2 size={20} />
-                      </div>
-                    ) : (
-                      <div className="p-2 bg-red-50 dark:bg-red-950/20 text-red-500 dark:text-red-400 rounded-lg">
-                        <XCircle size={20} />
+            {/* Zoom Result Banner */}
+            {zoomResult && (
+              <div className="mt-4 p-4 rounded-xl border border-teal-200/80 dark:border-teal-800 bg-teal-50/60 dark:bg-teal-950/40">
+                {zoomResult.status === 'Success' ? (
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2 text-green-700 dark:text-green-400 font-bold text-xs">
+                      <CheckCircle2 size={16} />
+                      <span>Student registered successfully on Zoom!</span>
+                    </div>
+                    {zoomResult.joinUrl && (
+                      <div className="flex items-center justify-between gap-3 bg-white dark:bg-gray-850 p-2.5 rounded-lg border border-teal-200/50 dark:border-gray-750">
+                        <span className="text-xs font-mono text-teal-600 dark:text-teal-400 truncate flex-1 select-all">
+                          {zoomResult.joinUrl}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => zoomResult.joinUrl && handleZoomCopy(zoomResult.joinUrl)}
+                          className="flex items-center gap-1 px-3 py-1 bg-teal-600 text-white rounded-lg text-xs font-bold hover:bg-teal-700 transition-colors cursor-pointer"
+                        >
+                          {zoomCopied ? <Check size={14} /> : <Copy size={14} />}
+                          <span>{zoomCopied ? 'Copied' : 'Copy Link'}</span>
+                        </button>
                       </div>
                     )}
-
-                    <div className="flex-1 min-w-0">
-                      <h4 className="text-sm font-bold text-gray-900 dark:text-white flex items-center gap-1.5">
-                        {zoomResult.status === "Success" ? "Registration Successful" : "Registration Failed"}
-                        {zoomResult.status === "Success" && (
-                          <Sparkles size={14} className="text-amber-500 animate-pulse" />
-                        )}
-                      </h4>
-                      <p className="text-[11px] text-gray-400 dark:text-gray-550 mt-0.5">
-                        Result for: <span className="font-semibold text-gray-600 dark:text-gray-300">{zoomResult.email}</span>
-                      </p>
-
-                      {zoomResult.status === "Success" && zoomResult.joinUrl ? (
-                        <div className="mt-4 space-y-2">
-                          <p className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">
-                            Student Join URL:
-                          </p>
-                          <div className="flex items-center gap-2 bg-white dark:bg-gray-900 p-2 rounded-lg border border-gray-150 dark:border-gray-800">
-                            <span className="text-[11px] font-mono text-teal-600 dark:text-teal-400 truncate flex-1 select-all">
-                              {zoomResult.joinUrl}
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() => zoomResult.joinUrl && handleZoomCopy(zoomResult.joinUrl)}
-                              className="p-1.5 bg-gray-50 hover:bg-gray-100 dark:bg-gray-850 dark:hover:bg-gray-800 text-gray-500 hover:text-gray-850 dark:hover:text-gray-200 rounded-md border border-gray-200 dark:border-gray-750 transition-colors cursor-pointer"
-                              title="Copy link"
-                            >
-                              {zoomCopied ? <Check size={12} className="text-green-500" /> : <Copy size={12} />}
-                            </button>
-                          </div>
-                          <p className="text-[10px] text-gray-400 italic">
-                            Success! The Join URL is saved and can be shared with the student directly.
-                          </p>
-                        </div>
-                      ) : (
-                        <div className="mt-3 bg-red-50/50 dark:bg-red-950/10 border border-red-100/50 dark:border-red-900/10 rounded-lg p-3 text-xs text-red-600 dark:text-red-400">
-                          <strong>Error:</strong> {zoomResult.error || "Unknown Error Response from Zoom"}
-                        </div>
-                      )}
-                    </div>
                   </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
+                ) : (
+                  <div className="flex items-center gap-2 text-red-600 dark:text-red-400 font-bold text-xs">
+                    <XCircle size={16} />
+                    <span>Failed: {zoomResult.error || 'Unknown error'}</span>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
-        )}
-      </div>
 
-      {/* Save Button */}
-      <div className="flex justify-end pt-6">
-        <button
-          onClick={handleSaveAll}
-          disabled={loading}
-          className="flex items-center gap-2 px-10 py-4 bg-teal-600 text-white font-black text-lg rounded-2xl hover:bg-teal-700 transition-all active:scale-95 shadow-xl shadow-teal-600/30 disabled:opacity-50"
-        >
-          {loading ? <RefreshCw className="animate-spin" size={24}/> : <Save size={24}/>}
-          {loading ? 'Processing...' : (editStudent ? 'Update' : 'Save')}
-        </button>
-      </div>
+          {/* Navigation Controls for Tab 2 */}
+          <div className="flex items-center justify-between gap-4 pt-4 border-t border-gray-150 dark:border-gray-800">
+            <button
+              type="button"
+              onClick={() => setFormActiveTab('personal')}
+              className="flex items-center gap-2 px-4 py-2.5 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-200 font-bold text-xs rounded-xl hover:bg-gray-200 dark:hover:bg-gray-700 transition-all cursor-pointer border border-gray-200 dark:border-gray-700"
+            >
+              <ArrowLeft size={16} />
+              <span>Back: Personal Details</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setFormActiveTab('activation')}
+              className="flex items-center gap-2 px-5 py-2.5 bg-teal-600 text-white font-bold text-xs rounded-xl hover:bg-teal-700 transition-all cursor-pointer shadow-md shadow-teal-600/20"
+            >
+              <span>Next: App Activation</span>
+              <ArrowRight size={16} />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 3: APP ACTIVATION & MODULE FOLDERS */}
+      {formActiveTab === 'activation' && (
+        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-6 shadow-sm space-y-6 animate-in fade-in duration-200">
+          {!studentData.pcaid ? (
+            <div className="p-8 text-center bg-amber-50/80 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-2xl">
+              <AlertTriangle size={32} className="mx-auto text-amber-500 mb-2" />
+              <h4 className="text-sm font-bold text-amber-900 dark:text-amber-200">PCA ID Required</h4>
+              <p className="text-xs text-amber-700 dark:text-amber-300 mt-1 max-w-md mx-auto">
+                Please set and save the student's PCA ID in the "Personal Details & Payment" tab first before configuring App Activation module permissions.
+              </p>
+              <button
+                type="button"
+                onClick={() => setFormActiveTab('personal')}
+                className="mt-4 px-5 py-2 bg-amber-600 text-white font-bold text-xs rounded-xl hover:bg-amber-700 transition-colors cursor-pointer"
+              >
+                Go to Personal Details
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-6">
+              {/* Header Bar like AppActivation Student Access */}
+              <div className="pb-4 border-b border-gray-150 dark:border-gray-800 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="px-2.5 py-1 bg-teal-100 text-teal-800 dark:bg-teal-950/80 dark:text-teal-300 text-xs font-black font-mono rounded-lg">
+                      {studentData.pcaid}
+                    </span>
+                    <h2 className="text-xl font-bold text-gray-900 dark:text-white">
+                      {studentData.name || 'Unnamed Student'}
+                    </h2>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Batch: {studentData.joined_batch || 'N/A'} | District: {studentData.district || 'N/A'} | Email: {studentData.mail || 'N/A'}
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2.5 shrink-0 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const allEnabled = appFolders.length > 0 && appFolders.every(f => isFolderEnabledForCurrentStudent(f.id));
+                      setAllFoldersAccessForCurrentStudent(!allEnabled);
+                    }}
+                    className={cn(
+                      "flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all border cursor-pointer",
+                      appFolders.length > 0 && appFolders.every(f => isFolderEnabledForCurrentStudent(f.id))
+                        ? "bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-300 hover:bg-red-100 border-red-200/60"
+                        : "bg-teal-50 dark:bg-teal-950/40 text-teal-700 dark:text-teal-300 hover:bg-teal-100 border-teal-200/60"
+                    )}
+                  >
+                    {appFolders.length > 0 && appFolders.every(f => isFolderEnabledForCurrentStudent(f.id)) ? <Square size={14} /> : <CheckSquare size={14} />}
+                    <span>{appFolders.length > 0 && appFolders.every(f => isFolderEnabledForCurrentStudent(f.id)) ? 'Disable All' : 'Enable All'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleSaveStudentAppAccess}
+                    disabled={savingAppAccess}
+                    className="flex items-center gap-2 px-5 py-2 bg-teal-600 hover:bg-teal-700 disabled:bg-teal-400 text-white font-bold text-xs rounded-xl transition-all shadow-md active:scale-95 cursor-pointer shrink-0"
+                  >
+                    {savingAppAccess ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+                    <span>{savingAppAccess ? 'Saving Access...' : 'Save Access'}</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Folder Tree Hierarchy */}
+              <div className="space-y-3 max-h-[500px] overflow-y-auto pr-1 custom-scrollbar">
+                {loadingAppAccess ? (
+                  <div className="py-12 text-center text-xs text-gray-400 flex items-center justify-center gap-2">
+                    <Loader2 size={18} className="animate-spin text-teal-600" />
+                    <span>Loading App Module Folders & Access Records...</span>
+                  </div>
+                ) : appFolders.length === 0 ? (
+                  <div className="py-10 text-center text-xs text-gray-400 border border-dashed border-gray-200 dark:border-gray-800 rounded-xl">
+                    No module folders configured in App Activation.
+                  </div>
+                ) : (
+                  appFolders.filter(f => !f.parent_id).map(rootFolder => renderActivationFolderTree(rootFolder, 0))
+                )}
+              </div>
+
+              {/* Bottom Footer Save Action Bar */}
+              <div className="pt-4 border-t border-gray-150 dark:border-gray-800 flex flex-col sm:flex-row items-center justify-between gap-4">
+                <button
+                  type="button"
+                  onClick={() => setFormActiveTab('zoom')}
+                  className="flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-200 font-bold text-xs rounded-xl hover:bg-gray-200 dark:hover:bg-gray-700 transition-all cursor-pointer border border-gray-200 dark:border-gray-700"
+                >
+                  <ArrowLeft size={16} />
+                  <span>Back: Zoom</span>
+                </button>
+
+                <div className="flex items-center gap-3">
+                  <span className="text-xs text-gray-500 font-medium hidden md:inline">
+                    Configuring app folder permissions for student: <strong>{studentData.name || studentData.pcaid}</strong>
+                  </span>
+
+                  <button
+                    type="button"
+                    onClick={handleSaveStudentAppAccess}
+                    disabled={savingAppAccess}
+                    className="flex items-center gap-2 px-6 py-2.5 bg-teal-600 hover:bg-teal-700 disabled:bg-teal-400 text-white font-bold text-xs rounded-xl transition-all shadow-md active:scale-95 cursor-pointer shrink-0"
+                  >
+                    {savingAppAccess ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+                    <span>{savingAppAccess ? 'Saving Access...' : 'Save Access Changes'}</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Duplicate Alert Modal */}
       {showDuplicateAlert && (

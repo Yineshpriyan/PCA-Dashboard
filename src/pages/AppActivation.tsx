@@ -137,6 +137,7 @@ export const DURATION_PRESETS = [
   { id: '3_months', label: '3 Months (90 Days)', days: 90 },
   { id: '6_months', label: '6 Months (180 Days)', days: 180 },
   { id: '1_year', label: '1 Year (365 Days)', days: 365 },
+  { id: '2_years', label: '2 Years (730 Days)', days: 730 },
   { id: 'unlimited', label: 'Unlimited (No Expiration)', days: null },
 ];
 
@@ -169,6 +170,20 @@ export function getAccessExpirationInfo(record?: StudentFolderAccess) {
     expiresDate,
     daysLeft
   };
+}
+
+export function getAllDescendantFolderIds(id: string, all: AppFolder[]): string[] {
+  const children = all.filter(f => f.parent_id === id);
+  let ids = [id];
+  for (const child of children) {
+    ids = ids.concat(getAllDescendantFolderIds(child.id, all));
+  }
+  return ids;
+}
+
+export function normalizeBatch(batch?: string): string {
+  if (!batch) return '';
+  return batch.trim().replace(/^batch\s+/i, '').trim();
 }
 
 export function syncParentFolderAccess(records: StudentFolderAccess[], folders: AppFolder[]): StudentFolderAccess[] {
@@ -553,15 +568,6 @@ export default function AppActivation() {
     } finally {
       setSavingFolder(false);
     }
-  };
-
-  const getAllDescendantFolderIds = (id: string, all: AppFolder[]): string[] => {
-    const children = all.filter(f => f.parent_id === id);
-    let ids = [id];
-    for (const child of children) {
-      ids = ids.concat(getAllDescendantFolderIds(child.id, all));
-    }
-    return ids;
   };
 
   const handleDeleteFolder = async (folderId: string) => {
@@ -1442,21 +1448,28 @@ export default function AppActivation() {
   // Filter helpers
   const uniqueBatches = useMemo(() => {
     const set = new Set<string>();
-    students.forEach(s => { if (s.joined_batch) set.add(s.joined_batch); });
-    return Array.from(set).sort();
+    students.forEach(s => {
+      const norm = normalizeBatch(s.joined_batch);
+      if (norm) set.add(norm);
+    });
+    return Array.from(set).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
   }, [students]);
 
   const uniqueDistricts = useMemo(() => {
     const set = new Set<string>();
-    students.forEach(s => { if (s.district) set.add(s.district); });
-    return Array.from(set).sort();
+    students.forEach(s => {
+      if (s.district && s.district.trim()) {
+        set.add(s.district.trim());
+      }
+    });
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
   }, [students]);
 
   // Filtered student list
   const filteredStudents = useMemo(() => {
     return students.filter(s => {
-      if (batchFilter !== 'ALL' && s.joined_batch !== batchFilter) return false;
-      if (districtFilter !== 'ALL' && s.district !== districtFilter) return false;
+      if (batchFilter !== 'ALL' && normalizeBatch(s.joined_batch) !== batchFilter) return false;
+      if (districtFilter !== 'ALL' && (s.district || '').trim() !== districtFilter) return false;
       if (studentSearch.trim()) {
         const query = studentSearch.toLowerCase();
         const match = 
@@ -1853,7 +1866,9 @@ export default function AppActivation() {
                 >
                   <option value="ALL">All Batches</option>
                   {uniqueBatches.map(b => (
-                    <option key={b} value={b}>Batch {b}</option>
+                    <option key={b} value={b}>
+                      {b.toLowerCase().startsWith('batch') ? b : `Batch ${b}`}
+                    </option>
                   ))}
                 </select>
 
@@ -1907,7 +1922,7 @@ export default function AppActivation() {
                   <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto custom-scrollbar pr-1">
                     {selectedStudents.map(s => (
                       <span
-                        key={s.pcaid}
+                        key={s.id}
                         className="inline-flex items-center gap-1 pl-2 pr-1 py-0.5 bg-white dark:bg-gray-800 text-teal-900 dark:text-teal-200 text-[10px] font-bold rounded-md border border-teal-200 dark:border-teal-700/60 shadow-2xs"
                       >
                         <span className="font-mono text-teal-700 dark:text-teal-400">{s.pcaid}</span>
