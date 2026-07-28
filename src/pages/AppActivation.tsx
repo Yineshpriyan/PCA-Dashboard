@@ -18,6 +18,7 @@ import {
   Lock, 
   Unlock, 
   Eye, 
+  EyeOff,
   ExternalLink, 
   Copy, 
   Info, 
@@ -33,6 +34,9 @@ import {
   CheckSquare,
   Square,
   Users,
+  User,
+  Camera,
+  Upload,
   Filter,
   Save,
   Loader2,
@@ -41,7 +45,7 @@ import {
   Timer
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
-import { AppFolder, AppResource, StudentFolderAccess, Student } from '../types';
+import { AppFolder, AppResource, StudentFolderAccess, Student, StudentAppCredentials } from '../types';
 import { toast } from 'sonner';
 import { logTransaction } from '../lib/transactions';
 import { useAuth } from '../hooks/useAuth';
@@ -276,7 +280,7 @@ export function syncParentFolderAccess(records: StudentFolderAccess[], folders: 
 export default function AppActivation() {
   const { user } = useAuth();
   const location = useLocation();
-  const [activeTab, setActiveTab] = useState<'folders' | 'student-access' | 'api-docs'>('folders');
+  const [activeTab, setActiveTab] = useState<'folders' | 'student-access' | 'students' | 'api-docs'>('student-access');
 
   // Duration preset state
   const [selectedDurationPreset, setSelectedDurationPreset] = useState<string>('unlimited');
@@ -290,26 +294,59 @@ export default function AppActivation() {
     '22222222-2222-2222-2222-222222222222': true
   });
 
-  // Student Access State
+  // Student Access & Credentials State
   const [students, setStudents] = useState<Student[]>([]);
+  const [rawCredentials, setRawCredentials] = useState<StudentAppCredentials[]>([]);
   const [accessRecords, setAccessRecords] = useState<StudentFolderAccess[]>([]);
   const [selectedStudentPcaids, setSelectedStudentPcaids] = useState<string[]>([]);
   const [studentSearch, setStudentSearch] = useState<string>('');
   const [batchFilter, setBatchFilter] = useState<string>('ALL');
   const [districtFilter, setDistrictFilter] = useState<string>('ALL');
+  const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [loading, setLoading] = useState<boolean>(true);
   const [savingAccess, setSavingAccess] = useState<boolean>(false);
   const [savingFolder, setSavingFolder] = useState<boolean>(false);
   const [savingResource, setSavingResource] = useState<boolean>(false);
 
+  // Student Credential Editing Modal State
+  const [showEditCredModal, setShowEditCredModal] = useState<boolean>(false);
+  const [credModalMode, setCredModalMode] = useState<'create' | 'edit'>('edit');
+  const [credFormData, setCredFormData] = useState<{
+    id?: string;
+    pcaid: string;
+    student_name: string;
+    password_hash: string;
+    status: 'Active' | 'Inactive';
+    profile_picture_url: string;
+  }>({
+    pcaid: '',
+    student_name: '',
+    password_hash: '',
+    status: 'Active',
+    profile_picture_url: ''
+  });
+  const [savingCred, setSavingCred] = useState<boolean>(false);
+  const [showPasswordMap, setShowPasswordMap] = useState<Record<string, boolean>>({});
+  const [showFormPassword, setShowFormPassword] = useState<boolean>(false);
+
   // Modals
   const [showFolderModal, setShowFolderModal] = useState<boolean>(false);
   const [folderModalMode, setFolderModalMode] = useState<'create' | 'edit'>('create');
-  const [folderFormData, setFolderFormData] = useState<{ id?: string; name: string; description: string; parent_id: string | null; is_active: boolean }>({
+  const [folderFormData, setFolderFormData] = useState<{
+    id?: string;
+    name: string;
+    description: string;
+    parent_id: string | null;
+    is_active: boolean;
+    payment_type: 'Free' | 'Paid';
+    price: number | '';
+  }>({
     name: '',
     description: '',
     parent_id: null,
-    is_active: true
+    is_active: true,
+    payment_type: 'Free',
+    price: 0
   });
 
   const [showResourceModal, setShowResourceModal] = useState<boolean>(false);
@@ -367,9 +404,52 @@ export default function AppActivation() {
         }
       }
 
-      // Load Students
-      const { data: dbStudents } = await supabase.from('student').select('*').order('name', { ascending: true });
-      if (dbStudents && dbStudents.length > 0) {
+      // Load Student App Credentials & map with Student details for filters
+      const { data: dbCreds } = await supabase
+        .from('student_app_credentials')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (dbCreds) {
+        setRawCredentials(dbCreds);
+      }
+
+      const { data: dbStudents } = await supabase
+        .from('student')
+        .select('*')
+        .is('deleted_at', null);
+
+      const studentMap = new Map<string, Student>();
+      if (dbStudents) {
+        dbStudents.forEach(st => {
+          if (st.pcaid) {
+            studentMap.set(st.pcaid.trim().toLowerCase(), st);
+          }
+        });
+      }
+
+      if (dbCreds && dbCreds.length > 0) {
+        const mappedList: Student[] = dbCreds.map(cred => {
+          const cleanPcaid = (cred.pcaid || '').trim();
+          const mappedSt = studentMap.get(cleanPcaid.toLowerCase());
+          return {
+            id: cred.id,
+            pcaid: cleanPcaid,
+            name: cred.student_name || cred.name || mappedSt?.name || cleanPcaid,
+            status: cred.status || 'Active',
+            joined_batch: mappedSt?.joined_batch || '',
+            district: mappedSt?.district || '',
+            phone: mappedSt?.phone || '',
+            mail: mappedSt?.mail || '',
+            asked_class_type: mappedSt?.asked_class_type || '',
+            asked_package_type: mappedSt?.asked_package_type || '',
+            admin: mappedSt?.admin || '',
+            created_at: cred.created_at || mappedSt?.created_at,
+            updated_at: cred.updated_at || mappedSt?.updated_at,
+          };
+        });
+        setStudents(mappedList);
+      } else if (dbStudents && dbStudents.length > 0) {
         setStudents(dbStudents);
       }
 
@@ -439,7 +519,9 @@ export default function AppActivation() {
       name: '',
       description: '',
       parent_id: parentId,
-      is_active: true
+      is_active: true,
+      payment_type: 'Free',
+      price: 0
     });
     setShowFolderModal(true);
   };
@@ -451,7 +533,9 @@ export default function AppActivation() {
       name: f.name,
       description: f.description || '',
       parent_id: f.parent_id,
-      is_active: f.is_active
+      is_active: f.is_active ?? true,
+      payment_type: f.payment_type || 'Free',
+      price: f.price ?? 0
     });
     setShowFolderModal(true);
   };
@@ -463,6 +547,9 @@ export default function AppActivation() {
       return;
     }
 
+    const selectedPaymentType = folderFormData.payment_type || 'Free';
+    const numericPrice = selectedPaymentType === 'Paid' ? (Number(folderFormData.price) || 0) : 0;
+
     setSavingFolder(true);
     try {
       if (folderModalMode === 'create') {
@@ -472,7 +559,9 @@ export default function AppActivation() {
           description: folderFormData.description.trim() || undefined,
           parent_id: folderFormData.parent_id || null,
           created_at: new Date().toISOString(),
-          is_active: folderFormData.is_active
+          is_active: folderFormData.is_active,
+          payment_type: selectedPaymentType,
+          price: numericPrice
         };
 
         const insertPayload: Record<string, any> = {
@@ -481,14 +570,18 @@ export default function AppActivation() {
           description: newF.description || null,
           parent_id: newF.parent_id,
           created_at: newF.created_at,
-          is_active: newF.is_active
+          is_active: newF.is_active,
+          payment_type: selectedPaymentType,
+          price: numericPrice
         };
 
         let { error } = await supabase.from('app_folder').insert(insertPayload);
 
-        // Fallback if 'is_active' column is missing in the database table schema
-        if (error && error.message && error.message.includes('is_active')) {
-          delete insertPayload.is_active;
+        // Fallback if payment_type, price, or is_active columns are missing in the database table schema
+        if (error && error.message && (error.message.includes('payment_type') || error.message.includes('price') || error.message.includes('is_active'))) {
+          if (error.message.includes('payment_type')) delete insertPayload.payment_type;
+          if (error.message.includes('price')) delete insertPayload.price;
+          if (error.message.includes('is_active')) delete insertPayload.is_active;
           const retry = await supabase.from('app_folder').insert(insertPayload);
           error = retry.error;
         }
@@ -508,7 +601,7 @@ export default function AppActivation() {
             action_type: 'CREATE_APP_FOLDER',
             entity_type: 'app_folder',
             entity_id: newF.id,
-            details: `Created folder "${newF.name}"`
+            details: `Created folder "${newF.name}" (${selectedPaymentType}${selectedPaymentType === 'Paid' ? ' - Rs.' + numericPrice : ''})`
           });
         }
 
@@ -522,13 +615,17 @@ export default function AppActivation() {
           name: folderFormData.name.trim(),
           description: folderFormData.description.trim() || null,
           parent_id: folderFormData.parent_id || null,
-          is_active: folderFormData.is_active
+          is_active: folderFormData.is_active,
+          payment_type: selectedPaymentType,
+          price: numericPrice
         };
 
         let { error } = await supabase.from('app_folder').update(updatePayload).eq('id', folderFormData.id);
 
-        if (error && error.message && error.message.includes('is_active')) {
-          delete updatePayload.is_active;
+        if (error && error.message && (error.message.includes('payment_type') || error.message.includes('price') || error.message.includes('is_active'))) {
+          if (error.message.includes('payment_type')) delete updatePayload.payment_type;
+          if (error.message.includes('price')) delete updatePayload.price;
+          if (error.message.includes('is_active')) delete updatePayload.is_active;
           const retry = await supabase.from('app_folder').update(updatePayload).eq('id', folderFormData.id);
           error = retry.error;
         }
@@ -544,7 +641,9 @@ export default function AppActivation() {
           name: folderFormData.name.trim(),
           description: folderFormData.description.trim() || undefined,
           parent_id: folderFormData.parent_id || null,
-          is_active: folderFormData.is_active
+          is_active: folderFormData.is_active,
+          payment_type: selectedPaymentType,
+          price: numericPrice
         } : f);
 
         syncFoldersState(updated);
@@ -655,6 +754,15 @@ export default function AppActivation() {
             <span className={`truncate ${depth === 0 ? 'font-bold' : 'font-semibold'}`}>
               {folder.name}
             </span>
+            {folder.payment_type === 'Paid' ? (
+              <span className="text-[9px] font-black bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 px-1.5 py-0.5 rounded border border-amber-200/80 shrink-0">
+                Paid {folder.price ? `Rs.${folder.price}` : ''}
+              </span>
+            ) : (
+              <span className="text-[9px] font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 px-1.5 py-0.5 rounded border border-emerald-200/60 shrink-0">
+                Free
+              </span>
+            )}
           </div>
 
           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
@@ -1470,6 +1578,7 @@ export default function AppActivation() {
     return students.filter(s => {
       if (batchFilter !== 'ALL' && normalizeBatch(s.joined_batch) !== batchFilter) return false;
       if (districtFilter !== 'ALL' && (s.district || '').trim() !== districtFilter) return false;
+      if (statusFilter !== 'ALL' && (s.status || 'Active').toLowerCase() !== statusFilter.toLowerCase()) return false;
       if (studentSearch.trim()) {
         const query = studentSearch.toLowerCase();
         const match = 
@@ -1481,7 +1590,149 @@ export default function AppActivation() {
       }
       return true;
     });
-  }, [students, studentSearch, batchFilter, districtFilter]);
+  }, [students, studentSearch, batchFilter, districtFilter, statusFilter]);
+
+  // Student Credential Handler Functions
+  const handleOpenEditCred = (student: Student) => {
+    const cleanPcaid = (student.pcaid || '').trim();
+    const existingCred = rawCredentials.find(c => (c.pcaid || '').trim().toLowerCase() === cleanPcaid.toLowerCase());
+    setCredModalMode('edit');
+    setCredFormData({
+      id: existingCred?.id || student.id,
+      pcaid: cleanPcaid,
+      student_name: student.name || existingCred?.student_name || existingCred?.name || '',
+      password_hash: existingCred?.password_hash || (student as any).password_hash || cleanPcaid,
+      status: ((existingCred?.status || student.status || 'Active') === 'Inactive' ? 'Inactive' : 'Active'),
+      profile_picture_url: existingCred?.profile_picture_url || (student as any).profile_picture_url || ''
+    });
+    setShowEditCredModal(true);
+  };
+
+  const handleOpenCreateCred = () => {
+    setCredModalMode('create');
+    setCredFormData({
+      pcaid: '',
+      student_name: '',
+      password_hash: '',
+      status: 'Active',
+      profile_picture_url: ''
+    });
+    setShowEditCredModal(true);
+  };
+
+  const handleSaveCred = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!credFormData.pcaid.trim()) {
+      toast.error('PCA ID is required');
+      return;
+    }
+
+    setSavingCred(true);
+    try {
+      const cleanPcaid = credFormData.pcaid.trim();
+      const cleanName = credFormData.student_name.trim();
+      const cleanPassword = credFormData.password_hash.trim() || cleanPcaid;
+
+      if (credModalMode === 'create') {
+        let { error: insertErr } = await supabase
+          .from('student_app_credentials')
+          .insert({
+            pcaid: cleanPcaid,
+            student_name: cleanName,
+            password_hash: cleanPassword,
+            status: credFormData.status,
+            profile_picture_url: credFormData.profile_picture_url.trim() || null,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          });
+
+        if (insertErr && (insertErr.message?.includes('column') || insertErr.message?.includes('student_name') || insertErr.message?.includes('name'))) {
+          const { error: retryErr } = await supabase
+            .from('student_app_credentials')
+            .insert({
+              pcaid: cleanPcaid,
+              name: cleanName,
+              password_hash: cleanPassword,
+              status: credFormData.status,
+              profile_picture_url: credFormData.profile_picture_url.trim() || null,
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString()
+            });
+          insertErr = retryErr;
+        }
+
+        if (insertErr) throw insertErr;
+        toast.success(`Created student app credentials for PCA ID: ${cleanPcaid}`);
+      } else {
+        let { error: updateErr } = await supabase
+          .from('student_app_credentials')
+          .update({
+            student_name: cleanName,
+            password_hash: cleanPassword,
+            status: credFormData.status,
+            profile_picture_url: credFormData.profile_picture_url.trim() || null,
+            updated_at: new Date().toISOString()
+          })
+          .eq('pcaid', cleanPcaid);
+
+        if (updateErr && (updateErr.message?.includes('column') || updateErr.message?.includes('student_name') || updateErr.message?.includes('name'))) {
+          const { error: retryErr } = await supabase
+            .from('student_app_credentials')
+            .update({
+              name: cleanName,
+              password_hash: cleanPassword,
+              status: credFormData.status,
+              profile_picture_url: credFormData.profile_picture_url.trim() || null,
+              updated_at: new Date().toISOString()
+            })
+            .eq('pcaid', cleanPcaid);
+          updateErr = retryErr;
+        }
+
+        if (updateErr) throw updateErr;
+
+        if (cleanName) {
+          await supabase
+            .from('student')
+            .update({ name: cleanName })
+            .eq('pcaid', cleanPcaid);
+        }
+
+        toast.success(`Updated credentials for PCA ID: ${cleanPcaid}`);
+      }
+
+      setShowEditCredModal(false);
+      await loadData();
+    } catch (err: any) {
+      console.error('Failed to save student app credentials:', err);
+      toast.error('Failed to save credentials: ' + (err.message || err));
+    } finally {
+      setSavingCred(false);
+    }
+  };
+
+  const handleToggleCredStatus = async (pcaid: string, currentStatus: string) => {
+    const newStatus = currentStatus === 'Active' ? 'Inactive' : 'Active';
+    try {
+      const { error } = await supabase
+        .from('student_app_credentials')
+        .update({
+          status: newStatus,
+          updated_at: new Date().toISOString()
+        })
+        .eq('pcaid', pcaid);
+
+      if (error) throw error;
+      toast.success(`PCA ID ${pcaid} status changed to ${newStatus}`);
+      await loadData();
+    } catch (err: any) {
+      toast.error('Failed to update status: ' + (err.message || err));
+    }
+  };
+
+  const toggleShowPassword = (pcaid: string) => {
+    setShowPasswordMap(prev => ({ ...prev, [pcaid]: !prev[pcaid] }));
+  };
 
   const selectedStudentPcaid = selectedStudents.length > 0 ? selectedStudents[0].pcaid : '';
   const selectedStudent = selectedStudents.length === 1 ? selectedStudents[0] : null;
@@ -1566,7 +1817,18 @@ export default function AppActivation() {
           }`}
         >
           <Key size={15} />
-          <span>Student Access</span>
+          <span>Access</span>
+        </button>
+        <button
+          onClick={() => setActiveTab('students')}
+          className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold transition-all shrink-0 ${
+            activeTab === 'students' 
+              ? 'bg-white text-slate-900 shadow-sm' 
+              : 'text-slate-300 hover:text-white hover:bg-white/10'
+          }`}
+        >
+          <Users size={15} />
+          <span>Edit</span>
         </button>
         <button
           onClick={() => setActiveTab('api-docs')}
@@ -1642,9 +1904,16 @@ export default function AppActivation() {
 
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div>
-                      <h2 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                      <h2 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2 flex-wrap">
                         <Folder className="text-amber-500 shrink-0" size={22} />
                         <span>{selectedFolder.name}</span>
+                        <span className={`text-xs font-extrabold px-2.5 py-0.5 rounded-full border ${
+                          selectedFolder.payment_type === 'Paid'
+                            ? 'bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-950/60 dark:text-indigo-300 dark:border-indigo-800/60'
+                            : 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800/60'
+                        }`}>
+                          {selectedFolder.payment_type === 'Paid' ? `Paid - Rs. ${(Number(selectedFolder.price) || 0).toLocaleString()}` : 'Free'}
+                        </span>
                       </h2>
                       {selectedFolder.description && (
                         <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
@@ -1694,10 +1963,19 @@ export default function AppActivation() {
                                 <Folder size={18} />
                               </div>
                               <div className="min-w-0">
-                                <h4 className="text-xs font-bold text-gray-800 dark:text-gray-200 truncate">
-                                  {sub.name}
-                                </h4>
-                                <p className="text-[11px] text-gray-400 truncate">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <h4 className="text-xs font-bold text-gray-800 dark:text-gray-200 truncate">
+                                    {sub.name}
+                                  </h4>
+                                  <span className={`text-[9px] font-bold px-1.5 py-0.2 rounded-full shrink-0 ${
+                                    sub.payment_type === 'Paid'
+                                      ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300'
+                                      : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
+                                  }`}>
+                                    {sub.payment_type === 'Paid' ? `Paid (Rs. ${sub.price || 0})` : 'Free'}
+                                  </span>
+                                </div>
+                                <p className="text-[11px] text-gray-400 truncate mt-0.5">
                                   {resources.filter(r => r.folder_id === sub.id).length} items
                                 </p>
                               </div>
@@ -1835,26 +2113,38 @@ export default function AppActivation() {
                 )}
               </div>
 
-              {/* Search Box */}
-              <div className="relative">
-                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                <input
-                  type="text"
-                  placeholder="Search by PCA ID, name, phone..."
-                  value={studentSearch}
-                  onChange={(e) => setStudentSearch(e.target.value)}
-                  className="w-full pl-9 pr-8 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-teal-500"
-                />
-                {studentSearch && (
-                  <button
-                    type="button"
-                    onClick={() => setStudentSearch('')}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 p-0.5 rounded-full"
-                    title="Clear search"
-                  >
-                    <X size={14} />
-                  </button>
-                )}
+              {/* Search Box & Status Filter Row */}
+              <div className="flex items-center gap-2">
+                <div className="relative flex-1 min-w-0">
+                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <input
+                    type="text"
+                    placeholder="Search PCA ID, name..."
+                    value={studentSearch}
+                    onChange={(e) => setStudentSearch(e.target.value)}
+                    className="w-full pl-9 pr-7 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-teal-500"
+                  />
+                  {studentSearch && (
+                    <button
+                      type="button"
+                      onClick={() => setStudentSearch('')}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 p-0.5 rounded-full"
+                      title="Clear search"
+                    >
+                      <X size={12} />
+                    </button>
+                  )}
+                </div>
+
+                <select
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                  className="w-28 px-2.5 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-semibold text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-2 focus:ring-teal-500 shrink-0"
+                >
+                  <option value="ALL">All Status</option>
+                  <option value="Active">Active</option>
+                  <option value="Inactive">Inactive</option>
+                </select>
               </div>
 
               {/* Filter Dropdowns Row */}
@@ -1885,13 +2175,14 @@ export default function AppActivation() {
               </div>
 
               {/* Clear Filters Button when any filter is active */}
-              {(batchFilter !== 'ALL' || districtFilter !== 'ALL' || studentSearch) && (
+              {(batchFilter !== 'ALL' || districtFilter !== 'ALL' || statusFilter !== 'ALL' || studentSearch) && (
                 <button
                   type="button"
                   onClick={() => {
                     setStudentSearch('');
                     setBatchFilter('ALL');
                     setDistrictFilter('ALL');
+                    setStatusFilter('ALL');
                   }}
                   className="w-full py-1 px-2 text-[11px] font-bold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/40 border border-red-200/60 dark:border-red-900/60 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors flex items-center justify-center gap-1 cursor-pointer"
                 >
@@ -1993,8 +2284,12 @@ export default function AppActivation() {
                             <span className="text-xs font-extrabold text-teal-700 dark:text-teal-400 font-mono">
                               {student.pcaid}
                             </span>
-                            <span className="text-[9px] bg-teal-100 text-teal-800 dark:bg-teal-900/50 dark:text-teal-300 font-bold px-1.5 py-0.5 rounded-full shrink-0">
-                              {student.asked_package_type || 'Active'}
+                            <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full shrink-0 ${
+                              (student.status || 'Active').toLowerCase() === 'active'
+                                ? 'bg-teal-100 text-teal-800 dark:bg-teal-900/50 dark:text-teal-300'
+                                : 'bg-rose-100 text-rose-800 dark:bg-rose-900/50 dark:text-rose-300'
+                            }`}>
+                              {student.status || 'Active'}
                             </span>
                           </div>
                           <h4 className="text-xs font-bold text-gray-800 dark:text-gray-200 mt-0.5 truncate">
@@ -2287,6 +2582,460 @@ export default function AppActivation() {
         </div>
       )}
 
+      {/* TAB 3: STUDENT APP CREDENTIALS & DETAILS EDITING */}
+      {activeTab === 'students' && (
+        <div className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-2xl p-6 shadow-sm space-y-6">
+          {/* Header Bar */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-gray-100 dark:border-gray-800">
+            <div>
+              <h2 className="text-base font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                <Users className="text-teal-600" size={20} />
+                <span>Student Management ({filteredStudents.length})</span>
+              </h2>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                Displaying student records from <code className="font-mono bg-gray-100 dark:bg-gray-800 px-1 py-0.5 rounded text-[11px]">student_app_credentials</code> table with filter mappings to <code className="font-mono bg-gray-100 dark:bg-gray-800 px-1 py-0.5 rounded text-[11px]">student</code> table.
+              </p>
+            </div>
+          </div>
+
+          {/* Search & Filter Bar */}
+          <div className="bg-gray-50 dark:bg-gray-800/50 p-4 rounded-xl border border-gray-100 dark:border-gray-800 space-y-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+              {/* Search input */}
+              <div className="relative">
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Search PCA ID, Name, Phone..."
+                  value={studentSearch}
+                  onChange={(e) => setStudentSearch(e.target.value)}
+                  className="w-full pl-9 pr-8 py-2 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-teal-500 font-medium text-gray-900 dark:text-white"
+                />
+                {studentSearch && (
+                  <button
+                    onClick={() => setStudentSearch('')}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+                  >
+                    <X size={12} />
+                  </button>
+                )}
+              </div>
+
+              {/* Batch Filter */}
+              <div>
+                <select
+                  value={batchFilter}
+                  onChange={(e) => setBatchFilter(e.target.value)}
+                  className="w-full px-3 py-2 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-teal-500 font-semibold text-gray-900 dark:text-white"
+                >
+                  <option value="ALL">All Batches ({uniqueBatches.length})</option>
+                  {uniqueBatches.map(b => (
+                    <option key={b} value={b}>Batch {b}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* District Filter */}
+              <div>
+                <select
+                  value={districtFilter}
+                  onChange={(e) => setDistrictFilter(e.target.value)}
+                  className="w-full px-3 py-2 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-teal-500 font-semibold text-gray-900 dark:text-white"
+                >
+                  <option value="ALL">All Districts ({uniqueDistricts.length})</option>
+                  {uniqueDistricts.map(d => (
+                    <option key={d} value={d}>{d}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Status Filter */}
+              <div>
+                <select
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                  className="w-full px-3 py-2 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-teal-500 font-semibold text-gray-900 dark:text-white"
+                >
+                  <option value="ALL">All Statuses</option>
+                  <option value="Active">🟢 Active Only</option>
+                  <option value="Inactive">🔴 Inactive Only</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Active Filter Summary */}
+            {(studentSearch || batchFilter !== 'ALL' || districtFilter !== 'ALL' || statusFilter !== 'ALL') && (
+              <div className="flex items-center justify-between text-xs text-gray-500 pt-1">
+                <span>Showing <strong>{filteredStudents.length}</strong> of <strong>{students.length}</strong> students</span>
+                <button
+                  onClick={() => {
+                    setStudentSearch('');
+                    setBatchFilter('ALL');
+                    setDistrictFilter('ALL');
+                    setStatusFilter('ALL');
+                  }}
+                  className="text-xs text-teal-600 hover:underline font-bold flex items-center gap-1 cursor-pointer"
+                >
+                  <RefreshCw size={12} />
+                  <span>Reset Filters</span>
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Student Records Table */}
+          {filteredStudents.length === 0 ? (
+            <div className="text-center py-12 bg-gray-50 dark:bg-gray-800/30 rounded-2xl border border-dashed border-gray-200 dark:border-gray-800">
+              <Users size={36} className="mx-auto text-gray-300 dark:text-gray-700 mb-2" />
+              <h4 className="text-xs font-bold text-gray-600 dark:text-gray-400">No Student Records Found</h4>
+              <p className="text-[11px] text-gray-400 mt-1 max-w-sm mx-auto">
+                No students match your selected search or filter criteria.
+              </p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto border border-gray-100 dark:border-gray-800 rounded-2xl">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-gray-50 dark:bg-gray-800/80 text-gray-500 dark:text-gray-400 uppercase tracking-wider font-bold text-[10px] border-b border-gray-100 dark:border-gray-800">
+                  <tr>
+                    <th className="py-3 px-4">Student Name & PCA ID</th>
+                    <th className="py-3 px-4">App Password</th>
+                    <th className="py-3 px-4">Account Status</th>
+                    <th className="py-3 px-4">Batch & District</th>
+                    <th className="py-3 px-4">Contact Details</th>
+                    <th className="py-3 px-4 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100 dark:divide-gray-800/60 font-medium">
+                  {filteredStudents.map((st) => {
+                    const rawCred = rawCredentials.find(c => (c.pcaid || '').trim().toLowerCase() === st.pcaid.trim().toLowerCase());
+                    const passwordVal = rawCred?.password_hash || (st as any).password_hash || st.pcaid;
+                    const isPassVisible = !!showPasswordMap[st.pcaid];
+                    const statusVal = rawCred?.status || st.status || 'Active';
+                    const isActive = statusVal.toLowerCase() === 'active';
+
+                    return (
+                      <tr key={st.id || st.pcaid} className="hover:bg-gray-50/60 dark:hover:bg-gray-800/30 transition-all">
+                        <td className="py-3.5 px-4">
+                          <div className="flex items-center gap-3">
+                            <div className="w-9 h-9 rounded-xl bg-teal-100 dark:bg-teal-950/80 text-teal-800 dark:text-teal-300 flex items-center justify-center text-xs font-extrabold uppercase shrink-0">
+                              {st.name ? st.name.slice(0, 2) : 'ST'}
+                            </div>
+                            <div className="min-w-0">
+                              <h4 className="font-bold text-gray-900 dark:text-white truncate">
+                                {st.name}
+                              </h4>
+                              <span className="font-mono text-[11px] font-extrabold text-teal-600 dark:text-teal-400">
+                                {st.pcaid}
+                              </span>
+                            </div>
+                          </div>
+                        </td>
+
+                        <td className="py-3.5 px-4">
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-mono text-xs bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded-lg border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-200">
+                              {isPassVisible ? passwordVal : '••••••••'}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => toggleShowPassword(st.pcaid)}
+                              className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg text-gray-400 hover:text-gray-600 transition-all cursor-pointer"
+                              title={isPassVisible ? 'Hide Password' : 'Show Password'}
+                            >
+                              {isPassVisible ? <EyeOff size={14} /> : <Eye size={14} />}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                navigator.clipboard.writeText(passwordVal);
+                                toast.success(`Copied password for ${st.pcaid}`);
+                              }}
+                              className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg text-gray-400 hover:text-gray-600 transition-all cursor-pointer"
+                              title="Copy Password"
+                            >
+                              <Copy size={13} />
+                            </button>
+                          </div>
+                        </td>
+
+                        <td className="py-3.5 px-4">
+                          <button
+                            type="button"
+                            onClick={() => handleToggleCredStatus(st.pcaid, statusVal)}
+                            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold border transition-all cursor-pointer ${
+                              isActive
+                                ? 'bg-emerald-50 text-emerald-800 border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800/60 hover:bg-emerald-100'
+                                : 'bg-rose-50 text-rose-800 border-rose-200 dark:bg-rose-950/60 dark:text-rose-300 dark:border-rose-800/60 hover:bg-rose-100'
+                            }`}
+                            title="Click to toggle account status"
+                          >
+                            <span className={`w-1.5 h-1.5 rounded-full ${isActive ? 'bg-emerald-500' : 'bg-rose-500'}`} />
+                            <span>{statusVal}</span>
+                          </button>
+                        </td>
+
+                        <td className="py-3.5 px-4">
+                          <div className="space-y-0.5 text-gray-600 dark:text-gray-300">
+                            {st.joined_batch && (
+                              <div className="font-semibold text-gray-800 dark:text-gray-200">
+                                Batch {normalizeBatch(st.joined_batch)}
+                              </div>
+                            )}
+                            {st.district && (
+                              <div className="text-[11px] text-gray-400">
+                                {st.district}
+                              </div>
+                            )}
+                            {!st.joined_batch && !st.district && (
+                              <span className="text-gray-400 text-[11px]">-</span>
+                            )}
+                          </div>
+                        </td>
+
+                        <td className="py-3.5 px-4">
+                          <div className="space-y-0.5 text-[11px]">
+                            {st.phone && <div className="text-gray-700 dark:text-gray-300 font-mono">{st.phone}</div>}
+                            {st.mail && <div className="text-gray-400 truncate max-w-[140px]">{st.mail}</div>}
+                            {!st.phone && !st.mail && <span className="text-gray-400">-</span>}
+                          </div>
+                        </td>
+
+                        <td className="py-3.5 px-4 text-right">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenEditCred(st)}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-teal-50 dark:bg-teal-950/50 hover:bg-teal-100 dark:hover:bg-teal-900/80 text-teal-700 dark:text-teal-300 rounded-xl font-bold transition-all border border-teal-200/60 dark:border-teal-800/60 shadow-2xs active:scale-95 cursor-pointer"
+                          >
+                            <Edit3 size={13} />
+                            <span>Edit</span>
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* MODAL: Create / Edit Student Credentials & Details */}
+      {showEditCredModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-gray-900 rounded-2xl max-w-md w-full p-6 border border-gray-100 dark:border-gray-800 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between pb-4 border-b border-gray-100 dark:border-gray-800 mb-4">
+              <h3 className="text-base font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                <Users className="text-teal-600" size={20} />
+                <span>{credModalMode === 'create' ? 'Add Student Credentials' : 'Edit Student Details'}</span>
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowEditCredModal(false)}
+                className="p-1 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg text-gray-400 hover:text-gray-600"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveCred} className="space-y-4">
+              {/* Profile Image Selection Section (Placed at top of form) */}
+              <div className="flex flex-col items-center justify-center p-4 bg-gray-50 dark:bg-gray-800/60 rounded-2xl border border-dashed border-gray-200 dark:border-gray-700 space-y-3">
+                <div className="relative group">
+                  <div className="w-20 h-20 rounded-full border-2 border-teal-500 overflow-hidden bg-white dark:bg-gray-800 flex items-center justify-center text-gray-400 shadow-inner">
+                    {credFormData.profile_picture_url ? (
+                      <img
+                        src={credFormData.profile_picture_url}
+                        alt="Profile Preview"
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          (e.target as HTMLElement).style.display = 'none';
+                        }}
+                      />
+                    ) : (
+                      <User size={36} className="text-gray-400 dark:text-gray-500" />
+                    )}
+                  </div>
+                  <label 
+                    className="absolute bottom-0 right-0 bg-teal-600 hover:bg-teal-700 text-white p-1.5 rounded-full cursor-pointer shadow-md transition-transform hover:scale-110"
+                    title="Upload or Change Image"
+                  >
+                    <Camera size={14} />
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          if (file.size > 2 * 1024 * 1024) {
+                            toast.error('Image size must be under 2MB');
+                            return;
+                          }
+                          const reader = new FileReader();
+                          reader.onloadend = () => {
+                            setCredFormData(prev => ({ ...prev, profile_picture_url: reader.result as string }));
+                          };
+                          reader.readAsDataURL(file);
+                        }
+                      }}
+                    />
+                  </label>
+                </div>
+
+                <div className="w-full text-center space-y-2">
+                  <div className="flex items-center justify-center gap-2">
+                    <label className="cursor-pointer text-xs font-bold text-teal-700 dark:text-teal-300 flex items-center gap-1.5 px-3 py-1.5 bg-white dark:bg-gray-800 border border-teal-200 dark:border-teal-800/80 rounded-xl shadow-2xs hover:bg-teal-50 dark:hover:bg-teal-950/40 transition-colors">
+                      <Upload size={13} />
+                      <span>Upload Image</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            if (file.size > 2 * 1024 * 1024) {
+                              toast.error('Image size must be under 2MB');
+                              return;
+                            }
+                            const reader = new FileReader();
+                            reader.onloadend = () => {
+                              setCredFormData(prev => ({ ...prev, profile_picture_url: reader.result as string }));
+                            };
+                            reader.readAsDataURL(file);
+                          }
+                        }}
+                      />
+                    </label>
+
+                    {credFormData.profile_picture_url && (
+                      <button
+                        type="button"
+                        onClick={() => setCredFormData(prev => ({ ...prev, profile_picture_url: '' }))}
+                        className="text-xs font-bold text-rose-600 hover:text-rose-700 dark:text-rose-400 flex items-center gap-1 px-3 py-1.5 bg-white dark:bg-gray-800 border border-rose-200 dark:border-rose-800/80 rounded-xl shadow-2xs hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer"
+                      >
+                        <X size={13} />
+                        <span>Remove</span>
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Fallback Image URL input */}
+                  <details className="text-[11px] text-gray-500 cursor-pointer text-left">
+                    <summary className="hover:underline font-medium text-gray-500 dark:text-gray-400 text-center">Or paste image link</summary>
+                    <input
+                      type="url"
+                      placeholder="https://example.com/photo.jpg"
+                      value={credFormData.profile_picture_url}
+                      onChange={(e) => setCredFormData({ ...credFormData, profile_picture_url: e.target.value })}
+                      className="w-full mt-2 px-3 py-1.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-mono focus:outline-none focus:ring-2 focus:ring-teal-500 text-gray-900 dark:text-white"
+                    />
+                  </details>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-1">
+                  PCA ID *
+                </label>
+                <input
+                  type="text"
+                  required
+                  readOnly={credModalMode === 'edit'}
+                  placeholder="e.g. 260201"
+                  value={credFormData.pcaid}
+                  onChange={(e) => setCredFormData({ ...credFormData, pcaid: e.target.value })}
+                  className={`w-full px-3 py-2 border rounded-xl text-xs font-mono font-bold focus:outline-none focus:ring-2 focus:ring-teal-500 ${
+                    credModalMode === 'edit'
+                      ? 'bg-gray-100 dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-teal-600 dark:text-teal-400 cursor-not-allowed'
+                      : 'bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white'
+                  }`}
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-1">
+                  Student Name (Disabled)
+                </label>
+                <input
+                  type="text"
+                  disabled
+                  readOnly
+                  placeholder="e.g. M. Husna"
+                  value={credFormData.student_name}
+                  className="w-full px-3 py-2 bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-semibold text-gray-500 dark:text-gray-400 cursor-not-allowed"
+                />
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
+                    App Password *
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setCredFormData({ ...credFormData, password_hash: credFormData.pcaid })}
+                    className="text-[10px] text-teal-600 font-bold hover:underline cursor-pointer"
+                  >
+                    Set to PCA ID
+                  </button>
+                </div>
+                <div className="relative">
+                  <input
+                    type={showFormPassword ? 'text' : 'password'}
+                    required
+                    placeholder="Mobile App Password"
+                    value={credFormData.password_hash}
+                    onChange={(e) => setCredFormData({ ...credFormData, password_hash: e.target.value })}
+                    className="w-full pl-3 pr-10 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-mono font-bold focus:outline-none focus:ring-2 focus:ring-teal-500 text-gray-900 dark:text-white"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowFormPassword(!showFormPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  >
+                    {showFormPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-1">
+                  Account Status
+                </label>
+                <select
+                  value={credFormData.status}
+                  onChange={(e) => setCredFormData({ ...credFormData, status: e.target.value as any })}
+                  className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-teal-500 text-gray-900 dark:text-white"
+                >
+                  <option value="Active">🟢 Active (App Access Granted)</option>
+                  <option value="Inactive">🔴 Inactive (App Access Blocked)</option>
+                </select>
+              </div>
+
+              <div className="flex items-center justify-between pt-3 border-t border-gray-100 dark:border-gray-800">
+                <button
+                  type="button"
+                  onClick={() => setShowEditCredModal(false)}
+                  className="px-4 py-2 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 text-gray-700 dark:text-gray-300 rounded-xl text-xs font-bold transition-all"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingCred}
+                  className="flex items-center gap-1.5 px-5 py-2 bg-teal-600 hover:bg-teal-700 disabled:bg-teal-400 text-white rounded-xl text-xs font-bold shadow-md active:scale-95 cursor-pointer transition-all"
+                >
+                  {savingCred && <Loader2 size={14} className="animate-spin" />}
+                  <span>{savingCred ? 'Saving...' : 'Save Student Details'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* MODAL: Create / Edit Folder */}
       {showFolderModal && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
@@ -2330,6 +3079,47 @@ export default function AppActivation() {
                   onChange={(e) => setFolderFormData({ ...folderFormData, description: e.target.value })}
                   className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-teal-500"
                 />
+              </div>
+
+              {/* Payment Type & Price Row */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-1">
+                    Payment Type *
+                  </label>
+                  <select
+                    value={folderFormData.payment_type}
+                    onChange={(e) => setFolderFormData({
+                      ...folderFormData,
+                      payment_type: e.target.value as 'Free' | 'Paid',
+                      price: e.target.value === 'Free' ? 0 : folderFormData.price
+                    })}
+                    className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-teal-500 text-gray-900 dark:text-white"
+                  >
+                    <option value="Free">🟢 Free Access</option>
+                    <option value="Paid">💳 Paid Module</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-1">
+                    Price (LKR)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    disabled={folderFormData.payment_type === 'Free'}
+                    placeholder={folderFormData.payment_type === 'Free' ? '0.00 (Free)' : 'e.g. 1500'}
+                    value={folderFormData.payment_type === 'Free' ? '' : folderFormData.price}
+                    onChange={(e) => setFolderFormData({ ...folderFormData, price: e.target.value === '' ? '' : Number(e.target.value) })}
+                    className={`w-full px-3 py-2 border rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-teal-500 ${
+                      folderFormData.payment_type === 'Free'
+                        ? 'bg-gray-100 dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-400 cursor-not-allowed'
+                        : 'bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white font-bold'
+                    }`}
+                  />
+                </div>
               </div>
 
               <div>

@@ -1542,8 +1542,10 @@ export function StudentForm({ isModal = false, modalStudent = null, modalLead = 
       }
 
       const cleanMail = (studentData.mail === '@gmail.com' || studentData.mail === '@icloud.com') ? '' : studentData.mail;
+      const currentCleanPcaid = studentData.pcaid.trim();
       const updatedStudentData = {
         ...studentData,
+        pcaid: currentCleanPcaid,
         mail: cleanMail,
         asked_class_type: finalAskedClassType,
         asked_package_type: finalAskedPackageType
@@ -1573,6 +1575,80 @@ export function StudentForm({ isModal = false, modalStudent = null, modalLead = 
       }
 
       if (saveError) throw saveError;
+
+      // Auto-sync Student App Credentials for mobile app access (1st time entry password = PCAID)
+      try {
+        const studentName = studentData.name ? studentData.name.trim() : '';
+
+        // Check if credentials record exists for current PCA ID
+        const { data: existingCreds, error: checkCredErr } = await supabase
+          .from('student_app_credentials')
+          .select('pcaid')
+          .eq('pcaid', currentCleanPcaid)
+          .maybeSingle();
+
+        if (checkCredErr) {
+          console.warn('Student app credentials lookup error:', checkCredErr);
+        }
+
+        if (!existingCreds) {
+          // 1st time entry: PCAID and password are the same, save student name as well
+          let { error: insertErr } = await supabase
+            .from('student_app_credentials')
+            .insert({
+              pcaid: currentCleanPcaid,
+              student_name: studentName,
+              password_hash: currentCleanPcaid,
+              status: 'Active',
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString()
+            });
+
+          // Fallback if 'student_name' or 'name' column varies
+          if (insertErr && (insertErr.message?.includes('column') || insertErr.message?.includes('student_name') || insertErr.message?.includes('name'))) {
+            console.warn('Column "student_name" missing on student_app_credentials table, retrying with name or without name column:', insertErr);
+            const { error: retryInsertErr } = await supabase
+              .from('student_app_credentials')
+              .insert({
+                pcaid: currentCleanPcaid,
+                password_hash: currentCleanPcaid,
+                status: 'Active',
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString()
+              });
+            insertErr = retryInsertErr;
+          }
+
+          if (insertErr) {
+            console.error('Failed to create student app credentials:', insertErr);
+            toast.error(`Student saved, but App Credentials sync failed: ${insertErr.message}`);
+          } else {
+            console.log('Successfully created student app credentials for:', currentCleanPcaid);
+          }
+        } else {
+          // Keep student_name updated on existing credentials record without resetting password
+          let { error: updateErr } = await supabase
+            .from('student_app_credentials')
+            .update({
+              student_name: studentName,
+              updated_at: new Date().toISOString()
+            })
+            .eq('pcaid', currentCleanPcaid);
+
+          // Fallback if 'student_name' column does not exist on student_app_credentials table
+          if (updateErr && (updateErr.message?.includes('column') || updateErr.message?.includes('student_name') || updateErr.message?.includes('name'))) {
+            console.warn('Column "student_name" missing on student_app_credentials table during update, skipping name update:', updateErr);
+            updateErr = null;
+          }
+
+          if (updateErr) {
+            console.error('Failed to update student app credentials:', updateErr);
+          }
+        }
+      } catch (credErr: any) {
+        console.error('Student app credentials sync exception:', credErr);
+        toast.error(`App Credentials error: ${credErr?.message || credErr}`);
+      }
 
       // Update last_temporary_id table if the PCAID matches our newly generated temp ID
       if (studentData.pcaid && latestGeneratedTempId === studentData.pcaid) {

@@ -95,6 +95,8 @@ export interface Student {
   created_at: string;
   batch_type?: string;
   gender?: string;
+  status?: string;
+  updated_at?: string;
   deleted_at?: string | null;
 }
 
@@ -156,6 +158,8 @@ export interface AppFolder {
   created_at: string;
   is_active: boolean;
   order_index?: number;
+  payment_type?: 'Free' | 'Paid';
+  price?: number | null;
 }
 
 export interface AppResource {
@@ -178,5 +182,18 @@ export interface StudentFolderAccess {
   expires_at?: string | null;
   duration_preset?: string | null;
   updated_at: string;
+}
+
+export interface StudentAppCredentials {
+  id: string;
+  pcaid: string;
+  student_name?: string | null;
+  name?: string | null;
+  password_hash?: string | null;
+  status: 'Active' | 'Inactive';
+  profile_picture_url?: string | null;
+  last_login_at?: string | null;
+  created_at?: string;
+  updated_at?: string;
 }
 
