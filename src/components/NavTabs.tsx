@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, useLocation, useSearchParams } from 'react-router-dom';
-import { Video, UserPlus, History, Trash2, Users, ClipboardList, PlusCircle, LayoutDashboard, Folder, Key, Layers } from 'lucide-react';
+import { Video, UserPlus, History, Trash2, Users, ClipboardList, PlusCircle, LayoutDashboard, Folder, Key, Layers, Bell } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useAuth } from '../hooks/useAuth';
 
@@ -241,6 +241,18 @@ export function ActivationNavTabs() {
       >
         <Layers size={15} className={activeTab === 'api-docs' ? "text-teal-600 dark:text-teal-400" : "text-gray-400"} />
         <span>App API Live Sync</span>
+      </button>
+      <button
+        onClick={() => setTab('notifications')}
+        className={cn(
+          "flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap",
+          activeTab === 'notifications'
+            ? "bg-white dark:bg-gray-900 text-teal-700 dark:text-teal-300 shadow-xs border border-teal-100 dark:border-teal-900/40 font-extrabold"
+            : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-white/50 dark:hover:bg-gray-700/50"
+        )}
+      >
+        <Bell size={15} className={activeTab === 'notifications' ? "text-teal-600 dark:text-teal-400" : "text-gray-400"} />
+        <span>App Notifications</span>
       </button>
     </div>
   );

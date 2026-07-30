@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useLocation, useSearchParams } from 'react-router-dom';
+import AppNotificationManager from '../components/AppNotificationManager';
 import { 
   Folder, 
   FolderPlus, 
@@ -282,7 +283,7 @@ export default function AppActivation() {
   const { user } = useAuth();
   const location = useLocation();
   const [searchParams] = useSearchParams();
-  const activeTab = (searchParams.get('tab') as 'folders' | 'student-access' | 'students' | 'api-docs') || 'student-access';
+  const activeTab = (searchParams.get('tab') as 'folders' | 'student-access' | 'students' | 'api-docs' | 'notifications') || 'student-access';
 
   // Duration preset state
   const [selectedDurationPreset, setSelectedDurationPreset] = useState<string>('unlimited');
@@ -2988,6 +2989,11 @@ export default function AppActivation() {
             </form>
           </div>
         </div>
+      )}
+
+      {/* TAB 5: APP NOTIFICATIONS & BROADCASTS */}
+      {activeTab === 'notifications' && (
+        <AppNotificationManager />
       )}
 
       {/* MODAL: Create / Edit Folder */}

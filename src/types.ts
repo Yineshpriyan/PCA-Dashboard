@@ -197,3 +197,23 @@ export interface StudentAppCredentials {
   updated_at?: string;
 }
 
+export type NotificationDisplayType = 'banner' | 'push_bar';
+
+export interface AppNotification {
+  id: string;
+  title: string;
+  message: string;
+  display_type: NotificationDisplayType;
+  image_url?: string | null;
+  action_url?: string | null;
+  target_batch?: string | null;
+  is_active: boolean;
+  scheduled_at?: string | null;
+  expires_at?: string | null;
+  clicks_count?: number;
+  views_count?: number;
+  created_at: string;
+  updated_at?: string;
+}
+
+
