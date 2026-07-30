@@ -35,6 +35,7 @@ import { cn, formatDate, copyToClipboard, exportToExcel } from '../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
 import { useNavigate } from 'react-router-dom';
 import { logTransaction } from '../lib/transactions';
+import { LeadNavTabs } from '../components/NavTabs';
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
@@ -545,9 +546,12 @@ export function CallTaskForm({ editData, onComplete }: { editData?: CallTask; on
     setFormData({ ...formData, asked_package_type: updated });
   };
 
+  const isStandalone = !onComplete && !editData;
+
   return (
-    <div className="max-w-4xl mx-auto">
-      <form onSubmit={handleSubmit} className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100 flex flex-col gap-8">
+    <div className={isStandalone ? "space-y-6" : ""}>
+      <div className="max-w-4xl mx-auto">
+        <form onSubmit={handleSubmit} className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100 flex flex-col gap-8">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-gray-100 pb-6">
           <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">
             <Plus size={20} className="text-teal-600" />
@@ -989,6 +993,7 @@ export function CallTaskForm({ editData, onComplete }: { editData?: CallTask; on
           )}
         </div>
       </form>
+    </div>
     </div>
   );
 }
@@ -1763,7 +1768,7 @@ export function CallTaskDisplay() {
 
   return (
     <div className="space-y-6">
-        <div className="flex flex-col gap-4 w-full">
+      <div className="flex flex-col gap-4 w-full">
           {/* Top Row: Search, New Task, Import, Export */}
           <div className="flex flex-wrap items-center gap-3 w-full">
             {/* Search textbox (Verify PCA ID / Phone Availability...) */}

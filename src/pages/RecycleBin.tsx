@@ -18,6 +18,7 @@ import {
 import { Student, CallTask } from '../types';
 import { cn, formatDate } from '../lib/utils';
 import { logTransaction } from '../lib/transactions';
+import { AuditNavTabs } from '../components/NavTabs';
 
 export default function RecycleBin() {
   const { user } = useAuth();
@@ -175,22 +176,17 @@ export default function RecycleBin() {
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-12">
-      {/* Header Banner */}
-      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-        <div className="space-y-1">
-          <p className="text-xs text-gray-500 dark:text-gray-400 font-medium pl-1">
-            View, review, and restore soft-deleted student and call task records instantly.
-          </p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-end gap-4">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={fetchData}
+            disabled={loading}
+            className="px-4 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-750 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-xl font-bold text-xs shadow-xs transition-all flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
+          >
+            <RotateCcw size={14} className={cn(loading && 'animate-spin')} />
+            Refresh Trash
+          </button>
         </div>
-
-        <button
-          onClick={fetchData}
-          disabled={loading}
-          className="px-4 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-750 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-xl font-bold text-xs shadow-sm transition-all flex items-center gap-1.5 disabled:opacity-50"
-        >
-          <RotateCcw size={14} className={cn(loading && 'animate-spin')} />
-          Refresh Trash
-        </button>
       </div>
 
       {/* Tabs Selector & Search */}

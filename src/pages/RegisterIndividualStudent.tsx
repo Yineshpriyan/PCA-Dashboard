@@ -15,6 +15,7 @@ import {
   ArrowRight
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
+import { ZoomNavTabs } from "../components/NavTabs";
 
 interface RegistrationResult {
   email: string;
@@ -125,7 +126,7 @@ export default function RegisterIndividualStudent() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-8">
+    <div className="max-w-6xl mx-auto px-4 py-8 space-y-6">
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Left Form Column */}
         <div className="lg:col-span-2 space-y-6">

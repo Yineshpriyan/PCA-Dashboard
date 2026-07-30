@@ -28,6 +28,7 @@ import { cn, playNotificationSound } from '../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
 import { supabase } from '../lib/supabase';
 import { toast } from 'sonner';
+import { TokenNavTabs, LeadNavTabs, ZoomNavTabs, AuditNavTabs, AdminNavTabs, ActivationNavTabs } from './NavTabs';
 import { Issue } from '../types';
 import AcademyLogo from './AcademyLogo';
 
@@ -36,6 +37,7 @@ interface NavItem {
   path: string;
   icon: React.ReactNode;
   roles: ('admin' | 'super_admin')[];
+  matchPaths?: string[];
 }
 
 interface NavSection {
@@ -53,15 +55,25 @@ const navSections: NavSection[] = [
   {
     title: 'Tokens & Issues',
     items: [
-      { label: 'New Issue', path: '/admin/new', icon: <PlusCircle size={18} />, roles: ['admin', 'super_admin'] },
-      { label: 'Issues', path: '/admin/display', icon: <ClipboardList size={18} />, roles: ['admin', 'super_admin'] },
+      { 
+        label: 'Tokens', 
+        path: '/admin/display', 
+        matchPaths: ['/admin/display', '/admin/new'],
+        icon: <ClipboardList size={18} />, 
+        roles: ['admin', 'super_admin'] 
+      },
     ]
   },
   {
     title: 'Lead & Call Tasks',
     items: [
-      { label: 'New Lead', path: '/admin/call-task/new', icon: <UserPlus size={18} />, roles: ['admin', 'super_admin'] },
-      { label: 'Leads', path: '/admin/call-task/display', icon: <LayoutDashboard size={18} />, roles: ['admin', 'super_admin'] },
+      { 
+        label: 'Leads', 
+        path: '/admin/call-task/display', 
+        matchPaths: ['/admin/call-task/display', '/admin/call-task/new'],
+        icon: <LayoutDashboard size={18} />, 
+        roles: ['admin', 'super_admin'] 
+      },
     ]
   },
   {
@@ -69,30 +81,50 @@ const navSections: NavSection[] = [
     items: [
       { label: 'New Student', path: '/admin/student-form', icon: <Settings size={18} />, roles: ['admin', 'super_admin'] },
       { label: 'Students', path: '/admin/student-explorer', icon: <Users size={18} />, roles: ['admin', 'super_admin'] },
-      { label: 'App Activation', path: '/admin/app-activation', icon: <Smartphone size={18} />, roles: ['admin', 'super_admin'] },
     ]
   },
   {
-    title: 'Zoom Webinars / Meetings',
+    title: 'App',
     items: [
-      { label: 'Bulk Register', path: '/admin/zoom-register', icon: <Video size={18} />, roles: ['admin', 'super_admin'] },
-      { label: 'Individual Register', path: '/admin/zoom-register-individual', icon: <UserPlus size={18} />, roles: ['admin', 'super_admin'] },
+      { label: 'Activation', path: '/admin/app-activation', icon: <Smartphone size={18} />, roles: ['admin', 'super_admin'] },
+    ]
+  },
+  {
+    title: 'Zoom',
+    items: [
+      { 
+        label: 'Webinar / Meeting', 
+        path: '/admin/zoom-register', 
+        matchPaths: ['/admin/zoom-register', '/admin/zoom-register-individual'],
+        icon: <Video size={18} />, 
+        roles: ['admin', 'super_admin'] 
+      },
     ]
   },
   {
     title: 'System Audit',
     items: [
-      { label: 'Transaction Log', path: '/admin/transactions', icon: <History size={18} />, roles: ['super_admin'] },
-      { label: 'Recycle Bin', path: '/admin/recycle-bin', icon: <Trash2 size={18} />, roles: ['admin', 'super_admin'] },
+      { 
+        label: 'System Audit', 
+        path: '/admin/transactions', 
+        matchPaths: ['/admin/transactions', '/admin/recycle-bin'],
+        icon: <History size={18} />, 
+        roles: ['admin', 'super_admin'] 
+      },
     ]
   },
   {
     title: 'Super Admin Area',
     items: [
       { label: 'Issue Fixing', path: '/super-admin/fixing', icon: <Wrench size={18} />, roles: ['super_admin'] },
-      { label: 'Admins', path: '/super-admin/admins', icon: <Users size={18} />, roles: ['super_admin'] },
+      { 
+        label: 'Admins', 
+        path: '/super-admin/admins', 
+        matchPaths: ['/super-admin/admins', '/super-admin/signup'],
+        icon: <Users size={18} />, 
+        roles: ['super_admin'] 
+      },
       { label: 'Add Items', path: '/super-admin/items', icon: <Settings size={18} />, roles: ['super_admin'] },
-      { label: 'New Account', path: '/super-admin/signup', icon: <UserPlus size={18} />, roles: ['super_admin'] },
     ]
   }
 ];
@@ -138,7 +170,14 @@ export function Sidebar({
   const filteredSections = navSections
     .map(section => ({
       ...section,
-      items: section.items.filter(item => user && item.roles.includes(user.admin_type))
+      items: section.items
+        .filter(item => user && item.roles.includes(user.admin_type))
+        .map(item => {
+          if (item.label === 'System Audit' && user?.admin_type === 'admin') {
+            return { ...item, path: '/admin/recycle-bin' };
+          }
+          return item;
+        })
     }))
     .filter(section => section.items.length > 0);
 
@@ -264,27 +303,33 @@ export function Sidebar({
                   {section.title}
                 </h3>
                 <div className="space-y-1">
-                  {section.items.map((item) => (
-                    <Link
-                      key={item.path}
-                      to={item.path}
-                      onClick={() => !isDesktop && setIsOpen(false)}
-                      className={cn(
-                        "flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-bold transition-all border border-transparent",
-                        location.pathname === item.path
-                          ? "bg-teal-50/70 dark:bg-teal-950/40 text-teal-700 dark:text-teal-400 border-teal-100/50 dark:border-teal-900/30 shadow-sm shadow-teal-700/5 font-black"
-                          : "text-gray-600 dark:text-gray-300 hover:bg-gray-50/70 dark:hover:bg-gray-800/65 hover:text-gray-900 dark:hover:text-white"
-                      )}
-                    >
-                      <span className={cn(
-                        "transition-transform duration-300",
-                        location.pathname === item.path ? "text-teal-600 dark:text-teal-400 scale-110" : "text-gray-400 dark:text-gray-500 group-hover:text-gray-600 dark:group-hover:text-gray-300"
-                      )}>
-                        {item.icon}
-                      </span>
-                      <span>{item.label}</span>
-                    </Link>
-                  ))}
+                  {section.items.map((item) => {
+                    const isActive = item.matchPaths 
+                      ? item.matchPaths.includes(location.pathname)
+                      : location.pathname === item.path;
+
+                    return (
+                      <Link
+                        key={item.path}
+                        to={item.path}
+                        onClick={() => !isDesktop && setIsOpen(false)}
+                        className={cn(
+                          "flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-bold transition-all border border-transparent",
+                          isActive
+                            ? "bg-teal-50/70 dark:bg-teal-950/40 text-teal-700 dark:text-teal-400 border-teal-100/50 dark:border-teal-900/30 shadow-sm shadow-teal-700/5 font-black"
+                            : "text-gray-600 dark:text-gray-300 hover:bg-gray-50/70 dark:hover:bg-gray-800/65 hover:text-gray-900 dark:hover:text-white"
+                        )}
+                      >
+                        <span className={cn(
+                          "transition-transform duration-300",
+                          isActive ? "text-teal-600 dark:text-teal-400 scale-110" : "text-gray-400 dark:text-gray-500 group-hover:text-gray-600 dark:group-hover:text-gray-300"
+                        )}>
+                          {item.icon}
+                        </span>
+                        <span>{item.label}</span>
+                      </Link>
+                    );
+                  })}
                 </div>
               </div>
             ))}
@@ -319,7 +364,7 @@ export function Topbar({
   // Find current nav item label
   let activeLabel = '';
   for (const section of navSections) {
-    const found = section.items.find(item => item.path === location.pathname);
+    const found = section.items.find(item => item.path === location.pathname || (item.matchPaths && item.matchPaths.includes(location.pathname)));
     if (found) {
       activeLabel = found.label;
       break;
@@ -349,10 +394,28 @@ export function Topbar({
           </button>
         )}
         {activeLabel && (
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3 sm:gap-4 overflow-x-auto py-1">
             <h2 className="text-lg md:text-xl font-bold text-gray-900 dark:text-gray-100 border-l-4 border-teal-600 pl-3 whitespace-nowrap">
               {activeLabel}
             </h2>
+            {(location.pathname === '/admin/display' || location.pathname === '/admin/new') && (
+              <TokenNavTabs />
+            )}
+            {(location.pathname === '/admin/call-task/display' || location.pathname === '/admin/call-task/new') && (
+              <LeadNavTabs />
+            )}
+            {location.pathname === '/admin/app-activation' && (
+              <ActivationNavTabs />
+            )}
+            {(location.pathname === '/admin/zoom-register' || location.pathname === '/admin/zoom-register-individual') && (
+              <ZoomNavTabs />
+            )}
+            {(location.pathname === '/admin/transactions' || location.pathname === '/admin/recycle-bin') && (
+              <AuditNavTabs />
+            )}
+            {(location.pathname === '/super-admin/admins' || location.pathname === '/super-admin/signup') && (
+              <AdminNavTabs />
+            )}
           </div>
         )}
       </div>

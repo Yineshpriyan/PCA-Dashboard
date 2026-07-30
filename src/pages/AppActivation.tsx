@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useSearchParams } from 'react-router-dom';
 import { 
   Folder, 
   FolderPlus, 
@@ -49,6 +49,7 @@ import { AppFolder, AppResource, StudentFolderAccess, Student, StudentAppCredent
 import { toast } from 'sonner';
 import { logTransaction } from '../lib/transactions';
 import { useAuth } from '../hooks/useAuth';
+import { cn } from '../lib/utils';
 
 // Pre-populated initial seed data if DB/localStorage is empty
 const INITIAL_FOLDERS: AppFolder[] = [
@@ -280,7 +281,8 @@ export function syncParentFolderAccess(records: StudentFolderAccess[], folders: 
 export default function AppActivation() {
   const { user } = useAuth();
   const location = useLocation();
-  const [activeTab, setActiveTab] = useState<'folders' | 'student-access' | 'students' | 'api-docs'>('student-access');
+  const [searchParams] = useSearchParams();
+  const activeTab = (searchParams.get('tab') as 'folders' | 'student-access' | 'students' | 'api-docs') || 'student-access';
 
   // Duration preset state
   const [selectedDurationPreset, setSelectedDurationPreset] = useState<string>('unlimited');
@@ -1795,54 +1797,6 @@ export default function AppActivation() {
 
   return (
     <div className="space-y-6">
-      {/* Top Tab Navigation Only */}
-      <div className="bg-slate-900 dark:bg-slate-900/95 text-white rounded-2xl p-1.5 shadow-md border border-slate-800/80 flex items-center justify-start sm:justify-center gap-2 overflow-x-auto">
-        <button
-          onClick={() => setActiveTab('folders')}
-          className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold transition-all shrink-0 ${
-            activeTab === 'folders' 
-              ? 'bg-white text-slate-900 shadow-sm' 
-              : 'text-slate-300 hover:text-white hover:bg-white/10'
-          }`}
-        >
-          <Folder size={15} />
-          <span>Folders & Files</span>
-        </button>
-        <button
-          onClick={() => setActiveTab('student-access')}
-          className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold transition-all shrink-0 ${
-            activeTab === 'student-access' 
-              ? 'bg-white text-slate-900 shadow-sm' 
-              : 'text-slate-300 hover:text-white hover:bg-white/10'
-          }`}
-        >
-          <Key size={15} />
-          <span>Access</span>
-        </button>
-        <button
-          onClick={() => setActiveTab('students')}
-          className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold transition-all shrink-0 ${
-            activeTab === 'students' 
-              ? 'bg-white text-slate-900 shadow-sm' 
-              : 'text-slate-300 hover:text-white hover:bg-white/10'
-          }`}
-        >
-          <Users size={15} />
-          <span>Edit</span>
-        </button>
-        <button
-          onClick={() => setActiveTab('api-docs')}
-          className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold transition-all shrink-0 ${
-            activeTab === 'api-docs' 
-              ? 'bg-white text-slate-900 shadow-sm' 
-              : 'text-slate-300 hover:text-white hover:bg-white/10'
-          }`}
-        >
-          <Layers size={15} />
-          <span>App API Live Sync</span>
-        </button>
-      </div>
-
       {/* TAB 1: FOLDERS & CONTENT MANAGEMENT */}
       {activeTab === 'folders' && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">

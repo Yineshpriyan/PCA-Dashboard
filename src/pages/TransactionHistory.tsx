@@ -19,6 +19,7 @@ import {
 import { TransactionLog } from '../types';
 import { cn, formatDate, exportToExcel } from '../lib/utils';
 import { motion } from 'motion/react';
+import { AuditNavTabs } from '../components/NavTabs';
 
 const ACTION_COLORS: Record<string, string> = {
   'CREATE': 'bg-emerald-50 text-emerald-700 border-emerald-100',
@@ -177,16 +178,12 @@ CREATE POLICY "Allow authenticated read and write to transaction_logs"
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-12">
-      {/* Header Banner */}
-      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-        <div className="space-y-1">
-          <p className="text-xs text-gray-500 font-medium pl-1">Audit log detailing operations, authentications, edits, and enrolments.</p>
-        </div>
-
-        <div className="flex items-center gap-2 w-full md:w-auto">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-end gap-4">
+        {/* Header Banner Actions */}
+        <div className="flex items-center gap-2">
           <button
             onClick={handleExport}
-            className="flex-1 md:flex-none flex items-center justify-center gap-2 px-4 py-2 bg-teal-50 text-teal-700 hover:bg-teal-100 rounded-xl font-bold text-xs transition-colors shadow-sm whitespace-nowrap"
+            className="flex items-center justify-center gap-2 px-4 py-2 bg-teal-50 text-teal-700 hover:bg-teal-100 dark:bg-teal-950/40 dark:text-teal-300 dark:hover:bg-teal-900/50 rounded-xl font-bold text-xs transition-colors shadow-xs whitespace-nowrap cursor-pointer"
           >
             <FileDown size={16} />
             Export to Excel
@@ -194,10 +191,10 @@ CREATE POLICY "Allow authenticated read and write to transaction_logs"
           <button
             onClick={fetchLogs}
             disabled={loading}
-            className="px-4 py-2 bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 rounded-xl font-bold text-xs shadow-sm transition-all flex items-center gap-1.5 disabled:opacity-50"
+            className="px-4 py-2 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-xl font-bold text-xs shadow-xs transition-all flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
             title="Reload live logs"
           >
-            <RotateCcw size={14} className={cn(loading && 'animate-spin')} />
+            <RotateCcw size={14} className={cn(loading && "animate-spin")} />
             Refresh
           </button>
         </div>

@@ -7,6 +7,7 @@ import { Copy, Edit2, History, RotateCcw, Send, Trash2, X as CloseIcon, Filter, 
 import { Issue, IssueType } from '../types';
 import { cn, copyToClipboard, formatDate, exportToExcel } from '../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
+import { TokenNavTabs } from '../components/NavTabs';
 
 export function IssueTokenForm() {
   const { user } = useAuth();
@@ -72,8 +73,8 @@ export function IssueTokenForm() {
   };
 
   return (
-    <div className="max-w-xl mx-auto">
-      <form onSubmit={handleSubmit} className="space-y-4 bg-white p-6 md:p-8 rounded-2xl shadow-sm border border-gray-100">
+    <div className="space-y-6">
+      <form onSubmit={handleSubmit} className="max-w-xl mx-auto space-y-4 bg-white p-6 md:p-8 rounded-2xl shadow-sm border border-gray-100 dark:bg-gray-900 dark:border-gray-800">
         <div className="flex flex-col gap-4">
           <div className="flex flex-col md:grid md:grid-cols-[100px_1fr] md:items-center gap-2 md:gap-4">
             <label className="text-sm font-semibold text-gray-700 capitalize">Issue</label>
@@ -271,8 +272,7 @@ export function DisplayTokens() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col xl:flex-row xl:items-center justify-end gap-4">
-        <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
           <div className="relative group flex-1 md:flex-none">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
             <input
@@ -350,22 +350,21 @@ export function DisplayTokens() {
             </button>
           )}
         </div>
-      </div>
       
       <div className="max-h-[600px] overflow-auto bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 relative">
         <table className="w-full text-left border-collapse min-w-[1200px]">
           <thead className="sticky top-0 z-30">
-            <tr className="bg-orange-200 dark:bg-amber-950">
-              <th className="p-4 font-bold text-gray-800 dark:text-amber-100 text-center sticky left-0 top-0 z-30 bg-orange-200 dark:bg-amber-950 w-[60px]">No</th>
-              <th className="p-4 font-bold text-gray-800 dark:text-amber-100 sticky left-[60px] top-0 z-30 bg-orange-200 dark:bg-amber-950 w-[140px]">Date</th>
-              <th className="p-4 font-bold text-gray-800 dark:text-amber-100 sticky left-[200px] top-0 z-30 bg-orange-200 dark:bg-amber-950 min-w-[150px]">Issue</th>
-              <th className="p-4 font-bold text-gray-800 dark:text-amber-100 sticky left-[350px] top-0 z-30 bg-orange-200 dark:bg-amber-950 w-[140px]">Phone</th>
-              <th className="p-4 font-bold text-gray-800 dark:text-amber-100 min-w-[200px] bg-orange-200 dark:bg-amber-950 sticky top-0">Note</th>
-              <th className="p-4 font-bold text-gray-800 dark:text-amber-100 min-w-[140px] bg-orange-200 dark:bg-amber-950 sticky top-0">PCAID</th>
-              <th className="p-4 font-bold text-gray-800 dark:text-amber-100 min-w-[160px] bg-orange-200 dark:bg-amber-950 sticky top-0">Name</th>
-              <th className="p-4 font-bold text-gray-800 dark:text-amber-100 min-w-[140px] bg-orange-200 dark:bg-amber-950 sticky top-0">Fixed Date</th>
-              <th className="p-4 font-bold text-gray-800 dark:text-amber-100 min-w-[120px] bg-orange-200 dark:bg-amber-950 sticky top-0">Status</th>
-              <th className="p-4 font-bold text-gray-800 dark:text-amber-100 text-center min-w-[100px] bg-orange-200 dark:bg-amber-950 sticky top-0">Actions</th>
+            <tr className="bg-teal-50/80 dark:bg-teal-950/50 border-b border-teal-100/80 dark:border-teal-900/40">
+              <th className="p-4 font-bold text-teal-900 dark:text-teal-200 text-center sticky left-0 top-0 z-30 bg-teal-50 dark:bg-teal-950 w-[60px]">No</th>
+              <th className="p-4 font-bold text-teal-900 dark:text-teal-200 sticky left-[60px] top-0 z-30 bg-teal-50 dark:bg-teal-950 w-[140px]">Date</th>
+              <th className="p-4 font-bold text-teal-900 dark:text-teal-200 sticky left-[200px] top-0 z-30 bg-teal-50 dark:bg-teal-950 min-w-[150px]">Issue</th>
+              <th className="p-4 font-bold text-teal-900 dark:text-teal-200 sticky left-[350px] top-0 z-30 bg-teal-50 dark:bg-teal-950 w-[140px]">Phone</th>
+              <th className="p-4 font-bold text-teal-900 dark:text-teal-200 min-w-[200px] bg-teal-50 dark:bg-teal-950 sticky top-0">Note</th>
+              <th className="p-4 font-bold text-teal-900 dark:text-teal-200 min-w-[140px] bg-teal-50 dark:bg-teal-950 sticky top-0">PCAID</th>
+              <th className="p-4 font-bold text-teal-900 dark:text-teal-200 min-w-[160px] bg-teal-50 dark:bg-teal-950 sticky top-0">Name</th>
+              <th className="p-4 font-bold text-teal-900 dark:text-teal-200 min-w-[140px] bg-teal-50 dark:bg-teal-950 sticky top-0">Fixed Date</th>
+              <th className="p-4 font-bold text-teal-900 dark:text-teal-200 min-w-[120px] bg-teal-50 dark:bg-teal-950 sticky top-0">Status</th>
+              <th className="p-4 font-bold text-teal-900 dark:text-teal-200 text-center min-w-[100px] bg-teal-50 dark:bg-teal-950 sticky top-0">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -377,10 +376,10 @@ export function DisplayTokens() {
               </tr>
             ) : (
               filteredTokens.map((token, index) => (
-                <tr key={token.id} className="border-t border-gray-100 dark:border-gray-800 hover:bg-orange-50/50 dark:hover:bg-amber-950/20 transition-colors group">
-                  <td className="p-4 text-center font-medium text-gray-600 dark:text-gray-400 sticky left-0 z-10 bg-white dark:bg-gray-900 group-hover:bg-orange-50/50 dark:group-hover:bg-amber-950/20">{index + 1}</td>
-                  <td className="p-4 text-sm text-gray-500 dark:text-gray-400 sticky left-[60px] z-10 bg-white dark:bg-gray-900 group-hover:bg-orange-50/50 dark:group-hover:bg-amber-950/20 whitespace-nowrap">{formatDate(token.date)}</td>
-                  <td className="p-4 sticky left-[200px] z-10 bg-white dark:bg-gray-900 group-hover:bg-orange-50/50 dark:group-hover:bg-amber-950/20 min-w-[150px]">
+                <tr key={token.id} className="border-t border-gray-100 dark:border-gray-800 hover:bg-teal-50/30 dark:hover:bg-teal-950/20 transition-colors group">
+                  <td className="p-4 text-center font-medium text-gray-600 dark:text-gray-400 sticky left-0 z-10 bg-white dark:bg-gray-900 group-hover:bg-teal-50/35 dark:group-hover:bg-teal-950/20">{index + 1}</td>
+                  <td className="p-4 text-sm text-gray-500 dark:text-gray-400 sticky left-[60px] z-10 bg-white dark:bg-gray-900 group-hover:bg-teal-50/35 dark:group-hover:bg-teal-950/20 whitespace-nowrap">{formatDate(token.date)}</td>
+                  <td className="p-4 sticky left-[200px] z-10 bg-white dark:bg-gray-900 group-hover:bg-teal-50/35 dark:group-hover:bg-teal-950/20 min-w-[150px]">
                     <div className="flex items-center gap-2">
                       <span className="text-gray-900 dark:text-gray-100 font-medium">{token.issue}</span>
                       <button onClick={() => handleCopy(token.issue, 'Issue')} className="p-1 text-teal-600 hover:bg-teal-50 dark:hover:bg-teal-950/35 rounded">
@@ -388,7 +387,7 @@ export function DisplayTokens() {
                       </button>
                     </div>
                   </td>
-                  <td className="p-4 font-mono text-sm sticky left-[350px] z-10 bg-white dark:bg-gray-900 group-hover:bg-orange-50/50 dark:group-hover:bg-amber-950/20 w-[140px]">
+                  <td className="p-4 font-mono text-sm sticky left-[350px] z-10 bg-white dark:bg-gray-900 group-hover:bg-teal-50/35 dark:group-hover:bg-teal-950/20 w-[140px]">
                     <div className="flex items-center gap-2">
                       <span className="text-gray-700 dark:text-gray-300">{token.phone}</span>
                       <button onClick={() => handleCopy(token.phone, 'Phone')} className="p-1 text-teal-600 hover:bg-teal-50 dark:hover:bg-teal-950/35 rounded">

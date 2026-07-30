@@ -21,6 +21,7 @@ import {
   Copy
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
+import { ZoomNavTabs } from "../components/NavTabs";
 
 const BATCH_SIZE = 10; // how many students to send to Zoom per batch
 
@@ -483,7 +484,7 @@ export default function RegisterStudents() {
   });
 
   return (
-    <div className="max-w-6xl mx-auto px-4 py-8 space-y-8">
+    <div className="max-w-6xl mx-auto px-4 py-8 space-y-6">
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         
         {/* Left column - Form details */}
