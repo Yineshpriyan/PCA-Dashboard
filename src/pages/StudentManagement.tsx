@@ -352,6 +352,7 @@ export function StudentForm({ isModal = false, modalStudent = null, modalLead = 
     return {
       pcaid: editStudent?.pcaid || leadData?.pcaid || '',
       name: editStudent?.name || leadData?.name || '',
+      nic: editStudent?.nic || '',
       phone: cleanPhone,
       stream: editStudent?.stream || leadData?.stream || '',
       proper_batch: editStudent?.proper_batch || leadData?.proper_batch || '',
@@ -1075,6 +1076,7 @@ export function StudentForm({ isModal = false, modalStudent = null, modalLead = 
       setStudentData({
         pcaid: s.pcaid || '',
         name: s.name || '',
+        nic: s.nic || '',
         phone: s.phone || '',
         stream: s.stream || '',
         proper_batch: s.proper_batch || '',
@@ -2032,7 +2034,7 @@ export function StudentForm({ isModal = false, modalStudent = null, modalLead = 
           onClose(true);
         } else {
           // Clear all
-          setStudentData({ pcaid: '', name: '', phone: '', stream: '', proper_batch: '', joined_batch: '', school: '', district: '', mail: '', address: '', asked_class_type: '', asked_package_type: '', batch_type: '', gender: '' });
+          setStudentData({ pcaid: '', name: '', nic: '', phone: '', stream: '', proper_batch: '', joined_batch: '', school: '', district: '', mail: '', address: '', asked_class_type: '', asked_package_type: '', batch_type: '', gender: '' });
           setStudentType('Paid');
           setTempPayments([]);
         }
@@ -2488,27 +2490,41 @@ export function StudentForm({ isModal = false, modalStudent = null, modalLead = 
             )}
           </div>
 
-          {/* Field 9: School */}
-          <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-semibold text-gray-700">School</label>
-            <input
-              type="text"
-              value={studentData.school}
-              onChange={(e) => setStudentData({ ...studentData, school: e.target.value })}
-              className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500/20"
-              placeholder="School Name"
-            />
+          {/* Left Column: NIC & School */}
+          <div className="flex flex-col gap-6">
+            {/* Field: NIC */}
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-semibold text-gray-700">NIC</label>
+              <input
+                type="text"
+                value={studentData.nic || ''}
+                onChange={(e) => setStudentData({ ...studentData, nic: e.target.value })}
+                className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500/20 text-gray-800"
+                placeholder="National Identity Card (NIC)"
+              />
+            </div>
+
+            {/* Field 9: School */}
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-semibold text-gray-700">School</label>
+              <input
+                type="text"
+                value={studentData.school}
+                onChange={(e) => setStudentData({ ...studentData, school: e.target.value })}
+                className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500/20"
+                placeholder="School Name"
+              />
+            </div>
           </div>
 
-          {/* Field 12: Address */}
-          <div className="flex flex-col gap-1.5">
+          {/* Right Column: Address (spanning height of NIC + School) */}
+          <div className="flex flex-col gap-1.5 h-full">
             <label className="text-sm font-semibold text-gray-700">Address</label>
             <textarea
               value={studentData.address}
               onChange={(e) => setStudentData({ ...studentData, address: e.target.value })}
-              className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500/20 h-28 resize-y text-sm"
+              className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500/20 flex-1 min-h-[140px] resize-y text-sm"
               placeholder="Home Address"
-              rows={4}
             />
           </div>
 
@@ -4279,6 +4295,7 @@ export function StudentExplorer() {
       'District': s.district,
       'Proper Batch': s.proper_batch,
       'Joined Batch': s.joined_batch,
+      'NIC': s.nic || '-',
       'School': s.school,
       'Mail': s.mail,
       'Address': s.address,
@@ -4294,7 +4311,8 @@ export function StudentExplorer() {
     const matchesSearch = !filters.search || 
       s.name.toLowerCase().includes(searchLower) || 
       s.pcaid.toLowerCase().includes(searchLower) || 
-      s.phone.includes(filters.search);
+      s.phone.includes(filters.search) ||
+      (s.nic && s.nic.toLowerCase().includes(searchLower));
     
     const matchesPcaidSearch = !filters.pcaid || (s.pcaid && s.pcaid.toLowerCase().includes(filters.pcaid.toLowerCase()));
     

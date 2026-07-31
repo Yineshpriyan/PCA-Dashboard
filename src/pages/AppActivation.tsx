@@ -368,6 +368,33 @@ export default function AppActivation() {
     loadData();
   }, []);
 
+  // Sync URL searchParams folderId parameter to selectedFolderId & expand ancestor folders
+  useEffect(() => {
+    const targetFolderId = searchParams.get('folderId') || searchParams.get('folder');
+    if (targetFolderId && folders.length > 0) {
+      const matched = folders.find(f => f.id === targetFolderId);
+      if (matched) {
+        setSelectedFolderId(matched.id);
+        setExpandedFolders(prev => {
+          const next = { ...prev, [matched.id]: true };
+          let curr = matched;
+          let guard = 0;
+          while (curr.parent_id && guard < 10) {
+            guard++;
+            next[curr.parent_id] = true;
+            const parent = folders.find(f => f.id === curr.parent_id);
+            if (parent && parent.id !== curr.id) {
+              curr = parent;
+            } else {
+              break;
+            }
+          }
+          return next;
+        });
+      }
+    }
+  }, [searchParams, folders]);
+
   // Reset filters and selected students whenever coming back from other menus, switching tabs, or mounting
   useEffect(() => {
     setStudentSearch('');

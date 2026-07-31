@@ -95,6 +95,7 @@ export interface Student {
   created_at: string;
   batch_type?: string;
   gender?: string;
+  nic?: string | null;
   status?: string;
   updated_at?: string;
   deleted_at?: string | null;

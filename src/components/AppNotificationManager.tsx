@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { 
   Bell, 
   Image as ImageIcon, 
@@ -42,6 +43,7 @@ const PRESET_SAMPLE_IMAGES = [
 ];
 
 export default function AppNotificationManager() {
+  const [, setSearchParams] = useSearchParams();
   const [notifications, setNotifications] = useState<AppNotification[]>(() => {
     try {
       const saved = localStorage.getItem('app_notifications');
@@ -162,14 +164,80 @@ export default function AppNotificationManager() {
     loadAppFolders();
   }, []);
 
-  // Format folder path hierarchy (e.g., Parent ➔ Subfolder)
-  const getFolderPath = (folder: AppFolder, allFolders: AppFolder[]) => {
-    if (!folder.parent_id) return folder.name;
-    const parent = allFolders.find(f => f.id === folder.parent_id);
-    if (parent) {
-      return `${parent.name} ➔ ${folder.name}`;
+  // Format full folder path hierarchy (e.g., Parent ➔ Subfolder)
+  const getFolderPath = (folder: AppFolder, allFolders: AppFolder[]): string => {
+    const parts: string[] = [folder.name];
+    let current = folder;
+    let guard = 0;
+    while (current.parent_id && guard < 10) {
+      guard++;
+      const parent = allFolders.find(f => f.id === current.parent_id);
+      if (parent && parent.id !== current.id) {
+        parts.unshift(parent.name);
+        current = parent;
+      } else {
+        break;
+      }
     }
-    return folder.name;
+    return parts.join(' ➔ ');
+  };
+
+  // Handle clicking a thumbnail notification, banner card, or action URL link
+  const handleNotificationClick = async (notif: AppNotification) => {
+    // 1. Increment clicks count in local state & Supabase
+    const updated = notifications.map(n => 
+      n.id === notif.id ? { ...n, clicks_count: (n.clicks_count || 0) + 1 } : n
+    );
+    setNotifications(updated);
+
+    try {
+      await supabase
+        .from('app_notifications')
+        .update({ clicks_count: (notif.clicks_count || 0) + 1 })
+        .eq('id', notif.id);
+    } catch (err) {
+      console.warn('Could not increment clicks count in DB:', err);
+    }
+
+    const url = notif.action_url || '';
+
+    // 2. Extract folder ID from URL formats (app://folder/ID, folder://ID, or plain ID)
+    let folderId = '';
+    if (url.startsWith('app://folder/')) {
+      folderId = url.replace('app://folder/', '');
+    } else if (url.startsWith('folder://')) {
+      folderId = url.replace('folder://', '');
+    } else if (appFolders.some(f => f.id === url)) {
+      folderId = url;
+    }
+
+    if (folderId) {
+      folderId = folderId.split('/')[0].split('?')[0].trim();
+    }
+
+    const targetFolder = appFolders.find(f => f.id === folderId);
+
+    if (targetFolder) {
+      const fullPath = getFolderPath(targetFolder, appFolders);
+      toast.success(`Directing to folder: "${fullPath}"`);
+      setSearchParams({ tab: 'folders', folderId: targetFolder.id });
+      return;
+    }
+
+    // 3. Handle fallback external links or app views
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+      window.open(url, '_blank');
+    } else if (url === 'app://courses' || url === 'app://folders') {
+      toast.info('Directing to App Folders view...');
+      setSearchParams({ tab: 'folders' });
+    } else if (url === 'app://students' || url === 'app://student-access') {
+      toast.info('Directing to Student Access...');
+      setSearchParams({ tab: 'student-access' });
+    } else if (url) {
+      toast.info(`Clicked link: ${url}`);
+    } else {
+      toast.info(`Notification title: "${notif.title}"`);
+    }
   };
 
   const filteredAppFolders = appFolders.filter(f => 
@@ -568,18 +636,28 @@ export default function AppNotificationManager() {
               >
                 <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                   <div className="flex items-start gap-3 flex-1 min-w-0">
-                    {/* Icon / Thumbnail Box */}
+                    {/* Icon / Thumbnail Box (Clickable to navigate to target folder) */}
                     {notif.display_type === 'banner' && notif.image_url ? (
-                      <div className="w-16 h-14 rounded-xl overflow-hidden bg-gray-100 dark:bg-gray-800 flex-shrink-0 border border-gray-200 dark:border-gray-700 relative">
-                        <img src={notif.image_url} alt={notif.title} className="w-full h-full object-cover" />
+                      <button
+                        type="button"
+                        onClick={() => handleNotificationClick(notif)}
+                        className="w-16 h-14 rounded-xl overflow-hidden bg-gray-100 dark:bg-gray-800 flex-shrink-0 border border-gray-200 dark:border-gray-700 relative group/thumb cursor-pointer hover:border-teal-500 hover:ring-2 hover:ring-teal-500/20 transition-all text-left"
+                        title="Click thumbnail to direct to target app folder"
+                      >
+                        <img src={notif.image_url} alt={notif.title} className="w-full h-full object-cover transition-transform group-hover/thumb:scale-105" />
                         <div className="absolute bottom-0 right-0 bg-teal-600 text-white p-0.5 rounded-tl-md">
                           <ImageIcon size={10} />
                         </div>
-                      </div>
+                      </button>
                     ) : (
-                      <div className="w-12 h-12 rounded-xl bg-indigo-50 dark:bg-indigo-950/50 border border-indigo-200 dark:border-indigo-800 flex items-center justify-center flex-shrink-0 text-indigo-600 dark:text-indigo-400">
+                      <button
+                        type="button"
+                        onClick={() => handleNotificationClick(notif)}
+                        className="w-12 h-12 rounded-xl bg-indigo-50 dark:bg-indigo-950/50 border border-indigo-200 dark:border-indigo-800 flex items-center justify-center flex-shrink-0 text-indigo-600 dark:text-indigo-400 cursor-pointer hover:border-indigo-500 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-all"
+                        title="Click alert icon to test folder link"
+                      >
                         <Bell size={20} />
-                      </div>
+                      </button>
                     )}
 
                     <div className="space-y-1 min-w-0 flex-1">
@@ -635,8 +713,12 @@ export default function AppNotificationManager() {
                         )}
                       </div>
 
-                      <h3 className="text-sm font-bold text-gray-900 dark:text-white truncate">
-                        {notif.title}
+                      <h3 
+                        onClick={() => handleNotificationClick(notif)}
+                        className="text-sm font-bold text-gray-900 dark:text-white truncate cursor-pointer hover:text-teal-600 dark:hover:text-teal-400 transition-colors flex items-center gap-1.5"
+                        title="Click notification title to open target folder"
+                      >
+                        <span>{notif.title}</span>
                       </h3>
 
                       <p className="text-xs text-gray-600 dark:text-gray-400 line-clamp-2 leading-relaxed">
@@ -654,15 +736,29 @@ export default function AppNotificationManager() {
                           <strong className="text-gray-700 dark:text-gray-300">{notif.views_count || 0}</strong> views
                         </span>
                         <span>•</span>
-                        <span className="truncate max-w-[180px]" title={notif.action_url || ''}>
-                          🔗 {notif.action_url || 'No action URL'}
-                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleNotificationClick(notif)}
+                          className="flex items-center gap-1 text-teal-600 dark:text-teal-400 hover:underline font-bold truncate max-w-[220px] cursor-pointer"
+                          title="Click to test direction to target folder"
+                        >
+                          <FolderOpen size={12} className="shrink-0" />
+                          <span className="truncate">{notif.action_url || 'No action URL'}</span>
+                        </button>
                       </div>
                     </div>
                   </div>
 
                   {/* Right Control Buttons */}
                   <div className="flex items-center gap-2 self-end sm:self-center pt-2 sm:pt-0 border-t sm:border-t-0 border-gray-100 dark:border-gray-800 w-full sm:w-auto justify-end">
+                    <button
+                      onClick={() => handleNotificationClick(notif)}
+                      className="p-2 hover:bg-teal-50 dark:hover:bg-teal-950/50 text-gray-500 hover:text-teal-600 rounded-xl transition-all cursor-pointer flex items-center gap-1 text-xs font-bold"
+                      title="Test Directing to Folder"
+                    >
+                      <FolderOpen size={15} />
+                    </button>
+
                     <button
                       onClick={() => handleEdit(notif)}
                       className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-400 hover:text-teal-600 rounded-xl transition-all cursor-pointer"
