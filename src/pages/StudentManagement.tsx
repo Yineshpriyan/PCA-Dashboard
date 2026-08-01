@@ -368,6 +368,50 @@ export function StudentForm({ isModal = false, modalStudent = null, modalLead = 
     };
   });
 
+  useEffect(() => {
+    if (editStudent) {
+      const rawPhone = editStudent.phone || '';
+      const cleanPhone = rawPhone.replace(/\D/g, '').replace(/^0+/, '').slice(0, 9);
+      setStudentData({
+        pcaid: editStudent.pcaid || '',
+        name: editStudent.name || '',
+        nic: editStudent.nic || '',
+        phone: cleanPhone,
+        stream: editStudent.stream || '',
+        proper_batch: editStudent.proper_batch || '',
+        joined_batch: editStudent.joined_batch || '',
+        school: editStudent.school || '',
+        district: editStudent.district || '',
+        mail: editStudent.mail || '',
+        address: editStudent.address || '',
+        asked_class_type: editStudent.asked_class_type || '',
+        asked_package_type: editStudent.asked_package_type || '',
+        batch_type: editStudent.batch_type || '',
+        gender: editStudent.gender || ''
+      });
+    } else if (leadData) {
+      const rawPhone = leadData.phone || '';
+      const cleanPhone = rawPhone.replace(/\D/g, '').replace(/^0+/, '').slice(0, 9);
+      setStudentData({
+        pcaid: leadData.pcaid || '',
+        name: leadData.name || '',
+        nic: '',
+        phone: cleanPhone,
+        stream: leadData.stream || '',
+        proper_batch: leadData.proper_batch || '',
+        joined_batch: leadData.joined_batch || '',
+        school: leadData.school || '',
+        district: leadData.district || '',
+        mail: leadData.mail || '',
+        address: leadData.address || '',
+        asked_class_type: leadData.asked_class_type || '',
+        asked_package_type: leadData.asked_package_type || '',
+        batch_type: leadData.batch_type || '',
+        gender: leadData.gender || ''
+      });
+    }
+  }, [editStudent, leadData]);
+
   // App Activation Folder Access State inside Student Form
   const [appFolders, setAppFolders] = useState<AppFolder[]>([]);
   const [appResources, setAppResources] = useState<{ id: string; folder_id: string }[]>([]);
@@ -1034,7 +1078,9 @@ export function StudentForm({ isModal = false, modalStudent = null, modalLead = 
       `pcaid.eq.${cleanQuery}`,
       `pcaid.eq.${cleanNoHyphens}`,
       `pcaid.ilike.${query}`,
-      `phone.eq.${query}`
+      `phone.eq.${query}`,
+      `nic.eq.${query}`,
+      `nic.ilike.%${query}%`
     ];
 
     if (digits) {
@@ -1044,7 +1090,7 @@ export function StudentForm({ isModal = false, modalStudent = null, modalLead = 
       orConditions.push(`phone.ilike.%${last9}`);
     }
 
-    // Check by PCA ID or Phone
+    // Check by PCA ID, Phone, or NIC
     const { data } = await supabase
       .from('student')
       .select('*')
@@ -1059,6 +1105,7 @@ export function StudentForm({ isModal = false, modalStudent = null, modalLead = 
         s.pcaid?.toUpperCase() === cleanQuery || 
         s.pcaid?.toUpperCase().replace(/[-_]/g, '') === cleanNoHyphens ||
         s.phone === query ||
+        s.nic?.toLowerCase() === query.toLowerCase() ||
         (digits && s.phone?.replace(/\D/g, '') === digits)
       ) || data[0];
     }
@@ -1556,15 +1603,19 @@ export function StudentForm({ isModal = false, modalStudent = null, modalLead = 
       // 1. Save Student
       const payload: any = {
         ...updatedStudentData,
+        nic: studentData.nic ? studentData.nic.trim() : null,
         admin: editStudent?.admin || user?.username || 'system',
         created_at: editStudent?.created_at || new Date().toISOString()
       };
+      // Clean up non-database schema keys
+      delete payload.batch_type;
+      delete payload.gender;
 
       let { error: saveError } = await supabase
         .from('student')
         .upsert(payload, { onConflict: 'pcaid' });
 
-      // If the error indicates missing column schema, fallback safely by omitting them
+      // If the error indicates missing column schema, fallback safely by omitting non-standard keys
       if (saveError && (saveError.message?.includes('column') || saveError.message?.includes('relation') || saveError.hint?.includes('column'))) {
         console.warn('DB schema mismatch, retrying save without batch_type and gender keys', saveError);
         const slimPayload = { ...payload };
@@ -3851,7 +3902,9 @@ export function StudentExplorer() {
       `pcaid.eq.${cleanQuery}`,
       `pcaid.eq.${cleanNoHyphens}`,
       `pcaid.ilike.${query}`,
-      `phone.eq.${query}`
+      `phone.eq.${query}`,
+      `nic.eq.${query}`,
+      `nic.ilike.%${query}%`
     ];
 
     if (digits) {
@@ -3861,7 +3914,7 @@ export function StudentExplorer() {
       orConditions.push(`phone.ilike.%${last9}`);
     }
 
-    // Check by PCA ID or Phone
+    // Check by PCA ID, Phone, or NIC
     const { data } = await supabase
       .from('student')
       .select('*')
@@ -3876,6 +3929,7 @@ export function StudentExplorer() {
         s.pcaid?.toUpperCase() === cleanQuery || 
         s.pcaid?.toUpperCase().replace(/[-_]/g, '') === cleanNoHyphens ||
         s.phone === query ||
+        s.nic?.toLowerCase() === query.toLowerCase() ||
         (digits && s.phone?.replace(/\D/g, '') === digits)
       ) || data[0];
     }
