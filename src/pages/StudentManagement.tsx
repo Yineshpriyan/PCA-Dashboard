@@ -857,18 +857,18 @@ export function StudentForm({ isModal = false, modalStudent = null, modalLead = 
         districtCode = '00';
       }
 
-      // Build 7-character prefix (e.g. "BRF2710")
+      // Build prefix for this specific student (e.g. "PRM2701")
       const prefix = `${streamChar}${batchTypeChar}${genderChar}${joinedBatchChar}${districtCode}`;
 
-      // Search student table directly for existing records starting with this 7-char prefix
+      // Search student table for existing records with the same batch (indices 3..4) and district (indices 5..6)
       const { data: existingStudents, error } = await supabase
         .from('student')
         .select('pcaid')
-        .ilike('pcaid', `${prefix}%`)
+        .eq('joined_batch', studentData.joined_batch)
         .is('deleted_at', null);
 
       if (error) {
-        console.error('Error searching existing students for prefix:', error);
+        console.error('Error searching existing students for PCA ID calculation:', error);
       }
 
       let maxSeq = 0;
@@ -876,17 +876,21 @@ export function StudentForm({ isModal = false, modalStudent = null, modalLead = 
         for (const st of existingStudents) {
           if (st.pcaid) {
             const cleanPcaId = st.pcaid.trim();
-            if (cleanPcaId.toUpperCase().startsWith(prefix.toUpperCase())) {
-              const suffix = cleanPcaId.slice(prefix.length);
-              const seqVal = parseInt(suffix, 10);
-              if (!isNaN(seqVal)) {
-                if (studentType === 'Scholarship') {
-                  if (seqVal >= 900 && seqVal <= 999) {
-                    maxSeq = Math.max(maxSeq, seqVal);
-                  }
-                } else {
-                  if (seqVal >= 1 && seqVal <= 899) {
-                    maxSeq = Math.max(maxSeq, seqVal);
+            if (cleanPcaId.length === 10) {
+              const stBatch = cleanPcaId.slice(3, 5);
+              const stDist = cleanPcaId.slice(5, 7);
+              if (stBatch === joinedBatchChar && stDist === districtCode) {
+                const suffix = cleanPcaId.slice(-3);
+                const seqVal = parseInt(suffix, 10);
+                if (!isNaN(seqVal)) {
+                  if (studentType === 'Scholarship') {
+                    if (seqVal >= 900 && seqVal <= 999) {
+                      maxSeq = Math.max(maxSeq, seqVal);
+                    }
+                  } else {
+                    if (seqVal >= 1 && seqVal <= 899) {
+                      maxSeq = Math.max(maxSeq, seqVal);
+                    }
                   }
                 }
               }
