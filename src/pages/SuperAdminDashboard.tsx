@@ -543,24 +543,8 @@ export function ItemsView() {
       const { data, error } = await supabase.from(table).insert({ [col]: val }).select().single();
       if (error) throw error;
       
-      // If it's a joinedBatch, automatically initialize the 25 rows for district_codes '01'-'25' in last_pca_id table
       if (type === 'joinedBatch') {
-        const lastPcaIdRows = Array.from({ length: 25 }, (_, i) => {
-          const districtCode = String(i + 1).padStart(2, '0');
-          return {
-            joined_batch: val,
-            district_code: districtCode,
-            last_id: 0,
-            last_scholarship_id: 899
-          };
-        });
-        const { error: batchErr } = await supabase.from('last_pca_id').insert(lastPcaIdRows);
-        if (batchErr) {
-          console.error('Failed to initialize last_pca_id entries:', batchErr);
-          toast.error(`Joined Batch added, but failed to initialize PCA IDs in database: ${batchErr.message}`);
-        } else {
-          toast.success('New Joined Batch added and PCA IDs initialized successfully!');
-        }
+        toast.success('New Joined Batch added successfully!');
       } else {
         toast.success(`New ${type} type added`);
       }
@@ -616,16 +600,6 @@ export function ItemsView() {
 
   const handleDelete = async (type: string, id: string) => {
     try {
-      if (type === 'joinedBatch') {
-        const item = joinedBatchItems.find(jb => jb.id === id);
-        if (item && item.joined_batch) {
-          // Delete related records from last_pca_id first
-          const { error: pcaErr } = await supabase.from('last_pca_id').delete().eq('joined_batch', item.joined_batch);
-          if (pcaErr) {
-            console.error('Failed to delete related last_pca_id entries:', pcaErr);
-          }
-        }
-      }
 
       const table = type === 'issue' ? 'issue_item' : 
                     type === 'class' ? 'class_item' : 

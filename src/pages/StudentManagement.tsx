@@ -857,81 +857,63 @@ export function StudentForm({ isModal = false, modalStudent = null, modalLead = 
         districtCode = '00';
       }
 
-      // 8th, 9th, 10th character - last ID
-      let dbLastId = 0;
-      if (studentType === 'Scholarship') {
-        dbLastId = 899; // Defaults to starting from 900
-      }
+      // Build 7-character prefix (e.g. "BRF2710")
+      const prefix = `${streamChar}${batchTypeChar}${genderChar}${joinedBatchChar}${districtCode}`;
 
-      const { data, error } = await supabase
-        .from('last_pca_id')
-        .select('last_id, last_scholarship_id')
-        .eq('joined_batch', studentData.joined_batch)
-        .eq('district_code', districtCode)
-        .maybeSingle();
+      // Search student table directly for existing records starting with this 7-char prefix
+      const { data: existingStudents, error } = await supabase
+        .from('student')
+        .select('pcaid')
+        .ilike('pcaid', `${prefix}%`)
+        .is('deleted_at', null);
 
       if (error) {
-        console.error('Error fetching sequential PCA ID from DB:', error);
-      } else if (data) {
-        if (studentType === 'Scholarship') {
-          if ('last_scholarship_id' in data && typeof data.last_scholarship_id === 'number') {
-            dbLastId = data.last_scholarship_id;
-          } else {
-            // Fallback to old _sch district_code if column is missing/undefined in returned data
-            const { data: oldSchData } = await supabase
-              .from('last_pca_id')
-              .select('last_id')
-              .eq('joined_batch', studentData.joined_batch)
-              .eq('district_code', districtCode + '_sch')
-              .maybeSingle();
-            if (oldSchData && typeof oldSchData.last_id === 'number') {
-              dbLastId = oldSchData.last_id;
+        console.error('Error searching existing students for prefix:', error);
+      }
+
+      let maxSeq = 0;
+      if (existingStudents && existingStudents.length > 0) {
+        for (const st of existingStudents) {
+          if (st.pcaid) {
+            const cleanPcaId = st.pcaid.trim();
+            if (cleanPcaId.toUpperCase().startsWith(prefix.toUpperCase())) {
+              const suffix = cleanPcaId.slice(prefix.length);
+              const seqVal = parseInt(suffix, 10);
+              if (!isNaN(seqVal)) {
+                if (studentType === 'Scholarship') {
+                  if (seqVal >= 900 && seqVal <= 999) {
+                    maxSeq = Math.max(maxSeq, seqVal);
+                  }
+                } else {
+                  if (seqVal >= 1 && seqVal <= 899) {
+                    maxSeq = Math.max(maxSeq, seqVal);
+                  }
+                }
+              }
             }
           }
-        } else {
-          if (typeof data.last_id === 'number') {
-            dbLastId = data.last_id;
-          }
-        }
-      } else if (studentType === 'Scholarship') {
-        // Fallback to old _sch district_code if main row not found and is scholarship
-        const { data: oldSchData } = await supabase
-          .from('last_pca_id')
-          .select('last_id')
-          .eq('joined_batch', studentData.joined_batch)
-          .eq('district_code', districtCode + '_sch')
-          .maybeSingle();
-        if (oldSchData && typeof oldSchData.last_id === 'number') {
-          dbLastId = oldSchData.last_id;
         }
       }
 
-      const nextId = dbLastId + 1;
+      let nextSeq = maxSeq + 1;
+      if (studentType === 'Scholarship' && maxSeq < 900) {
+        nextSeq = 900;
+      }
 
       // Limit checking based on student type
-      if (studentType === 'Paid' && nextId > 899) {
-        toast.error('IDs are full (Maximum of 899 Paid student IDs reached)');
+      if (studentType === 'Paid' && nextSeq > 899) {
+        toast.error('IDs are full for this category (Maximum of 899 Paid student IDs reached)');
         setIsGeneratingPcaId(false);
         return;
       }
-      if (studentType === 'Scholarship' && nextId > 999) {
-        toast.error('IDs are full (Maximum of 999 Scholarship student IDs reached)');
+      if (studentType === 'Scholarship' && nextSeq > 999) {
+        toast.error('IDs are full for this category (Maximum of 999 Scholarship student IDs reached)');
         setIsGeneratingPcaId(false);
         return;
       }
 
-      let lastIdStr = '';
-      if (String(nextId).length === 2) {
-        lastIdStr = '0' + nextId;
-      } else if (String(nextId).length === 1) {
-        lastIdStr = '00' + nextId;
-      } else {
-        lastIdStr = String(nextId);
-      }
-      
-      lastIdStr = lastIdStr.padStart(3, '0').slice(-3);
-
-      const computedPcaId = `${streamChar}${batchTypeChar}${genderChar}${joinedBatchChar}${districtCode}${lastIdStr}`;
+      const lastIdStr = String(nextSeq).padStart(3, '0');
+      const computedPcaId = `${prefix}${lastIdStr}`;
 
       setLatestGeneratedPcaId(computedPcaId);
       setStudentData(prev => ({ ...prev, pcaid: computedPcaId }));
@@ -1728,110 +1710,7 @@ export function StudentForm({ isModal = false, modalStudent = null, modalLead = 
         }
       }
 
-      // Update last_pca_id table if the PCAID matches our newly generated sequential PCA ID format or was generated in session
-      const isSequentialPcaId = studentData.pcaid && (
-        /^[BPN][PR][MFO]\d{7}$/.test(studentData.pcaid) || 
-        latestGeneratedPcaId === studentData.pcaid
-      );
-
-      if (isSequentialPcaId) {
-        try {
-          let districtCode = DISTRICT_NUMBERS[studentData.district] || studentData.district || '';
-          const digitsOnly = districtCode.replace(/\D/g, '');
-          let finalDistrictCode = '00';
-          if (digitsOnly) {
-            finalDistrictCode = digitsOnly.padStart(2, '0');
-          }
-
-          // Determine if it is a scholarship or paid sequence based on the actual PCA ID digits
-          let isScholarshipSeq = false;
-          const pcaidSuffix = studentData.pcaid.slice(-3);
-          const last3Val = parseInt(pcaidSuffix, 10);
-          if (studentData.pcaid && studentData.pcaid.length === 10 && !isNaN(last3Val) && last3Val >= 900 && last3Val <= 999) {
-            isScholarshipSeq = true;
-          }
-
-          if (studentData.joined_batch && finalDistrictCode) {
-            // First fetch the record with plain district code to check for the new column
-            const { data: existingPlain } = await supabase
-              .from('last_pca_id')
-              .select('*')
-              .eq('joined_batch', studentData.joined_batch)
-              .eq('district_code', finalDistrictCode)
-              .maybeSingle();
-
-            const hasScholarshipColumn = existingPlain && ('last_scholarship_id' in existingPlain);
-
-            if (isScholarshipSeq && !hasScholarshipColumn) {
-              // Fallback to the old '_sch' district code logic if the database hasn't been migrated yet
-              const oldSchCode = finalDistrictCode + '_sch';
-              const { data: existingOldSch } = await supabase
-                .from('last_pca_id')
-                .select('*')
-                .eq('joined_batch', studentData.joined_batch)
-                .eq('district_code', oldSchCode)
-                .maybeSingle();
-
-              const finalValue = !isNaN(last3Val) ? last3Val : ((existingOldSch ? (existingOldSch.last_id || 899) : 899) + 1);
-
-              if (existingOldSch) {
-                await supabase
-                  .from('last_pca_id')
-                  .update({ last_id: finalValue })
-                  .eq('joined_batch', studentData.joined_batch)
-                  .eq('district_code', oldSchCode);
-              } else {
-                await supabase
-                  .from('last_pca_id')
-                  .insert({
-                    joined_batch: studentData.joined_batch,
-                    district_code: oldSchCode,
-                    last_id: finalValue
-                  });
-              }
-            } else {
-              // Use the unified single-row approach with last_id or last_scholarship_id
-              const finalValue = !isNaN(last3Val) ? last3Val : (
-                isScholarshipSeq
-                  ? ((existingPlain ? (existingPlain.last_scholarship_id || 899) : 899) + 1)
-                  : ((existingPlain ? (existingPlain.last_id || 0) : 0) + 1)
-              );
-
-              if (existingPlain) {
-                const updatePayload: any = {};
-                if (isScholarshipSeq) {
-                  updatePayload.last_scholarship_id = finalValue;
-                } else {
-                  updatePayload.last_id = finalValue;
-                }
-                await supabase
-                  .from('last_pca_id')
-                  .update(updatePayload)
-                  .eq('joined_batch', studentData.joined_batch)
-                  .eq('district_code', finalDistrictCode);
-              } else {
-                const insertPayload: any = {
-                  joined_batch: studentData.joined_batch,
-                  district_code: finalDistrictCode,
-                };
-                if (isScholarshipSeq) {
-                  insertPayload.last_scholarship_id = finalValue;
-                  insertPayload.last_id = 0;
-                } else {
-                  insertPayload.last_id = finalValue;
-                  insertPayload.last_scholarship_id = 899;
-                }
-                await supabase
-                  .from('last_pca_id')
-                  .insert(insertPayload);
-              }
-            }
-          }
-          setLatestGeneratedPcaId(null);
-        } catch (dbErr) {
-          console.error('Error saving last PCA ID update on save:', dbErr);
-        }
-      }
+      setLatestGeneratedPcaId(null);
 
       // Log student transaction
       await logTransaction({
@@ -4055,7 +3934,7 @@ export function StudentExplorer() {
       // Fetch all active payments with paid_date and installments to build filter dropdowns and perform filtering
       const { data: payData, error: payError } = await supabase
         .from('payment')
-        .select('id, pcaid, class_type, type, paid_date, payment, installment(paid_amount, deleted_at)')
+        .select('id, pcaid, class_type, package_type, type, paid_date, payment, installment(paid_amount, deleted_at)')
         .is('deleted_at', null);
       if (payError) throw payError;
       if (payData) {
@@ -4404,8 +4283,14 @@ export function StudentExplorer() {
       })
     );
     
-    const matchesPackages = filters.packages.length === 0 || 
-      (s.asked_package_type ? filters.packages.some(p => s.asked_package_type.toLowerCase().includes(p.toLowerCase())) : false);
+    const studentPackagePayments = explorerPayments.filter(p => p.pcaid === s.pcaid && (p.type === 'package' || Boolean(p.package_type)));
+    const matchesPackages = filters.packages.length === 0 ? true : (
+      studentPackagePayments.some(p => {
+        if (!p.package_type) return false;
+        const ptLower = p.package_type.toLowerCase();
+        return filters.packages.some(pkg => ptLower === pkg.toLowerCase() || ptLower.includes(pkg.toLowerCase()));
+      })
+    );
     
     const matchesYear = !filters.year || explorerPayments.some(p => {
       if (p.pcaid === s.pcaid && p.paid_date) {
