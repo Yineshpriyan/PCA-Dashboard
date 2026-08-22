@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
 import { logTransaction } from '../lib/transactions';
@@ -288,13 +288,12 @@ export default function Login() {
 
           {/* Student Register Link */}
           <div className="mt-6 pt-5 border-t border-gray-100 dark:border-gray-800 text-center">
-            <button
-              type="button"
-              onClick={() => navigate('/register')}
-              className="text-xs font-semibold text-teal-600 dark:text-teal-400 hover:text-teal-700 dark:hover:text-teal-300 hover:underline cursor-pointer transition-colors"
+            <Link
+              to="/register"
+              className="inline-block text-xs font-semibold text-teal-600 dark:text-teal-400 hover:text-teal-700 dark:hover:text-teal-300 hover:underline cursor-pointer transition-colors"
             >
               Student Register &rarr;
-            </button>
+            </Link>
           </div>
         </div>
         
