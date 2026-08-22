@@ -285,6 +285,17 @@ export default function Login() {
               )}
             </button>
           </form>
+
+          {/* Student Register Link */}
+          <div className="mt-6 pt-5 border-t border-gray-100 dark:border-gray-800 text-center">
+            <button
+              type="button"
+              onClick={() => navigate('/register')}
+              className="text-xs font-semibold text-teal-600 dark:text-teal-400 hover:text-teal-700 dark:hover:text-teal-300 hover:underline cursor-pointer transition-colors"
+            >
+              Student Register &rarr;
+            </button>
+          </div>
         </div>
         
         <div className="mt-8 text-center text-gray-400 text-sm">

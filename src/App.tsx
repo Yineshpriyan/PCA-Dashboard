@@ -7,9 +7,13 @@ import React, { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster, toast } from 'sonner';
 import { AuthProvider, useAuth } from './hooks/useAuth';
+import { StudentAuthProvider } from './hooks/useStudentAuth';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { Shell } from './components/Shell';
 import Login from './pages/Login';
+import StudentRegister from './pages/StudentRegister';
+import StudentLogin from './pages/StudentLogin';
+import StudentPortal from './pages/StudentPortal';
 import { IssueTokenForm, DisplayTokens } from './pages/AdminDashboard';
 import { CallTaskForm, CallTaskDisplay } from './pages/CallTaskManagement';
 import { StudentForm, StudentExplorer } from './pages/StudentManagement';
@@ -183,6 +187,13 @@ function Root() {
         </ProtectedRoute>
       } />
 
+      {/* Public Student Routes */}
+      <Route path="/register" element={<StudentRegister />} />
+      <Route path="/student-register" element={<Navigate to="/register" replace />} />
+      <Route path="/student-login" element={<StudentLogin />} />
+      <Route path="/student-portal" element={<StudentPortal />} />
+      <Route path="/student/profile" element={<Navigate to="/student-portal" replace />} />
+
       {/* Catch all */}
       <Route path="*" element={<Navigate to="/login" replace />} />
     </Routes>
@@ -192,10 +203,12 @@ function Root() {
 export default function App() {
   return (
     <AuthProvider>
-      <BrowserRouter>
-        <Root />
-        <Toaster position="top-right" expand={false} richColors closeButton />
-      </BrowserRouter>
+      <StudentAuthProvider>
+        <BrowserRouter>
+          <Root />
+          <Toaster position="top-right" expand={false} richColors closeButton />
+        </BrowserRouter>
+      </StudentAuthProvider>
     </AuthProvider>
   );
 }

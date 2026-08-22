@@ -11,6 +11,36 @@ export const SRI_LANKAN_DISTRICTS = [
   'Moneragala', 'Ratnapura', 'Kegalle'
 ];
 
+export const DISTRICT_NUMBERS: Record<string, string> = {
+  'Colombo': '01',
+  'Gampaha': '02',
+  'Kalutara': '03',
+  'Kandy': '04',
+  'Matale': '05',
+  'Nuwara Eliya': '06',
+  'Galle': '07',
+  'Matara': '08',
+  'Matara ': '08',
+  'Hambantota': '09',
+  'Jaffna': '10',
+  'Kilinochchi': '11',
+  'Mannar': '12',
+  'Vavuniya': '13',
+  'Mullaitivu': '14',
+  'Batticaloa': '15',
+  'Ampara': '16',
+  'Trincomalee': '17',
+  'Kurunegala': '18',
+  'Puttalam': '19',
+  'Anuradhapura': '20',
+  'Polonnaruwa': '21',
+  'Badulla': '22',
+  'Moneragala': '23',
+  'Monaragala': '23',
+  'Ratnapura': '24',
+  'Kegalle': '25'
+};
+
 export interface User {
   id: string;
   username: string;

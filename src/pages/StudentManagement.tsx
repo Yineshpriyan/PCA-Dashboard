@@ -797,8 +797,8 @@ export function StudentForm({ isModal = false, modalStudent = null, modalLead = 
       toast.error('Please select Gender first.');
       return;
     }
-    if (!studentData.joined_batch) {
-      toast.error('Please select a Joined Batch first.');
+    if (!studentData.proper_batch) {
+      toast.error('Please select a Proper Batch first.');
       return;
     }
     if (!studentData.district) {
@@ -844,9 +844,9 @@ export function StudentForm({ isModal = false, modalStudent = null, modalLead = 
         genderChar = 'M';
       }
 
-      // 4th, 5th character - joined batch (pick last 02 digits)
-      const yearStr = String(studentData.joined_batch).trim();
-      const joinedBatchChar = yearStr.slice(-2);
+      // 4th, 5th character - proper batch (pick last 02 digits)
+      const yearStr = String(studentData.proper_batch).trim();
+      const properBatchChar = yearStr.slice(-2);
 
       // 6th, 7th character - district number
       let districtCode = DISTRICT_NUMBERS[studentData.district] || studentData.district || '';
@@ -858,13 +858,13 @@ export function StudentForm({ isModal = false, modalStudent = null, modalLead = 
       }
 
       // Build prefix for this specific student (e.g. "PRM2701")
-      const prefix = `${streamChar}${batchTypeChar}${genderChar}${joinedBatchChar}${districtCode}`;
+      const prefix = `${streamChar}${batchTypeChar}${genderChar}${properBatchChar}${districtCode}`;
 
-      // Search student table for existing records with the same batch (indices 3..4) and district (indices 5..6)
+      // Search student table for existing records with the same proper batch (indices 3..4) and district (indices 5..6)
       const { data: existingStudents, error } = await supabase
         .from('student')
         .select('pcaid')
-        .eq('joined_batch', studentData.joined_batch)
+        .eq('proper_batch', studentData.proper_batch)
         .is('deleted_at', null);
 
       if (error) {
@@ -879,7 +879,7 @@ export function StudentForm({ isModal = false, modalStudent = null, modalLead = 
             if (cleanPcaId.length === 10) {
               const stBatch = cleanPcaId.slice(3, 5);
               const stDist = cleanPcaId.slice(5, 7);
-              if (stBatch === joinedBatchChar && stDist === districtCode) {
+              if (stBatch === properBatchChar && stDist === districtCode) {
                 const suffix = cleanPcaId.slice(-3);
                 const seqVal = parseInt(suffix, 10);
                 if (!isNaN(seqVal)) {
