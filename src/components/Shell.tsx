@@ -140,40 +140,19 @@ const navSections: NavSection[] = [
 export function Sidebar({ 
   isOpen, 
   setIsOpen,
-  theme,
-  toggleTheme
 }: { 
   isOpen: boolean; 
   setIsOpen: (val: boolean) => void;
-  theme: 'light' | 'dark';
-  toggleTheme: () => void;
 }) {
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
   const location = useLocation();
-  const navigate = useNavigate();
   const [isDesktop, setIsDesktop] = React.useState(typeof window !== 'undefined' ? window.innerWidth >= 1024 : true);
-  const [isSidebarProfileExpanded, setIsSidebarProfileExpanded] = React.useState(false);
 
   React.useEffect(() => {
     const handleResize = () => setIsDesktop(window.innerWidth >= 1024);
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
-
-  const handleLogout = () => {
-    if (user) {
-      logTransaction({
-        admin_username: user.username,
-        action_type: 'LOGOUT',
-        entity_type: 'auth',
-        entity_id: user.id,
-        details: `Logged out of the PCA Portal`
-      });
-    }
-    logout();
-    setIsOpen(false);
-    navigate('/login');
-  };
 
   const filteredSections = navSections
     .map(section => ({
@@ -235,76 +214,7 @@ export function Sidebar({
             </div>
           </div>
 
-          {/* Clickable Profile Card - Placed below logo and above overview */}
-          <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-800">
-            <button
-              type="button"
-              onClick={() => setIsSidebarProfileExpanded(!isSidebarProfileExpanded)}
-              className="w-full flex items-center justify-between p-3 rounded-2xl bg-gray-50 dark:bg-gray-800 border border-gray-100 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-750 transition-all cursor-pointer text-left focus:outline-none focus:ring-2 focus:ring-teal-500/20 group"
-            >
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-teal-100 dark:bg-teal-950 flex items-center justify-center text-teal-700 dark:text-teal-300 shadow-inner group-hover:scale-105 transition-transform">
-                  <UserIcon size={20} />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-sm font-bold text-gray-900 dark:text-gray-100 truncate leading-snug">{user?.username}</p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 font-medium capitalize leading-none mt-0.5">{user?.admin_type?.replace('_', ' ')}</p>
-                </div>
-              </div>
-              <ChevronDown 
-                size={16} 
-                className={cn(
-                  "text-gray-400 dark:text-gray-500 transition-transform duration-250",
-                  isSidebarProfileExpanded && "rotate-180 text-teal-600 dark:text-teal-400"
-                )} 
-              />
-            </button>
-
-            {/* Collapsible Options panel */}
-            <AnimatePresence initial={false}>
-              {isSidebarProfileExpanded && (
-                <motion.div
-                  initial={{ height: 0, opacity: 0, marginTop: 0 }}
-                  animate={{ height: 'auto', opacity: 1, marginTop: 8 }}
-                  exit={{ height: 0, opacity: 0, marginTop: 0 }}
-                  className="overflow-hidden space-y-1.5"
-                >
-                  {/* Theme Selector */}
-                  <div className="flex items-center justify-between p-2 pl-3 rounded-xl bg-gray-50/50 dark:bg-gray-800/50 border border-gray-100/50 dark:border-gray-700/50">
-                    <span className="text-xs font-bold text-gray-500 dark:text-gray-400">Theme Mode</span>
-                    <button
-                      type="button"
-                      onClick={toggleTheme}
-                      className="p-1 px-2.5 rounded-lg bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-650 hover:bg-gray-50 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 transition-all flex items-center gap-1.5 text-[11px] font-bold shadow-sm cursor-pointer"
-                    >
-                      {theme === 'dark' ? (
-                        <>
-                          <Moon size={12} className="text-teal-400" />
-                          <span>Dark</span>
-                        </>
-                      ) : (
-                        <>
-                          <Sun size={12} className="text-amber-500" />
-                          <span>Light</span>
-                        </>
-                      )}
-                    </button>
-                  </div>
-
-                  {/* Logout Button */}
-                  <button
-                    onClick={handleLogout}
-                    className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors border border-transparent hover:border-red-100 dark:hover:border-red-900/30 cursor-pointer"
-                  >
-                    <LogOut size={16} />
-                    <span>Sign Out</span>
-                  </button>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
-
-          <div className="flex-1 px-3 py-6 space-y-6 overflow-y-auto">
+          <div className="flex-1 px-3 py-4 space-y-6 overflow-y-auto">
             {filteredSections.map((section, idx) => (
               <div key={idx} className="space-y-1.5">
                 <h3 className="text-[10px] font-bold text-gray-450 dark:text-gray-500 uppercase tracking-widest px-3 select-none">
@@ -361,11 +271,37 @@ export function Topbar({
 }) {
   const { user, logout } = useAuth();
   const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const profileDropdownRef = React.useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
   const location = useLocation();
 
+  // Close profile dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (profileDropdownRef.current && !profileDropdownRef.current.contains(event.target as Node)) {
+        setIsProfileOpen(false);
+      }
+    };
+    if (isProfileOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isProfileOpen]);
+
   const handleLogout = () => {
+    if (user) {
+      logTransaction({
+        admin_username: user.username,
+        action_type: 'LOGOUT',
+        entity_type: 'auth',
+        entity_id: user.id,
+        details: `Logged out of the PCA Portal`
+      });
+    }
     logout();
+    setIsProfileOpen(false);
     navigate('/login');
   };
 
@@ -426,6 +362,81 @@ export function Topbar({
             )}
           </div>
         )}
+      </div>
+
+      {/* Top Right Corner Profile Section */}
+      <div className="relative ml-auto pl-2" ref={profileDropdownRef}>
+        <button
+          type="button"
+          onClick={() => setIsProfileOpen(!isProfileOpen)}
+          className="flex items-center gap-3 px-3 py-1.5 rounded-2xl bg-gray-50 hover:bg-gray-100 dark:bg-gray-800/80 dark:hover:bg-gray-800 border border-gray-200/80 dark:border-gray-700/80 transition-all cursor-pointer text-left focus:outline-none focus:ring-2 focus:ring-teal-500/20 group shadow-xs"
+        >
+          <div className="w-8 h-8 rounded-full bg-teal-100 dark:bg-teal-950 flex items-center justify-center text-teal-700 dark:text-teal-300 shadow-inner group-hover:scale-105 transition-transform">
+            <UserIcon size={16} />
+          </div>
+          <div className="min-w-0 pr-1 hidden sm:block">
+            <p className="text-xs font-bold text-gray-900 dark:text-gray-100 truncate leading-tight">{user?.username}</p>
+            <p className="text-[10px] text-gray-500 dark:text-gray-400 font-medium capitalize leading-none mt-0.5">{user?.admin_type?.replace('_', ' ')}</p>
+          </div>
+          <ChevronDown 
+            size={14} 
+            className={cn(
+              "text-gray-400 dark:text-gray-500 transition-transform duration-200",
+              isProfileOpen && "rotate-180 text-teal-600 dark:text-teal-400"
+            )} 
+          />
+        </button>
+
+        {/* Profile Dropdown Menu */}
+        <AnimatePresence>
+          {isProfileOpen && (
+            <motion.div
+              initial={{ opacity: 0, y: 8, scale: 0.96 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 6, scale: 0.96 }}
+              transition={{ duration: 0.15, ease: 'easeOut' }}
+              className="absolute right-0 mt-2 w-56 bg-white dark:bg-gray-900 rounded-2xl shadow-xl border border-gray-200 dark:border-gray-800 p-2 z-50 overflow-hidden space-y-1"
+            >
+              {/* User Info Header in Dropdown (Visible for mobile too) */}
+              <div className="px-3 py-2 border-b border-gray-100 dark:border-gray-800 sm:hidden">
+                <p className="text-xs font-bold text-gray-900 dark:text-gray-100 truncate">{user?.username}</p>
+                <p className="text-[10px] text-gray-500 dark:text-gray-400 font-medium capitalize mt-0.5">{user?.admin_type?.replace('_', ' ')}</p>
+              </div>
+
+              {/* Theme Toggle in Dropdown */}
+              <div className="flex items-center justify-between p-2 rounded-xl bg-gray-50/70 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-700/60">
+                <span className="text-xs font-bold text-gray-600 dark:text-gray-300">Theme</span>
+                <button
+                  type="button"
+                  onClick={toggleTheme}
+                  className="p-1 px-2.5 rounded-lg bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-650 text-gray-700 dark:text-gray-200 transition-all flex items-center gap-1.5 text-[11px] font-bold shadow-xs cursor-pointer"
+                >
+                  {theme === 'dark' ? (
+                    <>
+                      <Moon size={12} className="text-teal-400" />
+                      <span>Dark</span>
+                    </>
+                  ) : (
+                    <>
+                      <Sun size={12} className="text-amber-500" />
+                      <span>Light</span>
+                    </>
+                  )}
+                </button>
+              </div>
+
+              {/* Sign Out Button */}
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors cursor-pointer"
+              >
+                <LogOut size={15} />
+                <span>Sign Out</span>
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </header>
   );
@@ -529,7 +540,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100 transition-colors duration-200">
-      <Sidebar isOpen={isSidebarOpen} setIsOpen={setIsSidebarOpen} theme={theme} toggleTheme={toggleTheme} />
+      <Sidebar isOpen={isSidebarOpen} setIsOpen={setIsSidebarOpen} />
       <div className={cn("flex flex-col min-h-screen transition-all duration-300 ease-in-out", isSidebarOpen ? "lg:ml-64" : "lg:ml-0")}>
         <Topbar isSidebarOpen={isSidebarOpen} setIsSidebarOpen={() => setIsSidebarOpen(!isSidebarOpen)} theme={theme} toggleTheme={toggleTheme} />
         <main className="flex-1 p-4 lg:px-6 lg:py-4">
