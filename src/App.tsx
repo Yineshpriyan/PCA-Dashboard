@@ -17,6 +17,7 @@ import StudentPortal from './pages/StudentPortal';
 import { IssueTokenForm, DisplayTokens } from './pages/AdminDashboard';
 import { CallTaskForm, CallTaskDisplay } from './pages/CallTaskManagement';
 import { StudentForm, StudentExplorer } from './pages/StudentManagement';
+import SelfEnrolmentManagement from './pages/SelfEnrolmentManagement';
 import { FreeClassForm } from './pages/FreeClassManagement';
 import RegisterStudents from './pages/RegisterStudents';
 import RegisterIndividualStudent from './pages/RegisterIndividualStudent';
@@ -97,6 +98,20 @@ function Root() {
         <ProtectedRoute allowedRoles={['admin', 'super_admin']}>
           <Shell>
             <StudentForm />
+          </Shell>
+        </ProtectedRoute>
+      } />
+      <Route path="/admin/self-enrolment" element={
+        <ProtectedRoute allowedRoles={['admin', 'super_admin']}>
+          <Shell>
+            <SelfEnrolmentManagement />
+          </Shell>
+        </ProtectedRoute>
+      } />
+      <Route path="/admin/self-registered" element={
+        <ProtectedRoute allowedRoles={['admin', 'super_admin']}>
+          <Shell>
+            <SelfEnrolmentManagement />
           </Shell>
         </ProtectedRoute>
       } />

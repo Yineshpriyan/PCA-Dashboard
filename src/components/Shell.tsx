@@ -20,7 +20,8 @@ import {
   Video,
   Home,
   Trash2,
-  Smartphone
+  Smartphone,
+  UserCheck
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { logTransaction } from '../lib/transactions';
@@ -80,6 +81,13 @@ const navSections: NavSection[] = [
     title: 'Student Enrolment',
     items: [
       { label: 'New Student', path: '/admin/student-form', icon: <Settings size={18} />, roles: ['admin', 'super_admin'] },
+      { 
+        label: 'Self Enrolment', 
+        path: '/admin/self-enrolment', 
+        matchPaths: ['/admin/self-enrolment', '/admin/self-registered'],
+        icon: <UserCheck size={18} />, 
+        roles: ['admin', 'super_admin'] 
+      },
       { label: 'Students', path: '/admin/student-explorer', icon: <Users size={18} />, roles: ['admin', 'super_admin'] },
     ]
   },

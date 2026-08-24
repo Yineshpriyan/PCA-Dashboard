@@ -687,10 +687,10 @@ export default function StudentRegister() {
                       </div>
 
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        {/* 3. முதல் தடவை பரீட்சைக்கு தோற்றிய / தோற்றவுள்ள ஆண்டு / Proper Batch */}
+                        {/* 3. முதல் தடவை பரீட்சைக்கு தோற்றிய ஆண்டு / Proper Batch */}
                         <div className="space-y-1.5">
                           <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                            முதல் தடவை பரீட்சைக்கு தோற்றிய / தோற்றவுள்ள ஆண்டு / Proper Batch <span className="text-red-500">*</span>
+                            முதல் தடவை பரீட்சைக்கு தோற்றிய ஆண்டு / Proper Batch <span className="text-red-500">*</span>
                           </label>
                           <input
                             type="text"
