@@ -530,10 +530,20 @@ export default function StudentRegister() {
                       <button
                         type="button"
                         onClick={() => copyToClip(registeredResult.pcaid, 'pcaid')}
-                        className="p-1.5 sm:p-2 bg-teal-50 dark:bg-teal-950/60 hover:bg-teal-100 dark:hover:bg-teal-900 text-teal-600 dark:text-teal-400 rounded-lg transition-colors cursor-pointer border border-teal-100 dark:border-teal-800"
+                        className="flex items-center gap-1.5 px-2.5 py-1.5 bg-teal-50 dark:bg-teal-950/60 hover:bg-teal-100 dark:hover:bg-teal-900 text-teal-600 dark:text-teal-400 rounded-lg transition-colors cursor-pointer border border-teal-100 dark:border-teal-800 text-xs font-bold shrink-0"
                         title="Copy PCA ID"
                       >
-                        {copiedPcaid ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
+                        {copiedPcaid ? (
+                          <>
+                            <Check className="w-3.5 h-3.5 text-green-500" />
+                            <span className="text-green-600 dark:text-green-400">Copied</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-3.5 h-3.5" />
+                            <span>Copy</span>
+                          </>
+                        )}
                       </button>
                     </div>
                   </div>
@@ -555,10 +565,20 @@ export default function StudentRegister() {
                       <button
                         type="button"
                         onClick={() => copyToClip(registeredResult.pcaid, 'password')}
-                        className="p-1.5 sm:p-2 bg-teal-50 dark:bg-teal-950/60 hover:bg-teal-100 dark:hover:bg-teal-900 text-teal-600 dark:text-teal-400 rounded-lg transition-colors cursor-pointer border border-teal-100 dark:border-teal-800"
+                        className="flex items-center gap-1.5 px-2.5 py-1.5 bg-teal-50 dark:bg-teal-950/60 hover:bg-teal-100 dark:hover:bg-teal-900 text-teal-600 dark:text-teal-400 rounded-lg transition-colors cursor-pointer border border-teal-100 dark:border-teal-800 text-xs font-bold shrink-0"
                         title="Copy Password"
                       >
-                        {copiedPassword ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
+                        {copiedPassword ? (
+                          <>
+                            <Check className="w-3.5 h-3.5 text-green-500" />
+                            <span className="text-green-600 dark:text-green-400">Copied</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-3.5 h-3.5" />
+                            <span>Copy</span>
+                          </>
+                        )}
                       </button>
                     </div>
                   </div>
