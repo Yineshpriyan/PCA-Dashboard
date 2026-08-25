@@ -50,7 +50,7 @@ const navSections: NavSection[] = [
   {
     title: 'Overview',
     items: [
-      { label: 'Dashboard', path: '/admin/home', icon: <Home size={18} />, roles: ['admin', 'super_admin'] },
+      { label: 'Dashboard', path: '/admin/home', icon: <Home size={18} />, roles: ['super_admin'] },
     ]
   },
   {

@@ -47,20 +47,22 @@ function Root() {
     );
   }
 
+  const defaultLandingPath = user?.admin_type === 'super_admin' ? '/admin/home' : '/admin/display';
+
   return (
     <Routes>
-      <Route path="/login" element={!user ? <Login /> : <Navigate to="/admin/home" />} />
+      <Route path="/login" element={!user ? <Login /> : <Navigate to={defaultLandingPath} />} />
       
       {/* Admin Routes */}
       <Route path="/admin" element={
         <ProtectedRoute allowedRoles={['admin', 'super_admin']}>
           <Shell>
-            <Navigate to="/admin/home" replace />
+            <Navigate to={defaultLandingPath} replace />
           </Shell>
         </ProtectedRoute>
       } />
       <Route path="/admin/home" element={
-        <ProtectedRoute allowedRoles={['admin', 'super_admin']}>
+        <ProtectedRoute allowedRoles={['super_admin']}>
           <Shell>
             <Home />
           </Shell>

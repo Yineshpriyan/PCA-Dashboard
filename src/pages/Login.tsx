@@ -194,7 +194,7 @@ export default function Login() {
         details: `Logged into the PCA Portal`
       }).catch(err => console.error('Failed to log login transaction:', err));
       
-      navigate('/admin/home');
+      navigate(userData.admin_type === 'super_admin' ? '/admin/home' : '/admin/display');
     } catch (err: any) {
       toast.error(err.message || 'An error occurred during login');
       console.error(err);

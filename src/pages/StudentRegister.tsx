@@ -442,49 +442,51 @@ export default function StudentRegister() {
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 flex flex-col font-sans transition-colors selection:bg-teal-500 selection:text-white">
       {/* Top Navigation Bar */}
-      <header className="w-full bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 sticky top-0 z-40 px-4 sm:px-8 py-3.5 flex items-center justify-between shadow-xs">
-        <div className="flex items-center gap-3">
-          <AcademyLogo width={36} height={36} showText={false} className="shrink-0" />
-          <div>
+      <header className="w-full bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 sticky top-0 z-40 px-3 sm:px-6 py-2.5 sm:py-3 flex items-center justify-between gap-2 shadow-xs">
+        <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
+          <AcademyLogo width={26} height={26} showText={false} className="shrink-0" />
+          <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <span className="font-black tracking-tight text-slate-900 dark:text-white text-base sm:text-lg">Physics Cube Academy</span>
-              <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 bg-teal-50 dark:bg-teal-950/60 text-teal-700 dark:text-teal-400 border border-teal-200 dark:border-teal-800 rounded-full">
+              <span className="font-bold sm:font-extrabold tracking-tight text-slate-900 dark:text-white text-xs sm:text-base whitespace-nowrap truncate">
+                Physics Cube Academy
+              </span>
+              <span className="hidden sm:inline-flex text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 bg-teal-50 dark:bg-teal-950/60 text-teal-700 dark:text-teal-400 border border-teal-200 dark:border-teal-800 rounded-full whitespace-nowrap">
                 Student Portal
               </span>
             </div>
-            <p className="text-xs text-slate-500 dark:text-slate-400 font-medium hidden sm:block">Advanced Level Physics Academy Registration</p>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium hidden md:block leading-tight">Advanced Level Physics Academy Registration</p>
           </div>
         </div>
 
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
           {/* Theme Option Toggle */}
           <button
             type="button"
             onClick={toggleTheme}
-            className="p-2 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors cursor-pointer border border-slate-200 dark:border-slate-700"
+            className="p-1.5 sm:p-2 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg sm:rounded-xl transition-colors cursor-pointer border border-slate-200 dark:border-slate-700"
             title={`Switch to ${theme === 'dark' ? 'Light' : 'Dark'} mode`}
             aria-label="Toggle Theme"
           >
             {theme === 'dark' ? (
-              <Sun size={18} className="text-amber-400" />
+              <Sun size={16} className="text-amber-400" />
             ) : (
-              <Moon size={18} className="text-slate-600" />
+              <Moon size={16} className="text-slate-600" />
             )}
           </button>
 
           {/* Student Login Link */}
           <Link
             to="/student-login"
-            className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer"
+            className="flex items-center gap-1.5 px-2.5 sm:px-3.5 py-1.5 sm:py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 rounded-lg sm:rounded-xl text-[11px] sm:text-xs font-bold transition-all shadow-xs cursor-pointer whitespace-nowrap"
           >
-            <LogIn className="w-3.5 h-3.5" />
+            <LogIn className="w-3.5 h-3.5 shrink-0" />
             <span>Student Login</span>
           </Link>
         </div>
       </header>
 
       {/* Main Content Area */}
-      <main className="flex-1 max-w-3xl w-full mx-auto p-4 sm:p-6 lg:p-8 flex flex-col justify-center">
+      <main className="flex-1 max-w-3xl w-full mx-auto p-3 sm:p-6 lg:p-8 flex flex-col justify-center">
         <AnimatePresence mode="wait">
           {registeredResult ? (
             /* Registration Success Credentials View */
@@ -494,41 +496,41 @@ export default function StudentRegister() {
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.98 }}
               transition={{ duration: 0.25 }}
-              className="bg-white dark:bg-slate-900 border border-teal-200 dark:border-teal-800/60 rounded-3xl p-6 sm:p-10 shadow-sm space-y-8"
+              className="bg-white dark:bg-slate-900 border border-teal-200 dark:border-teal-800/60 rounded-2xl sm:rounded-3xl p-4 sm:p-8 shadow-sm space-y-6 sm:space-y-8"
             >
               {/* Header Badge */}
               <div className="text-center space-y-3">
-                <div className="inline-flex items-center justify-center w-16 h-16 bg-teal-50 dark:bg-teal-950/60 border border-teal-200 dark:border-teal-800 rounded-full text-teal-600 dark:text-teal-400 shadow-inner">
-                  <CheckCircle2 className="w-8 h-8 animate-bounce" />
+                <div className="inline-flex items-center justify-center w-14 h-14 sm:w-16 sm:h-16 bg-teal-50 dark:bg-teal-950/60 border border-teal-200 dark:border-teal-800 rounded-full text-teal-600 dark:text-teal-400 shadow-inner">
+                  <CheckCircle2 className="w-7 h-7 sm:w-8 sm:h-8 animate-bounce" />
                 </div>
-                <h1 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white tracking-tight">பதிவு வெற்றிகரமாக முடிவடைந்தது!</h1>
-                <p className="text-slate-600 dark:text-slate-300 text-sm max-w-md mx-auto">
+                <h1 className="text-xl sm:text-2xl md:text-3xl font-black text-slate-900 dark:text-white tracking-tight">பதிவு வெற்றிகரமாக முடிவடைந்தது!</h1>
+                <p className="text-slate-600 dark:text-slate-300 text-xs sm:text-sm max-w-md mx-auto">
                   Welcome to Physics Cube Academy, <strong className="text-teal-600 dark:text-teal-400">{registeredResult.name}</strong>. Your official PCA ID and student credentials have been generated.
                 </p>
               </div>
 
               {/* Credentials Highlight Card */}
-              <div className="bg-slate-50 dark:bg-slate-800/60 border border-teal-200 dark:border-teal-800/80 rounded-2xl p-6 space-y-6 shadow-xs relative overflow-hidden">
+              <div className="bg-slate-50 dark:bg-slate-800/60 border border-teal-200 dark:border-teal-800/80 rounded-2xl p-4 sm:p-6 space-y-5 sm:space-y-6 shadow-xs relative overflow-hidden">
                 <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-700">
                   <div className="flex items-center gap-2">
-                    <ShieldCheck className="w-5 h-5 text-teal-600 dark:text-teal-400" />
-                    <span className="text-xs font-black uppercase tracking-wider text-teal-700 dark:text-teal-300">Your Student Credentials</span>
+                    <ShieldCheck className="w-4 h-4 sm:w-5 sm:h-5 text-teal-600 dark:text-teal-400" />
+                    <span className="text-[11px] sm:text-xs font-black uppercase tracking-wider text-teal-700 dark:text-teal-300">Your Student Credentials</span>
                   </div>
-                  <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">Save this securely</span>
+                  <span className="text-[10px] sm:text-[11px] font-semibold text-slate-500 dark:text-slate-400">Save this securely</span>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                   {/* PCA ID / Username */}
-                  <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-4 space-y-1.5 shadow-xs">
-                    <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Username (PCA ID)</span>
+                  <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-3.5 sm:p-4 space-y-1.5 shadow-xs">
+                    <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Username (PCA ID)</span>
                     <div className="flex items-center justify-between gap-2">
-                      <span className="text-xl sm:text-2xl font-mono font-black text-slate-900 dark:text-white tracking-widest selection:bg-teal-500">
+                      <span className="text-lg sm:text-2xl font-mono font-black text-slate-900 dark:text-white tracking-wider sm:tracking-widest selection:bg-teal-500">
                         {registeredResult.pcaid}
                       </span>
                       <button
                         type="button"
                         onClick={() => copyToClip(registeredResult.pcaid, 'pcaid')}
-                        className="p-2 bg-teal-50 dark:bg-teal-950/60 hover:bg-teal-100 dark:hover:bg-teal-900 text-teal-600 dark:text-teal-400 rounded-lg transition-colors cursor-pointer border border-teal-100 dark:border-teal-800"
+                        className="p-1.5 sm:p-2 bg-teal-50 dark:bg-teal-950/60 hover:bg-teal-100 dark:hover:bg-teal-900 text-teal-600 dark:text-teal-400 rounded-lg transition-colors cursor-pointer border border-teal-100 dark:border-teal-800"
                         title="Copy PCA ID"
                       >
                         {copiedPcaid ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
@@ -537,10 +539,10 @@ export default function StudentRegister() {
                   </div>
 
                   {/* Password */}
-                  <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-4 space-y-1.5 shadow-xs">
-                    <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Initial Password</span>
+                  <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-3.5 sm:p-4 space-y-1.5 shadow-xs">
+                    <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Initial Password</span>
                     <div className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-2 font-mono font-black text-slate-900 dark:text-white text-xl sm:text-2xl tracking-widest">
+                      <div className="flex items-center gap-2 font-mono font-black text-slate-900 dark:text-white text-lg sm:text-2xl tracking-wider sm:tracking-widest">
                         {showPassword ? registeredResult.pcaid : '••••••••••'}
                         <button
                           type="button"
@@ -553,7 +555,7 @@ export default function StudentRegister() {
                       <button
                         type="button"
                         onClick={() => copyToClip(registeredResult.pcaid, 'password')}
-                        className="p-2 bg-teal-50 dark:bg-teal-950/60 hover:bg-teal-100 dark:hover:bg-teal-900 text-teal-600 dark:text-teal-400 rounded-lg transition-colors cursor-pointer border border-teal-100 dark:border-teal-800"
+                        className="p-1.5 sm:p-2 bg-teal-50 dark:bg-teal-950/60 hover:bg-teal-100 dark:hover:bg-teal-900 text-teal-600 dark:text-teal-400 rounded-lg transition-colors cursor-pointer border border-teal-100 dark:border-teal-800"
                         title="Copy Password"
                       >
                         {copiedPassword ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
@@ -563,7 +565,7 @@ export default function StudentRegister() {
                 </div>
 
                 {/* Important Notice */}
-                <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/50 rounded-xl p-3.5 text-xs text-amber-900 dark:text-amber-300 leading-relaxed flex items-start gap-2.5">
+                <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/50 rounded-xl p-3 sm:p-3.5 text-[11px] sm:text-xs text-amber-900 dark:text-amber-300 leading-relaxed flex items-start gap-2.5">
                   <Sparkles className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
                   <div>
                     <strong>Important:</strong> Your default password is the same as your <strong>PCA ID</strong>. You can use these credentials to sign in to this <strong>Student Portal</strong> and the <strong>PCA Mobile App</strong>.
@@ -572,11 +574,11 @@ export default function StudentRegister() {
               </div>
 
               {/* Action Buttons */}
-              <div className="flex flex-col sm:flex-row items-center gap-4 pt-2">
+              <div className="flex flex-col sm:flex-row items-center gap-3 sm:gap-4 pt-2">
                 <button
                   type="button"
                   onClick={handleDirectLogin}
-                  className="w-full sm:flex-1 py-3.5 px-6 bg-teal-600 hover:bg-teal-700 active:bg-teal-800 text-white font-bold rounded-xl text-sm transition-all shadow-sm flex items-center justify-center gap-2 cursor-pointer"
+                  className="w-full sm:flex-1 py-3 sm:py-3.5 px-6 bg-teal-600 hover:bg-teal-700 active:bg-teal-800 text-white font-bold rounded-xl text-xs sm:text-sm transition-all shadow-sm flex items-center justify-center gap-2 cursor-pointer"
                 >
                   <span>Open Student Account</span>
                   <ArrowRight className="w-4 h-4" />
@@ -595,7 +597,7 @@ export default function StudentRegister() {
                     setPhoneError('');
                     setMailError('');
                   }}
-                  className="w-full sm:w-auto py-3.5 px-6 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold rounded-xl text-sm transition-colors cursor-pointer border border-slate-200 dark:border-slate-700"
+                  className="w-full sm:w-auto py-3 sm:py-3.5 px-6 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold rounded-xl text-xs sm:text-sm transition-colors cursor-pointer border border-slate-200 dark:border-slate-700"
                 >
                   Register Another Student
                 </button>
@@ -609,12 +611,12 @@ export default function StudentRegister() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -15 }}
               transition={{ duration: 0.25 }}
-              className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 sm:p-10 shadow-sm space-y-8"
+              className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl sm:rounded-3xl p-4 sm:p-8 md:p-10 shadow-sm space-y-6 sm:space-y-8"
             >
               {/* Form Header */}
-              <div className="border-b border-slate-200 dark:border-slate-800 pb-5">
-                <h1 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white tracking-tight">Create Your Student Account</h1>
-                <p className="text-slate-500 dark:text-slate-400 text-xs sm:text-sm mt-1">
+              <div className="border-b border-slate-200 dark:border-slate-800 pb-4 sm:pb-5">
+                <h1 className="text-xl sm:text-2xl md:text-3xl font-black text-slate-900 dark:text-white tracking-tight">Create Your Student Account</h1>
+                <p className="text-slate-500 dark:text-slate-400 text-[11px] sm:text-xs md:text-sm mt-1">
                   உங்கள் விபரங்களை உள்ளிட்டு உங்களுக்கான பிரத்தியேக PCA ID ஐ பெற்றுக்கொள்ளுங்கள்.
                 </p>
               </div>
@@ -814,10 +816,10 @@ export default function StudentRegister() {
                       ? 'border-red-500 focus-within:ring-red-500/20 focus-within:border-red-500' 
                       : 'border-slate-200 dark:border-slate-700 focus-within:ring-teal-500/20 focus-within:border-teal-500'
                   }`}>
-                    <div className="flex items-center gap-1.5 px-3.5 py-2.5 bg-slate-100 dark:bg-slate-800/90 border-r border-slate-200 dark:border-slate-700 select-none text-xs font-bold text-slate-700 dark:text-slate-300 shrink-0">
-                      <span className="text-base" role="img" aria-label="Sri Lanka Flag">🇱🇰</span>
+                    <div className="flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3.5 py-2 sm:py-2.5 bg-slate-100 dark:bg-slate-800/90 border-r border-slate-200 dark:border-slate-700 select-none text-xs font-bold text-slate-700 dark:text-slate-300 shrink-0">
+                      <span className="text-sm sm:text-base" role="img" aria-label="Sri Lanka Flag">🇱🇰</span>
                       <span>+94</span>
-                      <ChevronDown size={12} className="text-slate-400" />
+                      <ChevronDown size={11} className="text-slate-400" />
                     </div>
                     <input
                       type="text"
@@ -832,7 +834,7 @@ export default function StudentRegister() {
                       }}
                       onBlur={() => handlePhoneBlur(phone)}
                       placeholder="7X XXX XXXX"
-                      className="w-full px-3.5 py-2.5 bg-transparent focus:outline-none text-xs font-medium text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500"
+                      className="w-full px-3 py-2 sm:py-2.5 bg-transparent focus:outline-none text-xs font-medium text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500"
                       required
                     />
                   </div>
@@ -861,7 +863,7 @@ export default function StudentRegister() {
                       }}
                       onBlur={() => handleMailBlur(mail)}
                       placeholder="username"
-                      className="w-full px-3.5 py-2.5 bg-transparent focus:outline-none text-xs font-medium text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500"
+                      className="w-full px-3 py-2 sm:py-2.5 bg-transparent focus:outline-none text-xs font-medium text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 min-w-0"
                     />
                     <select
                       value={mailDomain}
@@ -869,7 +871,7 @@ export default function StudentRegister() {
                         setMailDomain(e.target.value);
                         if (mailError) setMailError('');
                       }}
-                      className="px-3.5 py-2.5 bg-slate-100 dark:bg-slate-800/90 border-l border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-700 dark:text-slate-300 focus:outline-none cursor-pointer shrink-0"
+                      className="px-2 sm:px-3 py-2 sm:py-2.5 bg-slate-100 dark:bg-slate-800/90 border-l border-slate-200 dark:border-slate-700 text-[11px] sm:text-xs font-bold text-slate-700 dark:text-slate-300 focus:outline-none cursor-pointer shrink-0"
                     >
                       <option value="@gmail.com">@gmail.com</option>
                       <option value="@icloud.com">@icloud.com</option>
