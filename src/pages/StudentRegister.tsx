@@ -87,9 +87,10 @@ export default function StudentRegister() {
   const [registeredResult, setRegisteredResult] = useState<{
     pcaid: string;
     name: string;
-    stream: string;
-    proper_batch: string;
-    district: string;
+    stream?: string;
+    proper_batch?: string;
+    district?: string;
+    isExisting?: boolean;
   } | null>(null);
 
   const [copiedPcaid, setCopiedPcaid] = useState(false);
@@ -282,6 +283,57 @@ export default function StudentRegister() {
     setIsSubmitting(true);
 
     try {
+      // =========================================================================
+      // STEP 0: Check if student already exists by Phone or NIC (prevent duplicate PCA IDs)
+      // =========================================================================
+      const phoneDigits = cleanPhone; // e.g. "771234567"
+      const phoneVariations = [
+        phoneDigits,
+        `0${phoneDigits}`,
+        `+94${phoneDigits}`,
+        `94${phoneDigits}`
+      ];
+      const phoneOrFilter = phoneVariations.map(p => `phone.eq.${p}`).join(',');
+      const rawNic = nic.trim().toUpperCase();
+      const duplicateFilter = rawNic ? `${phoneOrFilter},nic.eq.${rawNic}` : phoneOrFilter;
+
+      const { data: existingRecords, error: dupCheckErr } = await supabase
+        .from('student')
+        .select('pcaid, name, stream, proper_batch, district, phone, nic')
+        .is('deleted_at', null)
+        .or(duplicateFilter)
+        .limit(1);
+
+      if (dupCheckErr) {
+        console.warn('Could not check existing student duplicates:', dupCheckErr);
+      }
+
+      if (existingRecords && existingRecords.length > 0) {
+        const existingStudent = existingRecords[0];
+
+        // Ensure credentials exist in student_app_credentials table for login
+        await supabase
+          .from('student_app_credentials')
+          .upsert({
+            pcaid: existingStudent.pcaid,
+            password_hash: existingStudent.pcaid,
+            status: 'Active',
+            student_name: existingStudent.name,
+          }, { onConflict: 'pcaid' });
+
+        toast.success(`நீங்கள் ஏற்கனவே பதிவு செய்துள்ளீர்கள்! உங்களுடைய PCA ID: ${existingStudent.pcaid}`);
+        setRegisteredResult({
+          pcaid: existingStudent.pcaid,
+          name: existingStudent.name,
+          stream: existingStudent.stream || stream,
+          proper_batch: existingStudent.proper_batch || effectiveProperBatch,
+          district: existingStudent.district || district,
+          isExisting: true,
+        });
+        setIsSubmitting(false);
+        return;
+      }
+
       // 1. Calculate Stream Code
       let streamChar = 'B';
       if (stream === 'Physical Science') {
@@ -388,6 +440,43 @@ export default function StudentRegister() {
         .insert(studentPayload);
 
       if (insertStudentErr) {
+        // If unique constraint was triggered (e.g. race condition or edge case)
+        if (
+          insertStudentErr.message?.includes('idx_student_unique_active_phone') ||
+          insertStudentErr.message?.includes('idx_student_unique_active_nic') ||
+          insertStudentErr.message?.includes('duplicate key value')
+        ) {
+          const { data: dupStudent } = await supabase
+            .from('student')
+            .select('pcaid, name, stream, proper_batch, district')
+            .is('deleted_at', null)
+            .or(duplicateFilter)
+            .limit(1)
+            .maybeSingle();
+
+          if (dupStudent) {
+            await supabase
+              .from('student_app_credentials')
+              .upsert({
+                pcaid: dupStudent.pcaid,
+                password_hash: dupStudent.pcaid,
+                status: 'Active',
+                student_name: dupStudent.name,
+              }, { onConflict: 'pcaid' });
+
+            toast.success(`நீங்கள் ஏற்கனவே பதிவு செய்துள்ளீர்கள்! உங்களுடைய PCA ID: ${dupStudent.pcaid}`);
+            setRegisteredResult({
+              pcaid: dupStudent.pcaid,
+              name: dupStudent.name,
+              stream: dupStudent.stream || stream,
+              proper_batch: dupStudent.proper_batch || effectiveProperBatch,
+              district: dupStudent.district || district,
+              isExisting: true,
+            });
+            setIsSubmitting(false);
+            return;
+          }
+        }
         throw new Error(`Failed to create student record: ${insertStudentErr.message}`);
       }
 
@@ -501,11 +590,36 @@ export default function StudentRegister() {
               {/* Header Badge */}
               <div className="text-center space-y-3">
                 <div className="inline-flex items-center justify-center w-14 h-14 sm:w-16 sm:h-16 bg-teal-50 dark:bg-teal-950/60 border border-teal-200 dark:border-teal-800 rounded-full text-teal-600 dark:text-teal-400 shadow-inner">
-                  <CheckCircle2 className="w-7 h-7 sm:w-8 sm:h-8 animate-bounce" />
+                  <CheckCircle2 className="w-7 h-7 sm:w-8 sm:h-8" />
                 </div>
-                <h1 className="text-xl sm:text-2xl md:text-3xl font-black text-slate-900 dark:text-white tracking-tight">பதிவு வெற்றிகரமாக முடிவடைந்தது!</h1>
+                {registeredResult.isExisting ? (
+                  <div>
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-50 dark:bg-amber-950/60 border border-amber-300 dark:border-amber-700 text-amber-800 dark:text-amber-300 text-xs font-bold rounded-full">
+                      <Sparkles className="w-3.5 h-3.5" />
+                      <span>ஏற்கனவே பதிவு செய்யப்பட்டுள்ளது / Already Registered</span>
+                    </span>
+                  </div>
+                ) : (
+                  <div>
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-teal-50 dark:bg-teal-950/60 border border-teal-300 dark:border-teal-700 text-teal-800 dark:text-teal-300 text-xs font-bold rounded-full">
+                      <Check className="w-3.5 h-3.5" />
+                      <span>புதிய பதிவு / New Registration</span>
+                    </span>
+                  </div>
+                )}
+                <h1 className="text-xl sm:text-2xl md:text-3xl font-black text-slate-900 dark:text-white tracking-tight">
+                  {registeredResult.isExisting ? 'உங்கள் PCA ID விபரம்' : 'பதிவு வெற்றிகரமாக முடிவடைந்தது!'}
+                </h1>
                 <p className="text-slate-600 dark:text-slate-300 text-xs sm:text-sm max-w-md mx-auto">
-                  Welcome to Physics Cube Academy, <strong className="text-teal-600 dark:text-teal-400">{registeredResult.name}</strong>. Your official PCA ID and student credentials have been generated.
+                  {registeredResult.isExisting ? (
+                    <>
+                      <strong className="text-teal-600 dark:text-teal-400">{registeredResult.name}</strong>, இந்த தொலைபேசி இலக்கத்திற்கு ஏற்கனவே PCA ID ஒதுக்கப்பட்டுள்ளது. நீங்கள் இதை பயன்படுத்தி உள்நுழையலாம்.
+                    </>
+                  ) : (
+                    <>
+                      Welcome to Physics Cube Academy, <strong className="text-teal-600 dark:text-teal-400">{registeredResult.name}</strong>. Your official PCA ID and student credentials have been generated.
+                    </>
+                  )}
                 </p>
               </div>
 
