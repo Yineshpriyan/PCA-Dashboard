@@ -646,7 +646,7 @@ export default function StudentRegister() {
                 {/* 1. பெயர் / Name */}
                 <div className="space-y-1.5">
                   <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                    பெயர் / Name <span className="text-red-500">*</span>
+                    மாணவரின் பெயர் (தந்தையின் பெயர் தேவையில்லை) / Name <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="text"
