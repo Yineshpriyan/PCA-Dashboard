@@ -58,7 +58,7 @@ import {
   syncParentFolderAccess, 
   getAllDescendantFolderIds 
 } from './AppActivation';
-import { cn, copyToClipboard, formatDate, exportToExcel, cleanStudentNameForZoom } from '../lib/utils';
+import { cn, copyToClipboard, formatDate, exportToExcel, cleanStudentNameForZoom, parseEmailUsernameAndDomain } from '../lib/utils';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { logTransaction } from '../lib/transactions';
@@ -2387,13 +2387,21 @@ export function StudentForm({ isModal = false, modalStudent = null, modalLead = 
                     : studentData.mail
                 }
                 onChange={(e) => {
-                  const val = e.target.value.trim();
-                  const cleanVal = val.replace(/[^a-zA-Z0-9._-]/g, '');
+                  const val = e.target.value;
                   const currentDomain = studentData.mail.endsWith('@icloud.com') ? '@icloud.com' : '@gmail.com';
-                  setStudentData({ ...studentData, mail: cleanVal ? `${cleanVal}${currentDomain}` : currentDomain });
+                  const { username, domain } = parseEmailUsernameAndDomain(val, currentDomain);
+                  setStudentData({ ...studentData, mail: username ? `${username}${domain}` : domain });
                   if (mailError) setMailError('');
                 }}
-                onBlur={() => handleMailBlur(studentData.mail)}
+                onBlur={() => {
+                  const currentDomain = studentData.mail.endsWith('@icloud.com') ? '@icloud.com' : '@gmail.com';
+                  const { username, domain } = parseEmailUsernameAndDomain(studentData.mail, currentDomain);
+                  const cleanedMail = username ? `${username}${domain}` : currentDomain;
+                  if (cleanedMail !== studentData.mail) {
+                    setStudentData({ ...studentData, mail: cleanedMail });
+                  }
+                  handleMailBlur(cleanedMail);
+                }}
                 className="w-full px-3 py-2 bg-transparent focus:outline-none text-sm text-gray-800 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
                 placeholder="username"
               />
@@ -2401,17 +2409,8 @@ export function StudentForm({ isModal = false, modalStudent = null, modalLead = 
                 value={studentData.mail.endsWith('@icloud.com') ? '@icloud.com' : '@gmail.com'}
                 onChange={(e) => {
                   const newDomain = e.target.value;
-                  const currentEmail = studentData.mail || '';
-                  let username = '';
-                  if (currentEmail.endsWith('@gmail.com')) {
-                    username = currentEmail.slice(0, -10);
-                  } else if (currentEmail.endsWith('@icloud.com')) {
-                    username = currentEmail.slice(0, -11);
-                  } else {
-                    username = currentEmail.split('@')[0];
-                  }
-                  const cleanUsername = username.replace(/[^a-zA-Z0-9._-]/g, '');
-                  setStudentData({ ...studentData, mail: cleanUsername ? `${cleanUsername}${newDomain}` : newDomain });
+                  const { username } = parseEmailUsernameAndDomain(studentData.mail, newDomain);
+                  setStudentData({ ...studentData, mail: username ? `${username}${newDomain}` : newDomain });
                   if (mailError) setMailError('');
                 }}
                 className="px-3 py-2 bg-gray-100 dark:bg-gray-800 border-l border-gray-200 dark:border-gray-700 text-sm font-semibold text-gray-650 dark:text-gray-300 focus:outline-none focus:ring-0 cursor-pointer hover:bg-gray-250 dark:hover:bg-gray-750 transition-colors"

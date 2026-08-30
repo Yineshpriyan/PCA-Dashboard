@@ -59,6 +59,52 @@ export function exportToExcel(data: any[], fileName: string) {
   XLSX.writeFile(workbook, `${fileName}.xlsx`);
 }
 
+/**
+ * Parses user email input and strips accidental duplicated domains (e.g. "@gmail.com", "@icloud.com", "gmail.com", "icloud.com").
+ * Automatically identifies if the user typed or pasted an @icloud.com or @gmail.com address.
+ */
+export function parseEmailUsernameAndDomain(
+  rawInput: string,
+  fallbackDomain: string = '@gmail.com'
+): { username: string; domain: string } {
+  if (!rawInput) return { username: '', domain: fallbackDomain };
+  let val = rawInput.trim();
+  let detectedDomain = fallbackDomain;
+
+  // 1. Detect if the user explicitly typed/pasted an iCloud or Gmail domain
+  if (/@icloud(\.com)?/i.test(val) || /icloud\.com$/i.test(val)) {
+    detectedDomain = '@icloud.com';
+  } else if (/@gmail(\.com)?/i.test(val) || /@googlemail(\.com)?/i.test(val) || /gmail\.com$/i.test(val)) {
+    detectedDomain = '@gmail.com';
+  }
+
+  // 2. If input contains '@', extract the username part before the first '@'
+  if (val.includes('@')) {
+    val = val.split('@')[0];
+  }
+
+  // 3. Strip trailing accidental domains if typed without '@' (e.g. "mynamegmail.com" or "nameicloud.com")
+  val = val.replace(/(gmail|icloud|googlemail)\.com$/gi, '');
+  val = val.replace(/(gmail|icloud|googlemail)$/gi, '');
+
+  // 4. Clean all characters leaving only valid email username characters: a-z, A-Z, 0-9, ., _, -
+  const cleanUsername = val.replace(/[^a-zA-Z0-9._-]/g, '');
+
+  return { username: cleanUsername, domain: detectedDomain };
+}
+
+/**
+ * Returns a fully formatted clean email like "username@gmail.com" or "username@icloud.com",
+ * guaranteed to never contain duplicated suffixes like "@gmail.com@gmail.com".
+ */
+export function formatCleanEmail(rawInput: string, currentDomain: string = '@gmail.com'): string {
+  if (!rawInput || !rawInput.trim()) return '';
+  const { username, domain } = parseEmailUsernameAndDomain(rawInput, currentDomain);
+  if (!username) return '';
+  return `${username}${domain}`;
+}
+
+
 export async function playNotificationSound() {
   try {
     const context = new (window.AudioContext || (window as any).webkitAudioContext)();

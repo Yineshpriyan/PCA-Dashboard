@@ -31,7 +31,7 @@ import {
   LeadStatus 
 } from '../types';
 import { useAuth } from '../hooks/useAuth';
-import { cn, formatDate, copyToClipboard, exportToExcel } from '../lib/utils';
+import { cn, formatDate, copyToClipboard, exportToExcel, parseEmailUsernameAndDomain } from '../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
 import { useNavigate } from 'react-router-dom';
 import { logTransaction } from '../lib/transactions';
@@ -715,13 +715,21 @@ export function CallTaskForm({ editData, onComplete }: { editData?: CallTask; on
                       : formData.mail
                   }
                   onChange={(e) => {
-                    const val = e.target.value.trim();
-                    const cleanVal = val.replace(/[^a-zA-Z0-9._-]/g, '');
+                    const val = e.target.value;
                     const currentDomain = formData.mail.endsWith('@icloud.com') ? '@icloud.com' : '@gmail.com';
-                    setFormData({ ...formData, mail: cleanVal ? `${cleanVal}${currentDomain}` : currentDomain });
+                    const { username, domain } = parseEmailUsernameAndDomain(val, currentDomain);
+                    setFormData({ ...formData, mail: username ? `${username}${domain}` : domain });
                     if (mailError) setMailError('');
                   }}
-                  onBlur={() => handleMailBlur(formData.mail)}
+                  onBlur={() => {
+                    const currentDomain = formData.mail.endsWith('@icloud.com') ? '@icloud.com' : '@gmail.com';
+                    const { username, domain } = parseEmailUsernameAndDomain(formData.mail, currentDomain);
+                    const cleanedMail = username ? `${username}${domain}` : currentDomain;
+                    if (cleanedMail !== formData.mail) {
+                      setFormData({ ...formData, mail: cleanedMail });
+                    }
+                    handleMailBlur(cleanedMail);
+                  }}
                   className="w-full px-3 py-2 bg-transparent focus:outline-none text-sm text-gray-800 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
                   placeholder="username"
                 />
@@ -729,17 +737,8 @@ export function CallTaskForm({ editData, onComplete }: { editData?: CallTask; on
                   value={formData.mail.endsWith('@icloud.com') ? '@icloud.com' : '@gmail.com'}
                   onChange={(e) => {
                     const newDomain = e.target.value;
-                    const currentEmail = formData.mail || '';
-                    let username = '';
-                    if (currentEmail.endsWith('@gmail.com')) {
-                      username = currentEmail.slice(0, -10);
-                    } else if (currentEmail.endsWith('@icloud.com')) {
-                      username = currentEmail.slice(0, -11);
-                    } else {
-                      username = currentEmail.split('@')[0];
-                    }
-                    const cleanUsername = username.replace(/[^a-zA-Z0-9._-]/g, '');
-                    setFormData({ ...formData, mail: cleanUsername ? `${cleanUsername}${newDomain}` : newDomain });
+                    const { username } = parseEmailUsernameAndDomain(formData.mail, newDomain);
+                    setFormData({ ...formData, mail: username ? `${username}${newDomain}` : newDomain });
                     if (mailError) setMailError('');
                   }}
                   className="px-3 py-2 bg-gray-100 dark:bg-gray-800 border-l border-gray-200 dark:border-gray-700 text-sm font-semibold text-gray-650 dark:text-gray-300 focus:outline-none focus:ring-0 cursor-pointer hover:bg-gray-250 dark:hover:bg-gray-750 transition-colors"

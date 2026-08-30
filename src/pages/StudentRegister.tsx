@@ -3,7 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useStudentAuth } from '../hooks/useStudentAuth';
 import { SRI_LANKAN_DISTRICTS, DISTRICT_NUMBERS, JoinedBatchItem } from '../types';
-import { cleanStudentNameForZoom } from '../lib/utils';
+import { cleanStudentNameForZoom, parseEmailUsernameAndDomain, formatCleanEmail } from '../lib/utils';
 import AcademyLogo from '../components/AcademyLogo';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'motion/react';
@@ -142,18 +142,18 @@ export default function StudentRegister() {
   };
 
   // Validation helper: Mail blur
-  const handleMailBlur = (usernameVal: string) => {
-    const cleanUser = usernameVal.trim().replace(/[^a-zA-Z0-9._-]/g, '');
-    if (!cleanUser) {
+  const handleMailBlur = (usernameVal: string, domainVal: string = mailDomain) => {
+    const { username, domain } = parseEmailUsernameAndDomain(usernameVal, domainVal);
+    if (!username) {
       setMailError('');
       return;
     }
-    const fullMail = `${cleanUser}${mailDomain}`;
+    const fullMail = `${username}${domain}`;
     const endsWithAllowed = fullMail.endsWith('@gmail.com') || fullMail.endsWith('@icloud.com');
     const isInvalid = !endsWithAllowed ||
-                      cleanUser.length === 0 ||
-                      cleanUser.includes(' ') ||
-                      cleanUser.includes('@');
+                      username.length === 0 ||
+                      username.includes(' ') ||
+                      username.includes('@');
     if (isInvalid) {
       setMailError('Invalid Gmail or iCloud username');
     } else {
@@ -255,14 +255,14 @@ export default function StudentRegister() {
     // 6. Validate Email (if provided)
     let finalMail: string | null = null;
     if (mail.trim()) {
-      const cleanUser = mail.trim().replace(/[^a-zA-Z0-9._-]/g, '');
-      if (cleanUser) {
-        finalMail = `${cleanUser}${mailDomain}`;
+      const { username, domain } = parseEmailUsernameAndDomain(mail, mailDomain);
+      if (username) {
+        finalMail = `${username}${domain}`;
         const endsWithAllowed = finalMail.endsWith('@gmail.com') || finalMail.endsWith('@icloud.com');
         const isInvalid = !endsWithAllowed ||
-                          cleanUser.length === 0 ||
-                          cleanUser.includes(' ') ||
-                          cleanUser.includes('@');
+                          username.length === 0 ||
+                          username.includes(' ') ||
+                          username.includes('@');
         if (isInvalid) {
           toast.error('Please enter a valid Gmail or iCloud username');
           setMailError('Invalid Gmail or iCloud username');
@@ -1007,19 +1007,30 @@ export default function StudentRegister() {
                       type="text"
                       value={mail}
                       onChange={(e) => {
-                        const cleanVal = e.target.value.trim().replace(/[^a-zA-Z0-9._-]/g, '');
-                        setMail(cleanVal);
+                        const inputVal = e.target.value;
+                        const { username, domain } = parseEmailUsernameAndDomain(inputVal, mailDomain);
+                        setMail(username);
+                        if (domain !== mailDomain) {
+                          setMailDomain(domain);
+                        }
                         if (mailError) setMailError('');
                       }}
-                      onBlur={() => handleMailBlur(mail)}
+                      onBlur={() => {
+                        const { username, domain } = parseEmailUsernameAndDomain(mail, mailDomain);
+                        if (username !== mail) setMail(username);
+                        if (domain !== mailDomain) setMailDomain(domain);
+                        handleMailBlur(username, domain);
+                      }}
                       placeholder="username"
                       className="w-full px-3 py-2 sm:py-2.5 bg-transparent focus:outline-none text-xs font-medium text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 min-w-0"
                     />
                     <select
                       value={mailDomain}
                       onChange={(e) => {
-                        setMailDomain(e.target.value);
+                        const newDomain = e.target.value;
+                        setMailDomain(newDomain);
                         if (mailError) setMailError('');
+                        if (mail) handleMailBlur(mail, newDomain);
                       }}
                       className="px-2 sm:px-3 py-2 sm:py-2.5 bg-slate-100 dark:bg-slate-800/90 border-l border-slate-200 dark:border-slate-700 text-[11px] sm:text-xs font-bold text-slate-700 dark:text-slate-300 focus:outline-none cursor-pointer shrink-0"
                     >
