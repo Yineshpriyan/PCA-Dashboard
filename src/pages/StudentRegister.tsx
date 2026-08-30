@@ -3,6 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useStudentAuth } from '../hooks/useStudentAuth';
 import { SRI_LANKAN_DISTRICTS, DISTRICT_NUMBERS, JoinedBatchItem } from '../types';
+import { cleanStudentNameForZoom } from '../lib/utils';
 import AcademyLogo from '../components/AcademyLogo';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'motion/react';
@@ -123,6 +124,11 @@ export default function StudentRegister() {
     loadDropdownData();
   }, []);
 
+  // Auto-clean name helper: removes leading/trailing initials, parenthetical notes, extra spaces and capitalizes words properly
+  const cleanStudentName = (rawName: string): string => {
+    return cleanStudentNameForZoom(rawName);
+  };
+
   // Validation helper: Phone blur
   const handlePhoneBlur = (phoneVal: string) => {
     const cleanPhone = phoneVal.replace(/\D/g, '');
@@ -190,9 +196,13 @@ export default function StudentRegister() {
     e.preventDefault();
 
     // 1. Validate Name
-    if (!name.trim()) {
+    const sanitizedName = cleanStudentName(name);
+    if (!sanitizedName) {
       toast.error('பெயர் அவசியமானது / Name is required');
       return;
+    }
+    if (sanitizedName !== name) {
+      setName(sanitizedName);
     }
 
     // 2. Validate Batch
@@ -421,7 +431,7 @@ export default function StudentRegister() {
       // 8. Insert Student Record into `student` table (matching exact schema columns)
       const studentPayload = {
         pcaid: finalPcaId,
-        name: name.trim(),
+        name: sanitizedName || name.trim(),
         stream: stream || null,
         proper_batch: effectiveProperBatch || null,
         joined_batch: effectiveJoinedBatch || null,
@@ -766,7 +776,13 @@ export default function StudentRegister() {
                     type="text"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    placeholder="e.g. Kasun Chamara Perera"
+                    onBlur={() => {
+                      const formatted = cleanStudentName(name);
+                      if (formatted && formatted !== name) {
+                        setName(formatted);
+                      }
+                    }}
+                    placeholder="e.g. Sudarini / Chamara Perera"
                     className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-medium text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all"
                     required
                   />

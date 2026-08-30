@@ -58,7 +58,7 @@ import {
   syncParentFolderAccess, 
   getAllDescendantFolderIds 
 } from './AppActivation';
-import { cn, copyToClipboard, formatDate, exportToExcel } from '../lib/utils';
+import { cn, copyToClipboard, formatDate, exportToExcel, cleanStudentNameForZoom } from '../lib/utils';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { logTransaction } from '../lib/transactions';
@@ -259,7 +259,8 @@ export function StudentForm({ isModal = false, modalStudent = null, modalLead = 
     const cleanWebinarId = zoomWebinarId.trim();
     const cleanEmail = (studentData.mail || '').trim();
     const cleanFirstName = (studentData.pcaid || '').trim();
-    const cleanLastName = (studentData.name || '').trim();
+    const rawLastName = (studentData.name || '').trim();
+    const cleanLastName = cleanStudentNameForZoom(rawLastName);
 
     if (!cleanWebinarId) {
       toast.error("Please enter a valid Zoom Webinar ID.");
@@ -3337,15 +3338,22 @@ export function StudentForm({ isModal = false, modalStudent = null, modalLead = 
                 />
               </div>
 
-              {/* Prefilled Last Name (from Student Name) */}
+              {/* Prefilled Last Name (from Clean Student Name without Initials) */}
               <div>
-                <label className="block text-xs font-bold text-gray-600 dark:text-gray-400 uppercase tracking-wider mb-1">
-                  Last Name (from Student Name)
-                </label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-bold text-gray-600 dark:text-gray-400 uppercase tracking-wider">
+                    Last Name (Student Name)
+                  </label>
+                  {studentData.name && cleanStudentNameForZoom(studentData.name) !== studentData.name && (
+                    <span className="text-[10px] text-teal-600 dark:text-teal-400 font-bold">
+                      Initials removed for Zoom
+                    </span>
+                  )}
+                </div>
                 <input
                   type="text"
                   readOnly
-                  value={studentData.name || ''}
+                  value={cleanStudentNameForZoom(studentData.name || '')}
                   className="w-full px-4 py-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-bold text-gray-700 dark:text-gray-300 cursor-not-allowed"
                 />
               </div>

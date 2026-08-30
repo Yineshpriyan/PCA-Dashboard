@@ -22,6 +22,36 @@ export function copyToClipboard(text: string, label: string = 'Content') {
   return `${label} copied to clipboard!`;
 }
 
+// Clean and format student name for Zoom Webinar registrations & Database Entry
+// Strips leading and trailing initials (e.g. "V. Bavana" -> "Bavana", "r. sutha" -> "Sutha", "K. M. Dinesh" -> "Dinesh"), brackets, and formats proper title case
+export function cleanStudentNameForZoom(rawName: string): string {
+  if (!rawName) return '';
+  let cleaned = rawName.trim();
+
+  // 1. Remove bracketed notes like (Bio), (Repeat)
+  cleaned = cleaned.replace(/\(.*?\)/g, '').trim();
+
+  // 2. Remove leading initials:
+  // Matches single letter followed by dot/optional space (e.g. "V. ", "V.", "K.M.", "r.") OR single letter followed by whitespace (e.g. "V Bavana", "k m dinesh")
+  cleaned = cleaned.replace(/^([a-zA-Z]\.(?:\s*)|[a-zA-Z]\s+)+/i, '').trim();
+
+  // 3. Remove trailing initials: e.g. "Bavana V." or "Bavana V"
+  cleaned = cleaned.replace(/(\s+[a-zA-Z]\.?)+$/i, '').trim();
+
+  // 4. Fallback if everything was removed (e.g. name was literally just initials like "A.B.")
+  if (cleaned.length < 2) {
+    cleaned = rawName.replace(/\(.*?\)/g, '').trim();
+  }
+
+  // 5. Proper Title Case Capitalization (e.g. "sutha" -> "Sutha", "chamara perera" -> "Chamara Perera")
+  const words = cleaned.split(/\s+/).filter(Boolean);
+  if (words.length === 0) return rawName.trim() || '';
+
+  return words
+    .map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+    .join(' ');
+}
+
 export function exportToExcel(data: any[], fileName: string) {
   const worksheet = XLSX.utils.json_to_sheet(data);
   const workbook = XLSX.utils.book_new();

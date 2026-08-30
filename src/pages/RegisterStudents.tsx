@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { ZoomNavTabs } from "../components/NavTabs";
+import { cleanStudentNameForZoom } from "../lib/utils";
 
 const BATCH_SIZE = 10; // how many students to send to Zoom per batch
 
@@ -86,7 +87,7 @@ export default function RegisterStudents() {
         const lastVal = lastNameHeader ? (row[lastNameHeader] || "").trim() : "";
         return {
           firstName: firstVal,
-          lastName: lastVal,
+          lastName: cleanStudentNameForZoom(lastVal),
           email: emailVal,
         };
       })
@@ -184,7 +185,10 @@ export default function RegisterStudents() {
     const allResults: RegistrationResult[] = [];
 
     for (let i = 0; i < targetStudents.length; i += BATCH_SIZE) {
-      const batch = targetStudents.slice(i, i + BATCH_SIZE);
+      const batch = targetStudents.slice(i, i + BATCH_SIZE).map(s => ({
+        ...s,
+        lastName: cleanStudentNameForZoom(s.lastName)
+      }));
 
       try {
         const response = await fetch("/api/register-batch", {

@@ -37,6 +37,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { SRI_LANKAN_DISTRICTS } from '../types';
+import { cleanStudentNameForZoom } from '../lib/utils';
 
 interface PaymentRecord {
   id: string;
@@ -158,6 +159,7 @@ export default function SelfEnrolmentManagement() {
   // Filter states
   const [searchQuery, setSearchQuery] = useState('');
   const [paymentFilter, setPaymentFilter] = useState<'all' | 'paid' | 'unpaid'>('all');
+  const [adminFilter, setAdminFilter] = useState<string>('all');
   const [batchFilter, setBatchFilter] = useState('');
   const [properBatchFilter, setProperBatchFilter] = useState('');
   const [districtFilter, setDistrictFilter] = useState('');
@@ -243,15 +245,14 @@ export default function SelfEnrolmentManagement() {
     return a.localeCompare(b);
   });
 
-  // Fetch self-registered students and their payment statuses
+  // Fetch students and their payment statuses
   const fetchStudents = async () => {
     setIsLoading(true);
     try {
-      // 1. Fetch students where admin = 'self' (and not deleted)
+      // 1. Fetch students (not deleted)
       const { data: studentsData, error: stuError } = await supabase
         .from('student')
         .select('*')
-        .eq('admin', 'self')
         .is('deleted_at', null)
         .order('created_at', { ascending: false });
 
@@ -322,7 +323,7 @@ export default function SelfEnrolmentManagement() {
 
       setStudents(mappedStudents);
     } catch (err: any) {
-      console.error("Error fetching self-registered students:", err);
+      console.error("Error fetching students:", err);
       toast.error(`Failed to load students: ${err.message || 'Unknown error'}`);
     } finally {
       setIsLoading(false);
@@ -354,19 +355,28 @@ export default function SelfEnrolmentManagement() {
       if (paymentFilter === 'paid' && !s.isPaid) return false;
       if (paymentFilter === 'unpaid' && s.isPaid) return false;
 
-      // 3. Proper Batch Filter
+      // 3. Admin / Registered By Filter
+      if (adminFilter !== 'all') {
+        const stuAdmin = (s.admin || '').trim().toLowerCase();
+        const targetAdmin = adminFilter.trim().toLowerCase();
+        if (stuAdmin !== targetAdmin) {
+          return false;
+        }
+      }
+
+      // 4. Proper Batch Filter
       if (properBatchFilter && s.proper_batch !== properBatchFilter) return false;
 
-      // 4. Joined Batch Filter
+      // 5. Joined Batch Filter
       if (batchFilter && s.joined_batch !== batchFilter) return false;
 
-      // 5. District Filter
+      // 6. District Filter
       if (districtFilter && s.district !== districtFilter) return false;
 
-      // 6. Stream Filter
+      // 7. Stream Filter
       if (streamFilter && s.stream !== streamFilter) return false;
 
-      // 7. Date Range Filter
+      // 8. Date Range Filter
       if (fromDateFilter) {
         const stuDate = s.created_at ? s.created_at.split('T')[0] : '';
         if (stuDate && stuDate < fromDateFilter) return false;
@@ -382,6 +392,7 @@ export default function SelfEnrolmentManagement() {
     students,
     searchQuery,
     paymentFilter,
+    adminFilter,
     properBatchFilter,
     batchFilter,
     districtFilter,
@@ -389,6 +400,22 @@ export default function SelfEnrolmentManagement() {
     fromDateFilter,
     toDateFilter
   ]);
+
+  // Distinct admin list for filters
+  const uniqueAdmins = useMemo(() => {
+    const set = new Set<string>();
+    students.forEach(s => {
+      if (s.admin && s.admin.trim()) {
+        set.add(s.admin.trim());
+      }
+    });
+    // Ensure 'self' is in list if not already
+    return Array.from(set).sort((a, b) => {
+      if (a.toLowerCase() === 'self') return -1;
+      if (b.toLowerCase() === 'self') return 1;
+      return a.localeCompare(b);
+    });
+  }, [students]);
 
   // Distinct batch lists for filters
   const uniqueProperBatches = useMemo(() => {
@@ -630,10 +657,10 @@ export default function SelfEnrolmentManagement() {
       // Save last webinar ID
       localStorage.setItem('zoom_last_webinar_id', cleanWebinarId);
 
-      // Map students: FirstName = PCA ID, LastName = Student Name, Email = Student Mail
+      // Map students: FirstName = PCA ID, LastName = Clean Student Name without Initials, Email = Student Mail
       const targetPayload = selectedStudents.map(s => ({
         firstName: s.pcaid, // requirement: Firstname from PCAID
-        lastName: s.name,   // requirement: Lastname from name
+        lastName: cleanStudentNameForZoom(s.name), // requirement: Lastname from clean name (initials removed)
         email: s.mail?.trim() || `${s.pcaid.toLowerCase()}@physicsacademy.lk`
       }));
 
@@ -1246,8 +1273,24 @@ export default function SelfEnrolmentManagement() {
             </div>
 
             {/* Secondary Filters Grid */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 border-t border-gray-100 dark:border-gray-800">
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 pt-1 border-t border-gray-100 dark:border-gray-800">
               
+              {/* Admins Filter */}
+              <div>
+                <select
+                  value={adminFilter}
+                  onChange={(e) => setAdminFilter(e.target.value)}
+                  className="w-full px-2.5 py-1.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-xs font-medium text-gray-700 dark:text-gray-300"
+                >
+                  <option value="all">All Admins</option>
+                  {uniqueAdmins.map(a => (
+                    <option key={a} value={a}>
+                      {a.toLowerCase() === 'self' ? 'Self Registered' : `Admin: ${a}`}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
               {/* Proper Batch */}
               <div>
                 <select
@@ -1303,13 +1346,14 @@ export default function SelfEnrolmentManagement() {
             </div>
 
             {/* Reset Filters Bar */}
-            {(searchQuery || properBatchFilter || batchFilter || districtFilter || streamFilter || fromDateFilter || toDateFilter || paymentFilter !== 'all') && (
+            {(searchQuery || adminFilter !== 'all' || properBatchFilter || batchFilter || districtFilter || streamFilter || fromDateFilter || toDateFilter || paymentFilter !== 'all') && (
               <div className="flex items-center justify-between text-xs pt-2 text-gray-500 dark:text-gray-400">
                 <span>Showing <strong>{filteredStudents.length}</strong> of {students.length} students</span>
                 <button
                   onClick={() => {
                     setSearchQuery('');
                     setPaymentFilter('all');
+                    setAdminFilter('all');
                     setProperBatchFilter('');
                     setBatchFilter('');
                     setDistrictFilter('');
@@ -1355,12 +1399,12 @@ export default function SelfEnrolmentManagement() {
               {isLoading ? (
                 <div className="p-12 text-center text-gray-500 dark:text-gray-400 flex flex-col items-center justify-center gap-2">
                   <RefreshCw size={24} className="animate-spin text-teal-600" />
-                  <p className="text-sm font-semibold">Loading self-registered students...</p>
+                  <p className="text-sm font-semibold">Loading students...</p>
                 </div>
               ) : filteredStudents.length === 0 ? (
                 <div className="p-12 text-center text-gray-500 dark:text-gray-400 flex flex-col items-center justify-center gap-2">
                   <AlertCircle size={28} className="text-gray-400" />
-                  <p className="text-sm font-semibold">No self-registered students found</p>
+                  <p className="text-sm font-semibold">No students found</p>
                   <p className="text-xs text-gray-400">Try adjusting your search criteria or filters</p>
                 </div>
               ) : (
@@ -1372,6 +1416,7 @@ export default function SelfEnrolmentManagement() {
                       <th className="p-3.5">PCAID</th>
                       <th className="p-3.5">Phone No</th>
                       <th className="p-3.5">Batch</th>
+                      <th className="p-3.5">Registered By</th>
                       <th className="p-3.5">Payment Details</th>
                       <th className="p-3.5">Register Date</th>
                       <th className="p-3.5 text-right">Details</th>
@@ -1458,6 +1503,21 @@ export default function SelfEnrolmentManagement() {
                             </span>
                           </td>
 
+                          {/* Registered By / Admin */}
+                          <td className="p-3.5">
+                            {stu.admin?.toLowerCase() === 'self' ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-blue-50 dark:bg-blue-950/70 text-blue-700 dark:text-blue-300 border border-blue-200/60 dark:border-blue-800/40">
+                                self
+                              </span>
+                            ) : stu.admin ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-purple-50 dark:bg-purple-950/70 text-purple-700 dark:text-purple-300 border border-purple-200/60 dark:border-purple-800/40">
+                                {stu.admin}
+                              </span>
+                            ) : (
+                              <span className="text-gray-400 text-xs">-</span>
+                            )}
+                          </td>
+
                           {/* Payment Details */}
                           <td className="p-3.5">
                             {stu.isPaid ? (
@@ -1509,7 +1569,7 @@ export default function SelfEnrolmentManagement() {
             {/* Table Footer */}
             <div className="p-3.5 bg-gray-50/50 dark:bg-gray-800/40 border-t border-gray-200 dark:border-gray-800 flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
               <div>
-                Showing <strong>{filteredStudents.length}</strong> of <strong>{students.length}</strong> self-registered students
+                Showing <strong>{filteredStudents.length}</strong> of <strong>{students.length}</strong> students
               </div>
               <div>
                 Selected: <strong className="text-teal-600 dark:text-teal-400">{selectedCount}</strong>
@@ -1740,6 +1800,12 @@ export default function SelfEnrolmentManagement() {
                 <div>
                   <span className="text-[10px] font-bold text-gray-400 uppercase">District</span>
                   <p className="font-semibold text-gray-900 dark:text-gray-100">{viewingStudent.district || 'N/A'}</p>
+                </div>
+                <div>
+                  <span className="text-[10px] font-bold text-gray-400 uppercase">Registered By</span>
+                  <p className="font-semibold text-gray-900 dark:text-gray-100 capitalize">
+                    {viewingStudent.admin || 'N/A'}
+                  </p>
                 </div>
                 {viewingStudent.school && (
                   <div className="col-span-2 sm:col-span-3">

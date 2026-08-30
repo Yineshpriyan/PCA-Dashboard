@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { ZoomNavTabs } from "../components/NavTabs";
+import { cleanStudentNameForZoom } from "../lib/utils";
 
 interface RegistrationResult {
   email: string;
@@ -51,7 +52,8 @@ export default function RegisterIndividualStudent() {
     const cleanWebinarId = webinarId.trim();
     const cleanEmail = email.trim();
     const cleanFirstName = firstName.trim();
-    const cleanLastName = lastName.trim();
+    const rawLastName = lastName.trim();
+    const cleanLastName = cleanStudentNameForZoom(rawLastName);
 
     if (!cleanWebinarId) {
       toast.error("Please enter a valid Zoom Webinar or Meeting ID.");
@@ -64,6 +66,10 @@ export default function RegisterIndividualStudent() {
     if (!cleanEmail) {
       toast.error("Please enter a valid email address.");
       return;
+    }
+
+    if (cleanLastName !== lastName) {
+      setLastName(cleanLastName);
     }
 
     setIsRunning(true);
@@ -183,7 +189,13 @@ export default function RegisterIndividualStudent() {
                     required
                     value={lastName}
                     onChange={(e) => setLastName(e.target.value)}
-                    placeholder="Doe"
+                    onBlur={() => {
+                      const cleaned = cleanStudentNameForZoom(lastName);
+                      if (cleaned && cleaned !== lastName) {
+                        setLastName(cleaned);
+                      }
+                    }}
+                    placeholder="e.g. Sutha / Chamara Perera"
                     disabled={isRunning}
                     className="w-full px-4 py-2.5 bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500/20 text-gray-855 dark:text-gray-200 font-medium text-sm transition-all"
                   />
