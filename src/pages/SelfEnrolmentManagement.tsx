@@ -84,6 +84,8 @@ interface SelfStudent {
   district?: string | null;
   address?: string | null;
   nic?: string | null;
+  dob?: string | null;
+  gender?: string | null;
   admin?: string | null;
   created_at: string;
   payments: PaymentRecord[];

@@ -365,7 +365,8 @@ export function StudentForm({ isModal = false, modalStudent = null, modalLead = 
       asked_class_type: editStudent?.asked_class_type || leadData?.asked_class_type || '',
       asked_package_type: editStudent?.asked_package_type || leadData?.asked_package_type || '',
       batch_type: editStudent?.batch_type || leadData?.batch_type || '',
-      gender: editStudent?.gender || leadData?.gender || ''
+      gender: editStudent?.gender || leadData?.gender || '',
+      dob: editStudent?.dob || leadData?.dob || ''
     };
   });
 
@@ -388,7 +389,8 @@ export function StudentForm({ isModal = false, modalStudent = null, modalLead = 
         asked_class_type: editStudent.asked_class_type || '',
         asked_package_type: editStudent.asked_package_type || '',
         batch_type: editStudent.batch_type || '',
-        gender: editStudent.gender || ''
+        gender: editStudent.gender || '',
+        dob: editStudent.dob || ''
       });
     } else if (leadData) {
       const rawPhone = leadData.phone || '';
@@ -408,7 +410,8 @@ export function StudentForm({ isModal = false, modalStudent = null, modalLead = 
         asked_class_type: leadData.asked_class_type || '',
         asked_package_type: leadData.asked_package_type || '',
         batch_type: leadData.batch_type || '',
-        gender: leadData.gender || ''
+        gender: leadData.gender || '',
+        dob: leadData.dob || ''
       });
     }
   }, [editStudent, leadData]);
@@ -837,10 +840,13 @@ export function StudentForm({ isModal = false, modalStudent = null, modalLead = 
       // Female -> F
       // Others -> O
       let genderChar = 'M';
-      if (studentData.gender === 'Female') {
+      const cleanGender = (studentData.gender || '').trim().toLowerCase();
+      if (cleanGender === 'female' || cleanGender === 'f') {
         genderChar = 'F';
-      } else if (studentData.gender === 'Other' || studentData.gender === 'Others') {
+      } else if (cleanGender === 'other' || cleanGender === 'others' || cleanGender === 'o') {
         genderChar = 'O';
+      } else if (cleanGender === 'male' || cleanGender === 'm') {
+        genderChar = 'M';
       } else {
         genderChar = 'M';
       }
@@ -1591,6 +1597,7 @@ export function StudentForm({ isModal = false, modalStudent = null, modalLead = 
       const payload: any = {
         ...updatedStudentData,
         nic: studentData.nic ? studentData.nic.trim() : null,
+        dob: studentData.dob ? studentData.dob : null,
         admin: editStudent?.admin || user?.username || 'system',
         created_at: editStudent?.created_at || new Date().toISOString()
       };
@@ -1604,10 +1611,13 @@ export function StudentForm({ isModal = false, modalStudent = null, modalLead = 
 
       // If the error indicates missing column schema, fallback safely by omitting non-standard keys
       if (saveError && (saveError.message?.includes('column') || saveError.message?.includes('relation') || saveError.hint?.includes('column'))) {
-        console.warn('DB schema mismatch, retrying save without batch_type and gender keys', saveError);
+        console.warn('DB schema mismatch, retrying save without batch_type, gender, and dob keys if missing', saveError);
         const slimPayload = { ...payload };
         delete slimPayload.batch_type;
         delete slimPayload.gender;
+        if (saveError.message?.includes('dob') || saveError.hint?.includes('dob')) {
+          delete slimPayload.dob;
+        }
         const retryResult = await supabase
           .from('student')
           .upsert(slimPayload, { onConflict: 'pcaid' });
@@ -1969,7 +1979,7 @@ export function StudentForm({ isModal = false, modalStudent = null, modalLead = 
           onClose(true);
         } else {
           // Clear all
-          setStudentData({ pcaid: '', name: '', nic: '', phone: '', stream: '', proper_batch: '', joined_batch: '', school: '', district: '', mail: '', address: '', asked_class_type: '', asked_package_type: '', batch_type: '', gender: '' });
+          setStudentData({ pcaid: '', name: '', nic: '', phone: '', stream: '', proper_batch: '', joined_batch: '', school: '', district: '', mail: '', address: '', asked_class_type: '', asked_package_type: '', batch_type: '', gender: '', dob: '' });
           setStudentType('Paid');
           setTempPayments([]);
         }
@@ -2424,8 +2434,8 @@ export function StudentForm({ isModal = false, modalStudent = null, modalLead = 
             )}
           </div>
 
-          {/* Left Column: NIC & School */}
-          <div className="flex flex-col gap-6">
+          {/* Left Column: NIC, DOB & School */}
+          <div className="flex flex-col gap-4">
             {/* Field: NIC */}
             <div className="flex flex-col gap-1.5">
               <label className="text-sm font-semibold text-gray-700">NIC</label>
@@ -2435,6 +2445,18 @@ export function StudentForm({ isModal = false, modalStudent = null, modalLead = 
                 onChange={(e) => setStudentData({ ...studentData, nic: e.target.value })}
                 className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500/20 text-gray-800"
                 placeholder="National Identity Card (NIC)"
+              />
+            </div>
+
+            {/* Field: Date of Birth (DOB) */}
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-semibold text-gray-700">Date of Birth (DOB)</label>
+              <input
+                type="date"
+                value={studentData.dob || ''}
+                onChange={(e) => setStudentData({ ...studentData, dob: e.target.value })}
+                max={new Date().toISOString().split('T')[0]}
+                className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500/20 text-gray-800"
               />
             </div>
 
@@ -4240,6 +4262,7 @@ export function StudentExplorer() {
       'Proper Batch': s.proper_batch,
       'Joined Batch': s.joined_batch,
       'NIC': s.nic || '-',
+      'DOB': s.dob || '-',
       'School': s.school,
       'Mail': s.mail,
       'Address': s.address,

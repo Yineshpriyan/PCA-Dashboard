@@ -81,6 +81,7 @@ export default function StudentPortal() {
     school: '',
     nic: '',
     gender: 'Male',
+    dob: '',
   });
 
   // Change password state
@@ -109,6 +110,7 @@ export default function StudentPortal() {
         school: student.school || '',
         nic: student.nic || '',
         gender: student.gender || 'Male',
+        dob: student.dob || '',
       });
     }
   }, [student]);
@@ -536,6 +538,18 @@ export default function StudentPortal() {
                       <option value="Female">Female</option>
                       <option value="Other">Other</option>
                     </select>
+                  </div>
+
+                  {/* Date of Birth */}
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-gray-700 dark:text-gray-300">Date of Birth (DOB)</label>
+                    <input
+                      type="date"
+                      value={personalForm.dob}
+                      onChange={(e) => setPersonalForm({ ...personalForm, dob: e.target.value })}
+                      max={new Date().toISOString().split('T')[0]}
+                      className="w-full px-4 py-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-medium text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all"
+                    />
                   </div>
 
                   {/* Address */}

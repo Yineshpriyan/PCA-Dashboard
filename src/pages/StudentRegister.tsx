@@ -67,7 +67,8 @@ export default function StudentRegister() {
   const [stream, setStream] = useState('Biological Science');
   const [school, setSchool] = useState('');
   const [nic, setNic] = useState('');
-  const [gender, setGender] = useState('Male');
+  const [gender, setGender] = useState('');
+  const [dob, setDob] = useState('');
   const [phone, setPhone] = useState('');
   const [mail, setMail] = useState('');
   const [mailDomain, setMailDomain] = useState('@gmail.com');
@@ -79,6 +80,7 @@ export default function StudentRegister() {
   const [phoneError, setPhoneError] = useState('');
   const [mailError, setMailError] = useState('');
   const [nicError, setNicError] = useState('');
+  const [genderError, setGenderError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Dropdown options loaded from database
@@ -236,6 +238,7 @@ export default function StudentRegister() {
     // 4. Validate Gender
     if (!gender) {
       toast.error('பாலை தெரிவு செய்யவும் / Please select Gender');
+      setGenderError('பாலை தெரிவு செய்யவும் / Please select Gender');
       return;
     }
 
@@ -359,10 +362,13 @@ export default function StudentRegister() {
 
       // 3. Calculate Gender Code (Male -> M, Female -> F, Other -> O)
       let genderChar = 'M';
-      if (gender === 'Female') {
+      const cleanGender = (gender || '').trim().toLowerCase();
+      if (cleanGender === 'female' || cleanGender === 'f') {
         genderChar = 'F';
-      } else if (gender === 'Other' || gender === 'Others') {
+      } else if (cleanGender === 'other' || cleanGender === 'others' || cleanGender === 'o') {
         genderChar = 'O';
+      } else if (cleanGender === 'male' || cleanGender === 'm') {
+        genderChar = 'M';
       } else {
         genderChar = 'M';
       }
@@ -431,7 +437,7 @@ export default function StudentRegister() {
       // 8. Insert Student Record into `student` table (matching exact schema columns)
       const studentPayload = {
         pcaid: finalPcaId,
-        name: sanitizedName || name.trim(),
+        name: name.trim(),
         stream: stream || null,
         proper_batch: effectiveProperBatch || null,
         joined_batch: effectiveJoinedBatch || null,
@@ -439,15 +445,27 @@ export default function StudentRegister() {
         phone: cleanPhone || null,
         mail: finalMail,
         nic: nic.trim().toUpperCase() || null,
+        dob: dob || null,
         school: school.trim() || null,
         address: combinedAddress || null,
         admin: 'self',
         created_at: new Date().toISOString()
       };
 
-      const { error: insertStudentErr } = await supabase
+      let { error: insertStudentErr } = await supabase
         .from('student')
         .insert(studentPayload);
+
+      // Graceful fallback if database column 'dob' is missing in Postgres
+      if (insertStudentErr && (insertStudentErr.message?.includes('column "dob"') || insertStudentErr.hint?.includes('dob') || insertStudentErr.message?.includes('schema'))) {
+        console.warn('DB schema mismatch for dob column, retrying insert without dob key:', insertStudentErr);
+        const slimPayload = { ...studentPayload };
+        delete (slimPayload as any).dob;
+        const retryResult = await supabase
+          .from('student')
+          .insert(slimPayload);
+        insertStudentErr = retryResult.error;
+      }
 
       if (insertStudentErr) {
         // If unique constraint was triggered (e.g. race condition or edge case)
@@ -946,17 +964,42 @@ export default function StudentRegister() {
                   </label>
                   <select
                     value={gender}
-                    onChange={(e) => setGender(e.target.value)}
-                    className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-medium text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all cursor-pointer"
+                    onChange={(e) => {
+                      setGender(e.target.value);
+                      if (genderError) setGenderError('');
+                    }}
+                    className={`w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border rounded-xl text-xs font-medium text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 transition-all cursor-pointer ${
+                      genderError
+                        ? 'border-red-500 focus:ring-red-500/20 focus:border-red-500'
+                        : 'border-slate-200 dark:border-slate-700 focus:ring-teal-500/20 focus:border-teal-500'
+                    }`}
                     required
                   >
+                    <option value="" disabled>பாலை தெரிவு செய்யவும் / Select Gender</option>
                     <option value="Male">ஆண் / Male</option>
                     <option value="Female">பெண் / Female</option>
                     <option value="Other">ஏனையவை / Other</option>
                   </select>
+                  {genderError && (
+                    <span className="text-[11px] text-red-500 font-semibold">{genderError}</span>
+                  )}
                 </div>
 
-                {/* 9. தொலைபேசி இலக்கம் / Phone No */}
+                {/* 9. பிறந்த திகதி / Date of Birth (DOB) */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                    பிறந்த திகதி / Date of Birth (DOB)
+                  </label>
+                  <input
+                    type="date"
+                    value={dob}
+                    onChange={(e) => setDob(e.target.value)}
+                    max={new Date().toISOString().split('T')[0]}
+                    className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-medium text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all cursor-pointer"
+                  />
+                </div>
+
+                {/* 10. தொலைபேசி இலக்கம் / Phone No */}
                 <div className="space-y-1.5">
                   <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
                     தொலைபேசி இலக்கம் / Phone No <span className="text-red-500">*</span>

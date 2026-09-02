@@ -204,6 +204,7 @@ export const StudentAuthProvider: React.FC<{ children: ReactNode }> = ({ childre
         school: updatedData.school,
         nic: updatedData.nic,
         gender: updatedData.gender,
+        dob: updatedData.dob || null,
         updated_at: new Date().toISOString()
       };
 
@@ -212,10 +213,20 @@ export const StudentAuthProvider: React.FC<{ children: ReactNode }> = ({ childre
         Object.entries(allowedUpdates).filter(([_, v]) => v !== undefined)
       );
 
-      const { error: updateErr } = await supabase
+      let { error: updateErr } = await supabase
         .from('student')
         .update(payload)
         .eq('pcaid', student.pcaid);
+
+      if (updateErr && (updateErr.message?.includes('dob') || updateErr.hint?.includes('dob'))) {
+        const slimPayload = { ...payload };
+        delete (slimPayload as any).dob;
+        const retry = await supabase
+          .from('student')
+          .update(slimPayload)
+          .eq('pcaid', student.pcaid);
+        updateErr = retry.error;
+      }
 
       if (updateErr) {
         return { success: false, error: updateErr.message };

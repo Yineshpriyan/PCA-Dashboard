@@ -88,6 +88,7 @@ export function CallTaskForm({ editData, onComplete }: { editData?: CallTask; on
     district: editData?.district || '',
     mail: editData?.mail || '',
     address: editData?.address || '',
+    dob: (editData as any)?.dob || '',
     asked_class_type: editData?.asked_class_type || '',
     asked_package_type: editData?.asked_package_type || '',
     first_call_status: editData?.first_call_status || 'Pending' as CallStatus,
@@ -355,6 +356,7 @@ export function CallTaskForm({ editData, onComplete }: { editData?: CallTask; on
       const dataToSave = {
         ...formData,
         mail: cleanMail,
+        dob: formData.dob || null,
         asked_class_type: finalAskedClassType,
         asked_package_type: finalAskedPackageType,
         first_call_date: formData.first_call_date || null,
@@ -363,12 +365,26 @@ export function CallTaskForm({ editData, onComplete }: { editData?: CallTask; on
       };
 
       if (editData) {
-        const { data, error } = await supabase
+        let { data, error } = await supabase
           .from('calltask')
           .update(dataToSave)
           .eq('id', editData.id)
           .select()
           .single();
+        
+        // Graceful fallback if dob column not yet created in calltask
+        if (error && (error.message?.includes('dob') || error.hint?.includes('dob'))) {
+          const slimData = { ...dataToSave };
+          delete (slimData as any).dob;
+          const retryRes = await supabase
+            .from('calltask')
+            .update(slimData)
+            .eq('id', editData.id)
+            .select()
+            .single();
+          data = retryRes.data;
+          error = retryRes.error;
+        }
         if (error) throw error;
 
         // Log call task update transaction
@@ -391,16 +407,26 @@ export function CallTaskForm({ editData, onComplete }: { editData?: CallTask; on
           district: formData.district,
           mail: cleanMail,
           address: formData.address,
+          dob: formData.dob || null,
           asked_class_type: finalAskedClassType,
           stream: formData.stream || null
         };
 
         // Standard student also has package type
         sharedFields.asked_package_type = finalAskedPackageType;
-        await supabase
+        let { error: studentUpdateErr } = await supabase
           .from('student')
           .update(sharedFields)
           .eq('phone', editData.phone);
+        
+        if (studentUpdateErr && (studentUpdateErr.message?.includes('dob') || studentUpdateErr.hint?.includes('dob'))) {
+          const slimShared = { ...sharedFields };
+          delete slimShared.dob;
+          await supabase
+            .from('student')
+            .update(slimShared)
+            .eq('phone', editData.phone);
+        }
 
         // Update last_temporary_id table if the PCAID matches our newly generated temp ID
         if (formData.pcaid && latestGeneratedTempId === formData.pcaid) {
@@ -430,7 +456,7 @@ export function CallTaskForm({ editData, onComplete }: { editData?: CallTask; on
         toast.success('Call task updated & synced');
         if (onComplete) onComplete(data as CallTask);
       } else {
-        const { data, error } = await supabase
+        let { data, error } = await supabase
           .from('calltask')
           .insert({
             ...dataToSave,
@@ -439,6 +465,22 @@ export function CallTaskForm({ editData, onComplete }: { editData?: CallTask; on
           })
           .select()
           .single();
+        
+        if (error && (error.message?.includes('dob') || error.hint?.includes('dob'))) {
+          const slimData = { ...dataToSave };
+          delete (slimData as any).dob;
+          const retryRes = await supabase
+            .from('calltask')
+            .insert({
+              ...slimData,
+              admin: user?.username,
+              created_at: new Date().toISOString()
+            })
+            .select()
+            .single();
+          data = retryRes.data;
+          error = retryRes.error;
+        }
         if (error) throw error;
 
         // Log call task creation transaction
@@ -491,7 +533,7 @@ export function CallTaskForm({ editData, onComplete }: { editData?: CallTask; on
     setFormData({
       pcaid: '',
       name: '', phone: '', stream: '', proper_batch: '', joined_batch: '', school: '',
-      district: '', mail: '', address: '', asked_class_type: '', asked_package_type: '',
+      district: '', mail: '', address: '', dob: '', asked_class_type: '', asked_package_type: '',
       first_call_status: 'Pending', first_call_date: '',
       second_call_status: 'Pending', second_call_date: '',
       third_call_status: 'Pending', third_call_date: '',
@@ -696,6 +738,16 @@ export function CallTaskForm({ editData, onComplete }: { editData?: CallTask; on
                 <option value="">Select District</option>
                 {SRI_LANKAN_DISTRICTS.map(d => <option key={d} value={d}>{d}</option>)}
               </select>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-semibold text-gray-700">Date of Birth (DOB)</label>
+              <input
+                type="date"
+                value={formData.dob || ''}
+                onChange={(e) => setFormData({ ...formData, dob: e.target.value })}
+                max={new Date().toISOString().split('T')[0]}
+                className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500/20 text-gray-800"
+              />
             </div>
              <div className="flex flex-col gap-1.5">
               <label className="text-sm font-semibold text-gray-700">Mail</label>
@@ -1012,6 +1064,7 @@ function autoMapHeaders(headers: string[]) {
     district: ['district', 'city', 'town'],
     mail: ['mail', 'email', 'email_address', 'gmail', 'emailaddress'],
     address: ['address', 'home_address', 'location', 'addr'],
+    dob: ['dob', 'date of birth', 'date_of_birth', 'birthdate', 'birth date', 'birthday'],
     asked_class_type: ['class', 'class_type', 'asked_class_type', 'classes', 'subject', 'class types'],
     asked_package_type: ['package', 'package_type', 'asked_package_type', 'packages', 'package types'],
     status: ['status', 'lead_status', 'lead status', 'leadstage'],
@@ -1541,6 +1594,7 @@ export function CallTaskDisplay() {
       'Proper Batch': t.proper_batch || '',
       'Joined Batch': t.joined_batch || '',
       'School': t.school || '',
+      'DOB': t.dob ? formatDate(t.dob) : '',
       'Mail': t.mail || '',
       'Address': t.address || '',
       'Class': t.asked_class_type || '',
@@ -1619,6 +1673,7 @@ export function CallTaskDisplay() {
             school: getVal('school'),
             district: normalizeDistrict(getVal('district')),
             mail: getVal('mail'),
+            dob: normalizeDate(getVal('dob')) || null,
             address: getVal('address'),
             asked_class_type: normalizeClassTypes(getVal('asked_class_type'), classTypes.map(c => c.class_type)),
             asked_package_type: normalizePackageTypes(getVal('asked_package_type'), packageTypes.map(p => p.package_type)),

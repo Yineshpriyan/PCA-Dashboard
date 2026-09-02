@@ -86,6 +86,7 @@ export interface CallTask {
   note: string;
   status: LeadStatus;
   stream?: string;
+  dob?: string | null;
   created_at: string;
   deleted_at?: string | null;
 }
@@ -104,6 +105,7 @@ export interface FreeClassStudent {
   asked_class_type: string;
   admin: string;
   stream?: string;
+  dob?: string | null;
   created_at: string;
 }
 
@@ -126,6 +128,7 @@ export interface Student {
   batch_type?: string;
   gender?: string;
   nic?: string | null;
+  dob?: string | null;
   status?: string;
   updated_at?: string;
   deleted_at?: string | null;

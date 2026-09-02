@@ -45,6 +45,7 @@ export function FreeClassForm() {
     district: leadData?.district || '',
     mail: leadData?.mail || '',
     address: leadData?.address || '',
+    dob: leadData?.dob || '',
     asked_class_type: leadData?.asked_class_type || ''
   });
 
@@ -60,6 +61,7 @@ export function FreeClassForm() {
         district: leadData.district || '',
         mail: leadData.mail || '',
         address: leadData.address || '',
+        dob: leadData.dob || '',
         asked_class_type: leadData.asked_class_type || ''
       });
     }
@@ -101,29 +103,7 @@ export function FreeClassForm() {
     setLoading(true);
     try {
       // 1. Save to freeclass table using insert (since there's no unique constraint on phone)
-      const { error: saveError } = await supabase
-        .from('freeclass')
-        .insert({
-          pcaid: formData.pcaid || null,
-          name: formData.name,
-          phone: formData.phone,
-          proper_batch: formData.proper_batch,
-          joined_batch: formData.joined_batch,
-          school: formData.school,
-          district: formData.district,
-          mail: formData.mail,
-          address: formData.address,
-          asked_class_type: formData.asked_class_type,
-          admin: user?.username
-        });
-
-      if (saveError) {
-        console.error('Supabase Save Error:', saveError);
-        throw new Error(saveError.message);
-      }
-
-      // 2. Sync with CallTask table to mark as Joined and update record info
-      const sharedFieldsForTask = {
+      const savePayload: any = {
         pcaid: formData.pcaid || null,
         name: formData.name,
         phone: formData.phone,
@@ -133,18 +113,58 @@ export function FreeClassForm() {
         district: formData.district,
         mail: formData.mail,
         address: formData.address,
+        dob: formData.dob || null,
+        asked_class_type: formData.asked_class_type,
+        admin: user?.username
+      };
+
+      let { error: saveError } = await supabase
+        .from('freeclass')
+        .insert(savePayload);
+
+      if (saveError && (saveError.message?.includes('dob') || saveError.hint?.includes('dob'))) {
+        const slimPayload = { ...savePayload };
+        delete slimPayload.dob;
+        const retry = await supabase
+          .from('freeclass')
+          .insert(slimPayload);
+        saveError = retry.error;
+      }
+
+      if (saveError) {
+        console.error('Supabase Save Error:', saveError);
+        throw new Error(saveError.message);
+      }
+
+      // 2. Sync with CallTask table to mark as Joined and update record info
+      const sharedFieldsForTask: any = {
+        pcaid: formData.pcaid || null,
+        name: formData.name,
+        phone: formData.phone,
+        proper_batch: formData.proper_batch,
+        joined_batch: formData.joined_batch,
+        school: formData.school,
+        district: formData.district,
+        mail: formData.mail,
+        address: formData.address,
+        dob: formData.dob || null,
         asked_class_type: formData.asked_class_type,
         status: 'Joined',
         admin: user?.username || 'system'
       };
 
-      const { error: taskError } = await supabase
+      let { error: taskError } = await supabase
         .from('calltask')
         .update(sharedFieldsForTask)
         .eq('phone', formData.phone);
 
-      if (taskError) {
-        console.error('CallTask Update Error:', taskError);
+      if (taskError && (taskError.message?.includes('dob') || taskError.hint?.includes('dob'))) {
+        const slimTask = { ...sharedFieldsForTask };
+        delete slimTask.dob;
+        await supabase
+          .from('calltask')
+          .update(slimTask)
+          .eq('phone', formData.phone);
       }
 
       toast.success('Free Class student registered successfully!');
@@ -251,6 +271,17 @@ export function FreeClassForm() {
                 <option value="">Select District</option>
                 {SRI_LANKAN_DISTRICTS.map(d => <option key={d} value={d}>{d}</option>)}
               </select>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-semibold text-gray-700">Date of Birth (DOB)</label>
+              <input
+                type="date"
+                value={formData.dob}
+                onChange={(e) => setFormData({ ...formData, dob: e.target.value })}
+                max={new Date().toISOString().split('T')[0]}
+                className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg"
+              />
             </div>
 
             <div className="flex flex-col gap-1.5">
