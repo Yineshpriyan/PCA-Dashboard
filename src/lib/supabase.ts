@@ -5,7 +5,15 @@ const supabaseAnonKey = (import.meta.env.VITE_SUPABASE_ANON_KEY || '').trim();
 
 // Only initialize if keys are present to prevent fatal crash on module load
 export const supabase = supabaseUrl && supabaseAnonKey
-  ? createClient(supabaseUrl, supabaseAnonKey)
+  ? createClient(supabaseUrl, supabaseAnonKey, {
+      auth: {
+        // Bypass cross-tab navigator.locks API to prevent "Lock was released because another request stole it"
+        // when multiple tabs access the dashboard concurrently
+        lock: async (_name, _acquireTimeout, fn) => {
+          return await fn();
+        },
+      }
+    })
   : null as any;
 
 // Secondary client specifically for admin signup to prevent logging out the current super_admin session

@@ -3947,7 +3947,7 @@ export function StudentExplorer() {
     }
   };
 
-  const fetchStudents = async () => {
+  const fetchStudents = async (retryCount = 0) => {
     if (!user) return;
     setLoading(true);
     try {
@@ -3975,6 +3975,10 @@ export function StudentExplorer() {
       }
     } catch (err: any) {
       console.error('Error fetching students:', err);
+      if (retryCount < 2 && (err?.message?.includes('Lock') || err?.message?.includes('stole it') || err?.message?.includes('lock:'))) {
+        setTimeout(() => fetchStudents(retryCount + 1), 400);
+        return;
+      }
       toast.error('Failed to load students and payment records from the database: ' + (err.message || err));
     } finally {
       setLoading(false);
