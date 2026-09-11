@@ -3951,28 +3951,57 @@ export function StudentExplorer() {
     if (!user) return;
     setLoading(true);
     try {
-      let query = supabase.from('student').select('*').is('deleted_at', null);
-      
-      if (selectedAdmin) {
-        query = query.eq('admin', selectedAdmin);
-      } else if (user.admin_type !== 'super_admin') {
-        // Safety fallback for non-super admins if selectedAdmin is somehow empty
-        query = query.eq('admin', user.username);
-      }
+      // 1. Fetch Students (with pagination so records > 1000 are never truncated)
+      let allStudents: Student[] = [];
+      let studentPage = 0;
+      const pageSize = 1000;
 
-      const { data, error } = await query.order('created_at', { ascending: false });
-      if (error) throw error;
-      if (data) setStudents(data as Student[]);
+      while (true) {
+        let query = supabase.from('student').select('*').is('deleted_at', null);
+        
+        if (selectedAdmin) {
+          query = query.eq('admin', selectedAdmin);
+        } else if (user.admin_type !== 'super_admin') {
+          // Safety fallback for non-super admins if selectedAdmin is somehow empty
+          query = query.eq('admin', user.username);
+        }
 
-      // Fetch all active payments with paid_date and installments to build filter dropdowns and perform filtering
-      const { data: payData, error: payError } = await supabase
-        .from('payment')
-        .select('id, pcaid, class_type, package_type, type, paid_date, payment, installment(paid_amount, deleted_at)')
-        .is('deleted_at', null);
-      if (payError) throw payError;
-      if (payData) {
-        setExplorerPayments(payData);
+        const { data, error } = await query
+          .order('created_at', { ascending: false })
+          .range(studentPage * pageSize, (studentPage + 1) * pageSize - 1);
+
+        if (error) throw error;
+        if (data && data.length > 0) {
+          allStudents.push(...(data as Student[]));
+          if (data.length < pageSize) break;
+        } else {
+          break;
+        }
+        studentPage++;
       }
+      setStudents(allStudents);
+
+      // 2. Fetch all active payments with pagination to prevent truncating beyond Supabase's default 1000 limit
+      let allPayments: any[] = [];
+      let paymentPage = 0;
+
+      while (true) {
+        const { data: payData, error: payError } = await supabase
+          .from('payment')
+          .select('id, pcaid, class_type, package_type, type, paid_date, payment, installment(paid_amount, deleted_at)')
+          .is('deleted_at', null)
+          .range(paymentPage * pageSize, (paymentPage + 1) * pageSize - 1);
+
+        if (payError) throw payError;
+        if (payData && payData.length > 0) {
+          allPayments.push(...payData);
+          if (payData.length < pageSize) break;
+        } else {
+          break;
+        }
+        paymentPage++;
+      }
+      setExplorerPayments(allPayments);
     } catch (err: any) {
       console.error('Error fetching students:', err);
       if (retryCount < 2 && (err?.message?.includes('Lock') || err?.message?.includes('stole it') || err?.message?.includes('lock:'))) {
@@ -4291,11 +4320,11 @@ export function StudentExplorer() {
     const matchesProperBatch = !filters.properBatch || (s.proper_batch && s.proper_batch.toLowerCase().includes(filters.properBatch.toLowerCase()));
     const matchesJoinedBatch = !filters.joinedBatch || (s.joined_batch && s.joined_batch.toLowerCase().includes(filters.joinedBatch.toLowerCase()));
     
-    const studentPayments = explorerPayments.filter(p => p.pcaid === s.pcaid && p.type === 'class');
+    const studentPayments = explorerPayments.filter(p => p.pcaid === s.pcaid && (p.type === 'class' || (!p.type && Boolean(p.class_type))));
     const matchesClasses = filters.classes.length === 0 && !filters.month ? true : (
       studentPayments.some(p => {
         if (!p.class_type) return false;
-        const ptLower = p.class_type.toLowerCase();
+        const ptLower = p.class_type.trim().toLowerCase();
         
         // Extract base class name of the payment's class_type by stripping month suffixes
         let paymentBaseClass = p.class_type;
