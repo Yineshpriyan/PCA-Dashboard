@@ -102,16 +102,18 @@ export default function RecycleBin() {
           .in('payment_id', paymentIds);
       }
 
+      const studentFullName = [student.name, student.last_name].filter(Boolean).join(' ');
+
       // Log restoration action
       await logTransaction({
         admin_username: user.username,
         action_type: 'RESTORE',
         entity_type: 'student',
         entity_id: student.pcaid,
-        details: `Restored student ${student.name} (${student.pcaid}) and associated payments/installments from Recycle Bin`
+        details: `Restored student ${studentFullName || student.name} (${student.pcaid}) and associated payments/installments from Recycle Bin`
       });
 
-      toast.success(`Student ${student.name} successfully restored!`);
+      toast.success(`Student ${studentFullName || student.name} successfully restored!`);
       setStudents(prev => prev.filter(s => s.id !== student.id));
     } catch (err: any) {
       console.error('Error restoring student:', err);
@@ -156,8 +158,10 @@ export default function RecycleBin() {
   // Filter lists based on search query
   const filteredStudents = students.filter(s => {
     const query = searchQuery.toLowerCase();
+    const fullName = [s.name, s.last_name].filter(Boolean).join(' ').toLowerCase();
     return (
-      s.name.toLowerCase().includes(query) ||
+      fullName.includes(query) ||
+      (s.last_name && s.last_name.toLowerCase().includes(query)) ||
       s.pcaid.toLowerCase().includes(query) ||
       s.phone.toLowerCase().includes(query) ||
       (s.admin && s.admin.toLowerCase().includes(query))
@@ -270,7 +274,9 @@ export default function RecycleBin() {
                     <tr key={student.id} className="hover:bg-gray-50/30 dark:hover:bg-gray-850/20 transition-colors">
                       <td className="py-3.5 pl-6 pr-3 text-gray-450 dark:text-gray-500 font-bold">{idx + 1}</td>
                       <td className="py-3.5 px-3">
-                        <div className="font-extrabold text-gray-900 dark:text-gray-100">{student.name}</div>
+                        <div className="font-extrabold text-gray-900 dark:text-gray-100">
+                          {[student.name, student.last_name].filter(Boolean).join(' ')}
+                        </div>
                         <div className="text-[10px] text-gray-400">{student.mail}</div>
                       </td>
                       <td className="py-3.5 px-3">

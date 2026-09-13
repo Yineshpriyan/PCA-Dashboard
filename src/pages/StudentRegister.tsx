@@ -61,11 +61,14 @@ export default function StudentRegister() {
 
   // Form State
   const [name, setName] = useState('');
+  const [lastName, setLastName] = useState('');
   const [selectedBatch, setSelectedBatch] = useState('2027');
   const [properBatch, setProperBatch] = useState('2026');
   const [joinedBatch, setJoinedBatch] = useState('2027');
   const [stream, setStream] = useState('Biological Science');
   const [school, setSchool] = useState('');
+  const [fatherJob, setFatherJob] = useState('');
+  const [motherJob, setMotherJob] = useState('');
   const [nic, setNic] = useState('');
   const [gender, setGender] = useState('');
   const [dob, setDob] = useState('');
@@ -200,11 +203,20 @@ export default function StudentRegister() {
     // 1. Validate Name
     const sanitizedName = cleanStudentName(name);
     if (!sanitizedName) {
-      toast.error('பெயர் அவசியமானது / Name is required');
+      toast.error('மாணவரின் பெயர் அவசியமானது / First Name is required');
       return;
     }
     if (sanitizedName !== name) {
       setName(sanitizedName);
+    }
+
+    const sanitizedLastName = cleanStudentName(lastName);
+    if (!sanitizedLastName) {
+      toast.error('தந்தையின் பெயர் அவசியமானது / Last Name is required');
+      return;
+    }
+    if (sanitizedLastName !== lastName) {
+      setLastName(sanitizedLastName);
     }
 
     // 2. Validate Batch
@@ -433,11 +445,13 @@ export default function StudentRegister() {
 
       // 7. Combine Address 1 & Address 2
       const combinedAddress = [address1.trim(), address2.trim()].filter(Boolean).join(', ');
+      const studentFullName = [name.trim(), lastName.trim()].filter(Boolean).join(' ');
 
       // 8. Insert Student Record into `student` table (matching exact schema columns)
       const studentPayload = {
         pcaid: finalPcaId,
         name: name.trim(),
+        last_name: lastName.trim() || null,
         stream: stream || null,
         proper_batch: effectiveProperBatch || null,
         joined_batch: effectiveJoinedBatch || null,
@@ -447,6 +461,8 @@ export default function StudentRegister() {
         nic: nic.trim().toUpperCase() || null,
         dob: dob || null,
         school: school.trim() || null,
+        father_job: fatherJob.trim() || null,
+        mother_job: motherJob.trim() || null,
         address: combinedAddress || null,
         admin: 'self',
         created_at: new Date().toISOString()
@@ -456,11 +472,22 @@ export default function StudentRegister() {
         .from('student')
         .insert(studentPayload);
 
-      // Graceful fallback if database column 'dob' is missing in Postgres
-      if (insertStudentErr && (insertStudentErr.message?.includes('column "dob"') || insertStudentErr.hint?.includes('dob') || insertStudentErr.message?.includes('schema'))) {
-        console.warn('DB schema mismatch for dob column, retrying insert without dob key:', insertStudentErr);
+      // Graceful fallback if database column 'dob', 'last_name', 'father_job', or 'mother_job' is missing in Postgres
+      if (insertStudentErr && (insertStudentErr.message?.includes('column') || insertStudentErr.hint?.includes('column') || insertStudentErr.message?.includes('schema'))) {
+        console.warn('DB schema mismatch, retrying insert without problematic columns:', insertStudentErr);
         const slimPayload = { ...studentPayload };
-        delete (slimPayload as any).dob;
+        if (insertStudentErr.message?.includes('dob') || insertStudentErr.hint?.includes('dob')) {
+          delete (slimPayload as any).dob;
+        }
+        if (insertStudentErr.message?.includes('last_name') || insertStudentErr.hint?.includes('last_name')) {
+          delete (slimPayload as any).last_name;
+        }
+        if (insertStudentErr.message?.includes('father_job') || insertStudentErr.hint?.includes('father_job')) {
+          delete (slimPayload as any).father_job;
+        }
+        if (insertStudentErr.message?.includes('mother_job') || insertStudentErr.hint?.includes('mother_job')) {
+          delete (slimPayload as any).mother_job;
+        }
         const retryResult = await supabase
           .from('student')
           .insert(slimPayload);
@@ -476,26 +503,27 @@ export default function StudentRegister() {
         ) {
           const { data: dupStudent } = await supabase
             .from('student')
-            .select('pcaid, name, stream, proper_batch, district')
+            .select('pcaid, name, last_name, stream, proper_batch, district')
             .is('deleted_at', null)
             .or(duplicateFilter)
             .limit(1)
             .maybeSingle();
 
           if (dupStudent) {
+            const dupFullName = [dupStudent.name, dupStudent.last_name].filter(Boolean).join(' ');
             await supabase
               .from('student_app_credentials')
               .upsert({
                 pcaid: dupStudent.pcaid,
                 password_hash: dupStudent.pcaid,
                 status: 'Active',
-                student_name: dupStudent.name,
+                student_name: dupFullName || dupStudent.name,
               }, { onConflict: 'pcaid' });
 
             toast.success(`நீங்கள் ஏற்கனவே பதிவு செய்துள்ளீர்கள்! உங்களுடைய PCA ID: ${dupStudent.pcaid}`);
             setRegisteredResult({
               pcaid: dupStudent.pcaid,
-              name: dupStudent.name,
+              name: dupFullName || dupStudent.name,
               stream: dupStudent.stream || stream,
               proper_batch: dupStudent.proper_batch || effectiveProperBatch,
               district: dupStudent.district || district,
@@ -511,7 +539,7 @@ export default function StudentRegister() {
       // 9. Create App Credentials in `student_app_credentials` table (PCA ID & password are same!)
       const credentialsPayload = {
         pcaid: finalPcaId,
-        student_name: name.trim(),
+        student_name: studentFullName,
         password_hash: finalPcaId, // The PCAID and password are same
         status: 'Active',
         created_at: new Date().toISOString(),
@@ -529,7 +557,7 @@ export default function StudentRegister() {
       toast.success('பதிவு வெற்றிகரமாக முடிவடைந்தது! / Registration Successful!');
       setRegisteredResult({
         pcaid: finalPcaId,
-        name: name.trim(),
+        name: studentFullName,
         stream: stream,
         proper_batch: effectiveProperBatch,
         district: district
@@ -750,6 +778,9 @@ export default function StudentRegister() {
                   onClick={() => {
                     setRegisteredResult(null);
                     setName('');
+                    setLastName('');
+                    setFatherJob('');
+                    setMotherJob('');
                     setPhone('');
                     setMail('');
                     setNic('');
@@ -785,25 +816,47 @@ export default function StudentRegister() {
 
               <form onSubmit={handleSubmit} className="space-y-6">
                 
-                {/* 1. பெயர் / Name */}
-                <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                    மாணவரின் பெயர் (தந்தையின் பெயர் தேவையில்லை) / Name <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    onBlur={() => {
-                      const formatted = cleanStudentName(name);
-                      if (formatted && formatted !== name) {
-                        setName(formatted);
-                      }
-                    }}
-                    placeholder="e.g. Sudarini / Chamara Perera"
-                    className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-medium text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all"
-                    required
-                  />
+                {/* 1. பெயர் / First Name & Last Name */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                      மாணவரின் பெயர் / First Name <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      onBlur={() => {
+                        const formatted = cleanStudentName(name);
+                        if (formatted && formatted !== name) {
+                          setName(formatted);
+                        }
+                      }}
+                      placeholder="e.g. Sudarini"
+                      className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-medium text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all"
+                      required
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                      தந்தையின் பெயர் (Last Name) <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={lastName}
+                      onChange={(e) => setLastName(e.target.value)}
+                      onBlur={() => {
+                        const formatted = cleanStudentName(lastName);
+                        if (formatted && formatted !== lastName) {
+                          setLastName(formatted);
+                        }
+                      }}
+                      placeholder="e.g. Perera"
+                      className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-medium text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all"
+                      required
+                    />
+                  </div>
                 </div>
 
                 {/* 2. தொகுதி / Batch */}
@@ -930,6 +983,35 @@ export default function StudentRegister() {
                     placeholder="e.g. Royal College / Ananda College / Jaffna Hindu College"
                     className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-medium text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all"
                   />
+                </div>
+
+                {/* பெற்றோரின் தொழில் / Parents' Occupation */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                      தந்தையின் தொழில் / Father's Job
+                    </label>
+                    <input
+                      type="text"
+                      value={fatherJob}
+                      onChange={(e) => setFatherJob(e.target.value)}
+                      placeholder="e.g. Teacher, Engineer, Businessman"
+                      className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-medium text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                      தாயின் தொழில் / Mother's Job
+                    </label>
+                    <input
+                      type="text"
+                      value={motherJob}
+                      onChange={(e) => setMotherJob(e.target.value)}
+                      placeholder="e.g. Doctor, Accountant, Homemaker"
+                      className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-medium text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all"
+                    />
+                  </div>
                 </div>
 
                 {/* 7. அடையாள அட்டை இலக்கம் / NIC */}

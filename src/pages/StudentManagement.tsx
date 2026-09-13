@@ -267,11 +267,11 @@ export function StudentForm({ isModal = false, modalStudent = null, modalLead = 
       return;
     }
     if (!cleanFirstName) {
-      toast.error("PCA ID is required for first name registration on Zoom.");
+      toast.error("PCA ID is required for First Name registration on Zoom (from Section 1).");
       return;
     }
     if (!cleanLastName) {
-      toast.error("Student Name is required for last name registration on Zoom.");
+      toast.error("Student First Name is required for Last Name registration on Zoom (from Section 1).");
       return;
     }
     if (!cleanEmail) {
@@ -353,6 +353,7 @@ export function StudentForm({ isModal = false, modalStudent = null, modalLead = 
     return {
       pcaid: editStudent?.pcaid || leadData?.pcaid || '',
       name: editStudent?.name || leadData?.name || '',
+      last_name: editStudent?.last_name || leadData?.last_name || '',
       nic: editStudent?.nic || '',
       phone: cleanPhone,
       stream: editStudent?.stream || leadData?.stream || '',
@@ -366,7 +367,9 @@ export function StudentForm({ isModal = false, modalStudent = null, modalLead = 
       asked_package_type: editStudent?.asked_package_type || leadData?.asked_package_type || '',
       batch_type: editStudent?.batch_type || leadData?.batch_type || '',
       gender: editStudent?.gender || leadData?.gender || '',
-      dob: editStudent?.dob || leadData?.dob || ''
+      dob: editStudent?.dob || leadData?.dob || '',
+      father_job: editStudent?.father_job || '',
+      mother_job: editStudent?.mother_job || ''
     };
   });
 
@@ -377,6 +380,7 @@ export function StudentForm({ isModal = false, modalStudent = null, modalLead = 
       setStudentData({
         pcaid: editStudent.pcaid || '',
         name: editStudent.name || '',
+        last_name: editStudent.last_name || '',
         nic: editStudent.nic || '',
         phone: cleanPhone,
         stream: editStudent.stream || '',
@@ -390,7 +394,9 @@ export function StudentForm({ isModal = false, modalStudent = null, modalLead = 
         asked_package_type: editStudent.asked_package_type || '',
         batch_type: editStudent.batch_type || '',
         gender: editStudent.gender || '',
-        dob: editStudent.dob || ''
+        dob: editStudent.dob || '',
+        father_job: editStudent.father_job || '',
+        mother_job: editStudent.mother_job || ''
       });
     } else if (leadData) {
       const rawPhone = leadData.phone || '';
@@ -398,6 +404,7 @@ export function StudentForm({ isModal = false, modalStudent = null, modalLead = 
       setStudentData({
         pcaid: leadData.pcaid || '',
         name: leadData.name || '',
+        last_name: leadData.last_name || '',
         nic: '',
         phone: cleanPhone,
         stream: leadData.stream || '',
@@ -411,7 +418,9 @@ export function StudentForm({ isModal = false, modalStudent = null, modalLead = 
         asked_package_type: leadData.asked_package_type || '',
         batch_type: leadData.batch_type || '',
         gender: leadData.gender || '',
-        dob: leadData.dob || ''
+        dob: leadData.dob || '',
+        father_job: '',
+        mother_job: ''
       });
     }
   }, [editStudent, leadData]);
@@ -1116,6 +1125,7 @@ export function StudentForm({ isModal = false, modalStudent = null, modalLead = 
       setStudentData({
         pcaid: s.pcaid || '',
         name: s.name || '',
+        last_name: s.last_name || '',
         nic: s.nic || '',
         phone: s.phone || '',
         stream: s.stream || '',
@@ -1128,7 +1138,10 @@ export function StudentForm({ isModal = false, modalStudent = null, modalLead = 
         asked_class_type: s.asked_class_type || '',
         asked_package_type: s.asked_package_type || '',
         batch_type: s.batch_type || '',
-        gender: s.gender || ''
+        gender: s.gender || '',
+        dob: s.dob || '',
+        father_job: s.father_job || '',
+        mother_job: s.mother_job || ''
       });
       if (s.pcaid && s.pcaid.length === 10) {
         const last3 = s.pcaid.slice(-3);
@@ -1505,8 +1518,8 @@ export function StudentForm({ isModal = false, modalStudent = null, modalLead = 
   };
 
   const handleSaveAll = async () => {
-    if (!studentData.pcaid || !studentData.name) {
-      toast.error('PCA ID and Name are required');
+    if (!studentData.pcaid || !studentData.name?.trim() || !studentData.last_name?.trim()) {
+      toast.error('PCA ID, First Name, and Last Name are required');
       return;
     }
 
@@ -1596,8 +1609,12 @@ export function StudentForm({ isModal = false, modalStudent = null, modalLead = 
       // 1. Save Student
       const payload: any = {
         ...updatedStudentData,
+        name: studentData.name ? studentData.name.trim() : '',
+        last_name: studentData.last_name ? studentData.last_name.trim() : null,
         nic: studentData.nic ? studentData.nic.trim() : null,
         dob: studentData.dob ? studentData.dob : null,
+        father_job: studentData.father_job ? studentData.father_job.trim() : null,
+        mother_job: studentData.mother_job ? studentData.mother_job.trim() : null,
         admin: editStudent?.admin || user?.username || 'system',
         created_at: editStudent?.created_at || new Date().toISOString()
       };
@@ -1611,12 +1628,21 @@ export function StudentForm({ isModal = false, modalStudent = null, modalLead = 
 
       // If the error indicates missing column schema, fallback safely by omitting non-standard keys
       if (saveError && (saveError.message?.includes('column') || saveError.message?.includes('relation') || saveError.hint?.includes('column'))) {
-        console.warn('DB schema mismatch, retrying save without batch_type, gender, and dob keys if missing', saveError);
+        console.warn('DB schema mismatch, retrying save without batch_type, gender, dob, father_job, mother_job keys if missing', saveError);
         const slimPayload = { ...payload };
         delete slimPayload.batch_type;
         delete slimPayload.gender;
         if (saveError.message?.includes('dob') || saveError.hint?.includes('dob')) {
           delete slimPayload.dob;
+        }
+        if (saveError.message?.includes('last_name') || saveError.hint?.includes('last_name')) {
+          delete slimPayload.last_name;
+        }
+        if (saveError.message?.includes('father_job') || saveError.hint?.includes('father_job')) {
+          delete slimPayload.father_job;
+        }
+        if (saveError.message?.includes('mother_job') || saveError.hint?.includes('mother_job')) {
+          delete slimPayload.mother_job;
         }
         const retryResult = await supabase
           .from('student')
@@ -1628,7 +1654,7 @@ export function StudentForm({ isModal = false, modalStudent = null, modalLead = 
 
       // Auto-sync Student App Credentials for mobile app access (1st time entry password = PCAID)
       try {
-        const studentName = studentData.name ? studentData.name.trim() : '';
+        const studentFullName = [studentData.name ? studentData.name.trim() : '', studentData.last_name ? studentData.last_name.trim() : ''].filter(Boolean).join(' ');
 
         // Check if credentials record exists for current PCA ID
         const { data: existingCreds, error: checkCredErr } = await supabase
@@ -1642,12 +1668,12 @@ export function StudentForm({ isModal = false, modalStudent = null, modalLead = 
         }
 
         if (!existingCreds) {
-          // 1st time entry: PCAID and password are the same, save student name as well
+          // 1st time entry: PCAID and password are the same, save student full name as well
           let { error: insertErr } = await supabase
             .from('student_app_credentials')
             .insert({
               pcaid: currentCleanPcaid,
-              student_name: studentName,
+              student_name: studentFullName,
               password_hash: currentCleanPcaid,
               status: 'Active',
               created_at: new Date().toISOString(),
@@ -1680,7 +1706,7 @@ export function StudentForm({ isModal = false, modalStudent = null, modalLead = 
           let { error: updateErr } = await supabase
             .from('student_app_credentials')
             .update({
-              student_name: studentName,
+              student_name: studentFullName,
               updated_at: new Date().toISOString()
             })
             .eq('pcaid', currentCleanPcaid);
@@ -2073,14 +2099,14 @@ export function StudentForm({ isModal = false, modalStudent = null, modalLead = 
         <div className="space-y-8 animate-in fade-in duration-200">
           {/* SECTION 1: STUDENT DATA */}
           <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
-          <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+        <div className="flex flex-row items-center justify-between gap-4 mb-6">
+          <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2 whitespace-nowrap shrink-0">
             <UserIcon size={20} className="text-teal-600"/>
             Section 1: Student Data
           </h3>
           
           {/* Verification Bar */}
-          <div className="flex-1 max-w-md w-full relative">
+          <div className="flex-1 max-w-md relative">
             <div className="relative group">
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400 group-focus-within:text-teal-600 transition-colors">
                 <Search size={16} />
@@ -2174,66 +2200,76 @@ export function StudentForm({ isModal = false, modalStudent = null, modalLead = 
             )}
           </div>
         </div>
-        
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-6">
-          {/* Field 1: PCA ID */}
-          <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-semibold text-gray-700">PCA ID</label>
-            <div className="flex flex-col gap-2">
-              <div className="flex items-center gap-2">
-                <input
-                  type="text"
-                  value={studentData.pcaid}
-                  onChange={(e) => setStudentData({ ...studentData, pcaid: e.target.value.toUpperCase() })}
-                  className="w-36 px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg font-mono text-base focus:outline-none focus:ring-2 focus:ring-teal-500/20"
-                  placeholder="PCA-XXXX"
-                />
-                <div className="flex items-center gap-2">
-                  <button 
-                    type="button"
-                    onClick={handleGenerateTempId}
-                    disabled={isGeneratingTempId}
-                    className="inline-flex items-center justify-center px-3 py-1.5 bg-teal-50 hover:bg-teal-100/80 active:bg-teal-200 text-teal-700 border border-teal-100 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all disabled:opacity-50 cursor-pointer text-center h-[32px] whitespace-nowrap"
-                  >
-                    {isGeneratingTempId ? 'Generating...' : 'Temp ID'}
-                  </button>
-                  <button 
-                    type="button"
-                    onClick={handleGeneratePcaId}
-                    disabled={isGeneratingPcaId}
-                    className="inline-flex items-center justify-center px-3 py-1.5 bg-teal-600 hover:bg-teal-700 active:bg-teal-800 text-white border border-teal-600 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all disabled:opacity-50 cursor-pointer text-center h-[32px] whitespace-nowrap font-sans font-bold"
-                  >
-                    {isGeneratingPcaId ? 'Generating...' : 'PCA ID'}
-                  </button>
-                </div>
-              </div>
 
-              {/* Student Category Dropdown Box */}
-              <div className="flex flex-col gap-1 mt-1 max-w-[240px]">
-                <label className="text-[10px] font-black uppercase tracking-wider text-gray-400">Student Category</label>
-                <select
-                  value={studentType}
-                  onChange={(e) => setStudentType(e.target.value as 'Paid' | 'Scholarship')}
-                  className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-teal-500/20 text-gray-700 font-semibold cursor-pointer"
-                >
-                  <option value="Paid">Paid Student (Sequence 001 - 899)</option>
-                  <option value="Scholarship">Scholarship Holder (Sequence 900 - 999)</option>
-                </select>
-              </div>
+        {/* Row 1: PCA ID textbox, Temp ID / PCA ID buttons, and Student Category dropdown all in one line */}
+        <div className="flex flex-col gap-1.5 mb-6">
+          <label className="text-sm font-semibold text-gray-700">PCA ID</label>
+          <div className="flex items-center gap-3 flex-wrap sm:flex-nowrap">
+            <input
+              type="text"
+              value={studentData.pcaid}
+              onChange={(e) => setStudentData({ ...studentData, pcaid: e.target.value.toUpperCase() })}
+              className="w-36 px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg font-mono text-base focus:outline-none focus:ring-2 focus:ring-teal-500/20 h-[38px]"
+              placeholder="PCA-XXXX"
+            />
+            <div className="flex items-center gap-2">
+              <button 
+                type="button"
+                onClick={handleGenerateTempId}
+                disabled={isGeneratingTempId}
+                className="inline-flex items-center justify-center px-3 py-1.5 bg-teal-50 hover:bg-teal-100/80 active:bg-teal-200 text-teal-700 border border-teal-100 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all disabled:opacity-50 cursor-pointer text-center h-[38px] whitespace-nowrap"
+              >
+                {isGeneratingTempId ? 'Generating...' : 'Temp ID'}
+              </button>
+              <button 
+                type="button"
+                onClick={handleGeneratePcaId}
+                disabled={isGeneratingPcaId}
+                className="inline-flex items-center justify-center px-3 py-1.5 bg-teal-600 hover:bg-teal-700 active:bg-teal-800 text-white border border-teal-600 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all disabled:opacity-50 cursor-pointer text-center h-[38px] whitespace-nowrap font-sans font-bold"
+              >
+                {isGeneratingPcaId ? 'Generating...' : 'PCA ID'}
+              </button>
+            </div>
+            <div className="w-full sm:w-auto sm:min-w-[260px]">
+              <select
+                value={studentType}
+                onChange={(e) => setStudentType(e.target.value as 'Paid' | 'Scholarship')}
+                className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-teal-500/20 text-gray-700 font-semibold cursor-pointer h-[38px]"
+              >
+                <option value="Paid">Paid Student (Sequence 001 - 899)</option>
+                <option value="Scholarship">Scholarship Holder (Sequence 900 - 999)</option>
+              </select>
             </div>
           </div>
+        </div>
 
-          {/* Field 2: Name */}
+        {/* Row 2: First Name and Last Name in the next line */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-semibold text-gray-700">Name</label>
+            <label className="text-sm font-semibold text-gray-700">First Name <span className="text-red-500">*</span></label>
             <input
               type="text"
               value={studentData.name}
               onChange={(e) => setStudentData({ ...studentData, name: e.target.value })}
               className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500/20"
-              placeholder="Full Name"
+              placeholder="First Name"
+              required
             />
           </div>
+          <div className="flex flex-col gap-1.5">
+            <label className="text-sm font-semibold text-gray-700">Last Name <span className="text-red-500">*</span></label>
+            <input
+              type="text"
+              value={studentData.last_name || ''}
+              onChange={(e) => setStudentData({ ...studentData, last_name: e.target.value })}
+              className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500/20"
+              placeholder="Last Name"
+              required
+            />
+          </div>
+        </div>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-6">
 
           {/* Field 3: Stream */}
           <div className="flex flex-col gap-1.5">
@@ -2481,6 +2517,30 @@ export function StudentForm({ isModal = false, modalStudent = null, modalLead = 
               onChange={(e) => setStudentData({ ...studentData, address: e.target.value })}
               className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500/20 flex-1 min-h-[140px] resize-y text-sm"
               placeholder="Home Address"
+            />
+          </div>
+
+          {/* Field: Father's Job */}
+          <div className="flex flex-col gap-1.5">
+            <label className="text-sm font-semibold text-gray-700">Father's Job</label>
+            <input
+              type="text"
+              value={studentData.father_job || ''}
+              onChange={(e) => setStudentData({ ...studentData, father_job: e.target.value })}
+              className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500/20"
+              placeholder="e.g. Teacher, Engineer, Businessman"
+            />
+          </div>
+
+          {/* Field: Mother's Job */}
+          <div className="flex flex-col gap-1.5">
+            <label className="text-sm font-semibold text-gray-700">Mother's Job</label>
+            <input
+              type="text"
+              value={studentData.mother_job || ''}
+              onChange={(e) => setStudentData({ ...studentData, mother_job: e.target.value })}
+              className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500/20"
+              placeholder="e.g. Doctor, Accountant, Homemaker"
             />
           </div>
 
@@ -3310,7 +3370,9 @@ export function StudentForm({ isModal = false, modalStudent = null, modalLead = 
             </div>
             <div>
               <h3 className="text-base font-bold text-gray-900 dark:text-white">Zoom Webinar / Meeting Registration</h3>
-              <p className="text-xs text-gray-500 mt-0.5">Register this student for Zoom webinars and retrieve join URLs</p>
+              <p className="text-xs text-gray-500 mt-0.5">
+                Automatically fetches the student PCA ID as First Name and student First Name as Last Name
+              </p>
             </div>
           </div>
 
@@ -3348,35 +3410,57 @@ export function StudentForm({ isModal = false, modalStudent = null, modalLead = 
 
               {/* Prefilled First Name (from PCA ID) */}
               <div>
-                <label className="block text-xs font-bold text-gray-600 dark:text-gray-400 uppercase tracking-wider mb-1">
-                  First Name (from PCA ID)
-                </label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-bold text-gray-600 dark:text-gray-400 uppercase tracking-wider">
+                    First Name (on Zoom)
+                  </label>
+                  <span className="text-[10px] bg-teal-50 dark:bg-teal-950/60 text-teal-700 dark:text-teal-300 font-bold px-2 py-0.5 rounded-md border border-teal-100 dark:border-teal-900">
+                    Fetched from PCA ID
+                  </span>
+                </div>
                 <input
                   type="text"
                   readOnly
                   value={studentData.pcaid || ''}
+                  placeholder="PCA ID not set (enter in Tab 1)"
                   className="w-full px-4 py-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-mono font-bold text-gray-700 dark:text-gray-300 cursor-not-allowed"
                 />
+                {!studentData.pcaid && (
+                  <p className="text-[11px] text-amber-600 font-bold mt-1.5 flex items-center gap-1">
+                    <AlertTriangle size={12} /> PCA ID is missing. Enter PCA ID in Section 1 to enable registration.
+                  </p>
+                )}
               </div>
 
               {/* Prefilled Last Name (from Clean Student Name without Initials) */}
               <div>
                 <div className="flex items-center justify-between mb-1">
                   <label className="block text-xs font-bold text-gray-600 dark:text-gray-400 uppercase tracking-wider">
-                    Last Name (Student Name)
+                    Last Name (on Zoom)
                   </label>
-                  {studentData.name && cleanStudentNameForZoom(studentData.name) !== studentData.name && (
-                    <span className="text-[10px] text-teal-600 dark:text-teal-400 font-bold">
-                      Initials removed for Zoom
+                  <div className="flex items-center gap-1.5">
+                    {studentData.name && cleanStudentNameForZoom(studentData.name) !== studentData.name && (
+                      <span className="text-[10px] text-amber-700 dark:text-amber-400 font-bold">
+                        Initials removed
+                      </span>
+                    )}
+                    <span className="text-[10px] bg-teal-50 dark:bg-teal-950/60 text-teal-700 dark:text-teal-300 font-bold px-2 py-0.5 rounded-md border border-teal-100 dark:border-teal-900">
+                      Fetched from First Name
                     </span>
-                  )}
+                  </div>
                 </div>
                 <input
                   type="text"
                   readOnly
                   value={cleanStudentNameForZoom(studentData.name || '')}
+                  placeholder="First Name not set (enter in Tab 1)"
                   className="w-full px-4 py-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-bold text-gray-700 dark:text-gray-300 cursor-not-allowed"
                 />
+                {!studentData.name && (
+                  <p className="text-[11px] text-amber-600 font-bold mt-1.5 flex items-center gap-1">
+                    <AlertTriangle size={12} /> Student First Name is missing. Enter First Name in Section 1.
+                  </p>
+                )}
               </div>
 
               {/* Student Email */}
@@ -4289,13 +4373,17 @@ export function StudentExplorer() {
     const data = filteredStudents.map((s, idx) => ({
       'No': idx + 1,
       'PCA ID': s.pcaid,
-      'Name': s.name,
+      'First Name': s.name,
+      'Last Name': s.last_name || '-',
+      'Name': [s.name, s.last_name].filter(Boolean).join(' '),
       'Phone': s.phone,
       'District': s.district,
       'Proper Batch': s.proper_batch,
       'Joined Batch': s.joined_batch,
       'NIC': s.nic || '-',
       'DOB': s.dob || '-',
+      'Father\'s Job': s.father_job || '-',
+      'Mother\'s Job': s.mother_job || '-',
       'School': s.school,
       'Mail': s.mail,
       'Address': s.address,
@@ -4308,8 +4396,11 @@ export function StudentExplorer() {
 
   const filteredStudents = students.filter(s => {
     const searchLower = filters.search.toLowerCase();
+    const fullName = [s.name, s.last_name].filter(Boolean).join(' ').toLowerCase();
     const matchesSearch = !filters.search || 
       s.name.toLowerCase().includes(searchLower) || 
+      (s.last_name && s.last_name.toLowerCase().includes(searchLower)) ||
+      fullName.includes(searchLower) ||
       s.pcaid.toLowerCase().includes(searchLower) || 
       s.phone.includes(filters.search) ||
       (s.nic && s.nic.toLowerCase().includes(searchLower));
@@ -4320,41 +4411,73 @@ export function StudentExplorer() {
     const matchesProperBatch = !filters.properBatch || (s.proper_batch && s.proper_batch.toLowerCase().includes(filters.properBatch.toLowerCase()));
     const matchesJoinedBatch = !filters.joinedBatch || (s.joined_batch && s.joined_batch.toLowerCase().includes(filters.joinedBatch.toLowerCase()));
     
-    const studentPayments = explorerPayments.filter(p => p.pcaid === s.pcaid && (p.type === 'class' || (!p.type && Boolean(p.class_type))));
-    const matchesClasses = filters.classes.length === 0 && !filters.month ? true : (
-      studentPayments.some(p => {
-        if (!p.class_type) return false;
-        const ptLower = p.class_type.trim().toLowerCase();
-        
-        // Extract base class name of the payment's class_type by stripping month suffixes
-        let paymentBaseClass = p.class_type;
-        const match = MONTHS.find(m => p.class_type.endsWith(` ${m}`) || p.class_type.endsWith(` - ${m}`));
-        if (match) {
-          let idx = p.class_type.lastIndexOf(` - ${match}`);
-          if (idx === -1) {
-            idx = p.class_type.lastIndexOf(` ${match}`);
-          }
-          paymentBaseClass = p.class_type.substring(0, idx).trim();
-        }
+    // Gather all class entries for this student from both payment records and student.asked_class_type
+    const rawClassStrings: string[] = [];
+    if (s.asked_class_type) {
+      rawClassStrings.push(s.asked_class_type);
+    }
+    explorerPayments.filter(p => p.pcaid === s.pcaid).forEach(p => {
+      if (p.class_type) rawClassStrings.push(p.class_type);
+    });
 
-        const classMatch = filters.classes.length === 0 || 
-          filters.classes.some(c => paymentBaseClass.toLowerCase() === c.toLowerCase());
+    const individualClassItems: string[] = [];
+    rawClassStrings.forEach(str => {
+      str.split(',').forEach(item => {
+        const trimmed = item.trim();
+        if (trimmed) individualClassItems.push(trimmed);
+      });
+    });
+
+    const matchesClasses = filters.classes.length === 0 && !filters.month ? true : (
+      individualClassItems.some(item => {
+        const itemLower = item.toLowerCase();
+        
+        // Check month match
+        const monthMatch = !filters.month || (
+          itemLower.includes(filters.month.toLowerCase()) ||
+          (filters.month.toLowerCase().startsWith('sep') && itemLower.includes('sep'))
+        );
+
+        if (!monthMatch) return false;
+
+        // Check class match
+        if (filters.classes.length === 0) return true;
+
+        return filters.classes.some(c => {
+          const cLower = c.toLowerCase().trim();
+          if (itemLower.includes(cLower)) return true;
           
-        const monthMatch = !filters.month || 
-          ptLower.endsWith(` ${filters.month.toLowerCase()}`) || 
-          ptLower.includes(` ${filters.month.toLowerCase()}`) ||
-          ptLower.endsWith(` - ${filters.month.toLowerCase()}`) || 
-          ptLower.includes(`- ${filters.month.toLowerCase()}`);
-          
-        return classMatch && monthMatch;
+          let baseItem = item;
+          const foundMonth = MONTHS.find(m => item.endsWith(` ${m}`) || item.endsWith(` - ${m}`) || item.toLowerCase().includes(`- ${m.toLowerCase()}`));
+          if (foundMonth) {
+            baseItem = item.replace(new RegExp(`[- ]*${foundMonth}\\b`, 'gi'), '').trim();
+          }
+          const baseLower = baseItem.toLowerCase();
+          return baseLower === cLower || baseLower.includes(cLower) || cLower.includes(baseLower);
+        });
       })
     );
     
-    const studentPackagePayments = explorerPayments.filter(p => p.pcaid === s.pcaid && (p.type === 'package' || Boolean(p.package_type)));
+    // Gather all package entries for this student from both payment records and student.asked_package_type
+    const rawPackageStrings: string[] = [];
+    if (s.asked_package_type) {
+      rawPackageStrings.push(s.asked_package_type);
+    }
+    explorerPayments.filter(p => p.pcaid === s.pcaid && (p.type === 'package' || Boolean(p.package_type))).forEach(p => {
+      if (p.package_type) rawPackageStrings.push(p.package_type);
+    });
+
+    const individualPackageItems: string[] = [];
+    rawPackageStrings.forEach(str => {
+      str.split(',').forEach(item => {
+        const trimmed = item.trim();
+        if (trimmed) individualPackageItems.push(trimmed);
+      });
+    });
+
     const matchesPackages = filters.packages.length === 0 ? true : (
-      studentPackagePayments.some(p => {
-        if (!p.package_type) return false;
-        const ptLower = p.package_type.toLowerCase();
+      individualPackageItems.some(item => {
+        const ptLower = item.toLowerCase();
         return filters.packages.some(pkg => ptLower === pkg.toLowerCase() || ptLower.includes(pkg.toLowerCase()));
       })
     );
@@ -4977,12 +5100,12 @@ export function StudentExplorer() {
                           className="hover:text-teal-600 dark:hover:text-teal-400 cursor-pointer underline decoration-dotted transition-colors"
                           title="Click to Edit Student"
                         >
-                          {s.name}
+                          {[s.name, s.last_name].filter(Boolean).join(' ')}
                         </span>
                         <button 
                           onClick={(e) => {
                             e.stopPropagation();
-                            toast.success(copyToClipboard(s.name, 'Name'));
+                            toast.success(copyToClipboard([s.name, s.last_name].filter(Boolean).join(' '), 'Name'));
                           }}
                           className="p-1 text-gray-300 dark:text-gray-600 hover:text-teal-600 dark:hover:text-teal-400 transition-colors"
                         >

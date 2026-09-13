@@ -80,6 +80,7 @@ export function CallTaskForm({ editData, onComplete }: { editData?: CallTask; on
   const [formData, setFormData] = useState({
     pcaid: editData?.pcaid || '',
     name: editData?.name || '',
+    last_name: editData?.last_name || '',
     phone: editData?.phone ? (editData.phone.replace(/\D/g, '').replace(/^0+/, '').slice(0, 9)) : '',
     stream: editData?.stream || '',
     proper_batch: editData?.proper_batch || '',
@@ -306,8 +307,8 @@ export function CallTaskForm({ editData, onComplete }: { editData?: CallTask; on
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.name || !formData.phone) {
-      toast.error('Name and Phone are required');
+    if (!formData.name?.trim() || !formData.last_name?.trim() || !formData.phone) {
+      toast.error('First Name, Last Name, and Phone are required');
       return;
     }
 
@@ -355,6 +356,7 @@ export function CallTaskForm({ editData, onComplete }: { editData?: CallTask; on
       const cleanMail = (formData.mail === '@gmail.com' || formData.mail === '@icloud.com') ? '' : formData.mail;
       const dataToSave = {
         ...formData,
+        last_name: formData.last_name ? formData.last_name.trim() : null,
         mail: cleanMail,
         dob: formData.dob || null,
         asked_class_type: finalAskedClassType,
@@ -372,10 +374,11 @@ export function CallTaskForm({ editData, onComplete }: { editData?: CallTask; on
           .select()
           .single();
         
-        // Graceful fallback if dob column not yet created in calltask
-        if (error && (error.message?.includes('dob') || error.hint?.includes('dob'))) {
+        // Graceful fallback if dob or last_name column not yet created in calltask
+        if (error && (error.message?.includes('dob') || error.hint?.includes('dob') || error.message?.includes('last_name') || error.hint?.includes('last_name'))) {
           const slimData = { ...dataToSave };
-          delete (slimData as any).dob;
+          if (error.message?.includes('dob') || error.hint?.includes('dob')) delete (slimData as any).dob;
+          if (error.message?.includes('last_name') || error.hint?.includes('last_name')) delete (slimData as any).last_name;
           const retryRes = await supabase
             .from('calltask')
             .update(slimData)
@@ -393,13 +396,14 @@ export function CallTaskForm({ editData, onComplete }: { editData?: CallTask; on
           action_type: 'UPDATE',
           entity_type: 'calltask',
           entity_id: formData.pcaid || formData.phone || editData.id,
-          details: `Updated call task details for ${formData.name} (Phone: ${formData.phone}, Status: ${formData.status})`
+          details: `Updated call task details for ${[formData.name, formData.last_name].filter(Boolean).join(' ')} (Phone: ${formData.phone}, Status: ${formData.status})`
         });
 
         // Sync with Joined Record
         const sharedFields: any = {
           pcaid: formData.pcaid,
           name: formData.name,
+          last_name: formData.last_name ? formData.last_name.trim() : null,
           phone: formData.phone,
           proper_batch: formData.proper_batch,
           joined_batch: formData.joined_batch,
@@ -419,9 +423,10 @@ export function CallTaskForm({ editData, onComplete }: { editData?: CallTask; on
           .update(sharedFields)
           .eq('phone', editData.phone);
         
-        if (studentUpdateErr && (studentUpdateErr.message?.includes('dob') || studentUpdateErr.hint?.includes('dob'))) {
+        if (studentUpdateErr && (studentUpdateErr.message?.includes('dob') || studentUpdateErr.hint?.includes('dob') || studentUpdateErr.message?.includes('last_name') || studentUpdateErr.hint?.includes('last_name'))) {
           const slimShared = { ...sharedFields };
-          delete slimShared.dob;
+          if (studentUpdateErr.message?.includes('dob') || studentUpdateErr.hint?.includes('dob')) delete slimShared.dob;
+          if (studentUpdateErr.message?.includes('last_name') || studentUpdateErr.hint?.includes('last_name')) delete slimShared.last_name;
           await supabase
             .from('student')
             .update(slimShared)
@@ -466,9 +471,10 @@ export function CallTaskForm({ editData, onComplete }: { editData?: CallTask; on
           .select()
           .single();
         
-        if (error && (error.message?.includes('dob') || error.hint?.includes('dob'))) {
+        if (error && (error.message?.includes('dob') || error.hint?.includes('dob') || error.message?.includes('last_name') || error.hint?.includes('last_name'))) {
           const slimData = { ...dataToSave };
-          delete (slimData as any).dob;
+          if (error.message?.includes('dob') || error.hint?.includes('dob')) delete (slimData as any).dob;
+          if (error.message?.includes('last_name') || error.hint?.includes('last_name')) delete (slimData as any).last_name;
           const retryRes = await supabase
             .from('calltask')
             .insert({
@@ -489,7 +495,7 @@ export function CallTaskForm({ editData, onComplete }: { editData?: CallTask; on
           action_type: 'CREATE',
           entity_type: 'calltask',
           entity_id: data.pcaid || data.phone || data.id,
-          details: `Created new call task for ${data.name} (Phone: ${data.phone}, Proper Batch: ${data.proper_batch})`
+          details: `Created new call task for ${[data.name, data.last_name].filter(Boolean).join(' ')} (Phone: ${data.phone}, Proper Batch: ${data.proper_batch})`
         });
 
         // Update last_temporary_id table if the PCAID matches our newly generated temp ID
@@ -666,13 +672,25 @@ export function CallTaskForm({ editData, onComplete }: { editData?: CallTask; on
               </div>
             </div>
             <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-semibold text-gray-700">Name</label>
+              <label className="text-sm font-semibold text-gray-700">First Name <span className="text-red-500">*</span></label>
               <input
                 type="text"
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                 className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500/20"
-                placeholder="Full Name"
+                placeholder="First Name"
+                required
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-semibold text-gray-700">Last Name <span className="text-red-500">*</span></label>
+              <input
+                type="text"
+                value={formData.last_name || ''}
+                onChange={(e) => setFormData({ ...formData, last_name: e.target.value })}
+                className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500/20"
+                placeholder="Last Name"
+                required
               />
             </div>
             <div className="flex flex-col gap-1.5">
@@ -1055,7 +1073,8 @@ function autoMapHeaders(headers: string[]) {
   
   const rules: { [targetField: string]: string[] } = {
     phone: ['phone', 'mobile', 'contact', 'phone_number', 'phone number', 'tele', 'telephone', 'phn'],
-    name: ['name', 'full name', 'fullname', 'student name', 'std_name', 'student_name'],
+    last_name: ['last name', 'lastname', 'last_name', 'surname', 'family name', 'lname'],
+    name: ['first name', 'firstname', 'first_name', 'name', 'full name', 'fullname', 'student name', 'std_name', 'student_name'],
     pcaid: ['pcaid', 'pca id', 'id', 'student id', 'student_id', 'pca_id'],
     stream: ['stream', 'subject stream', 'field', 'stream_type'],
     proper_batch: ['proper batch', 'proper_batch', 'batch', 'proper'],
@@ -1405,8 +1424,11 @@ export function CallTaskDisplay() {
 
   const filteredTasks = tasks.filter(t => {
     const searchLower = filters.search.toLowerCase();
+    const fullName = [t.name, t.last_name].filter(Boolean).join(' ').toLowerCase();
     const matchesSearch = !filters.search || 
       (t.name?.toLowerCase().includes(searchLower)) || 
+      (t.last_name?.toLowerCase().includes(searchLower)) ||
+      (fullName.includes(searchLower)) ||
       (t.phone?.includes(filters.search)) ||
       (t.pcaid?.toLowerCase().includes(searchLower));
 
@@ -1586,7 +1608,9 @@ export function CallTaskDisplay() {
   const handleExport = () => {
     const data = filteredTasks.map((t, idx) => ({
       'No': idx + 1,
-      'Name': t.name,
+      'First Name': t.name,
+      'Last Name': t.last_name || '',
+      'Name': [t.name, t.last_name].filter(Boolean).join(' '),
       'Phone': t.phone,
       'PCA ID': t.pcaid || '',
       'Stream': t.stream || '',
@@ -1656,6 +1680,7 @@ export function CallTaskDisplay() {
           const rawPhone = getVal('phone').replace(/[\s\-()]/g, '');
           const rawPcaid = getVal('pcaid');
           const rawName = getVal('name');
+          const rawLastName = getVal('last_name');
 
           // Date normalized
           const fDate = normalizeDate(getVal('first_call_date')) || null;
@@ -1666,6 +1691,7 @@ export function CallTaskDisplay() {
             rowNum: index + 2,
             pcaid: rawPcaid.toUpperCase() || '',
             name: rawName,
+            last_name: rawLastName || null,
             phone: rawPhone,
             stream: normalizeStream(getVal('stream')),
             proper_batch: getVal('proper_batch'),
@@ -2254,12 +2280,12 @@ export function CallTaskDisplay() {
                         className="hover:text-teal-600 dark:hover:text-teal-400 cursor-pointer underline decoration-dotted transition-colors"
                         title="Click to Edit Call Task"
                       >
-                        {task.name}
+                        {[task.name, task.last_name].filter(Boolean).join(' ')}
                       </span>
                       <button 
                         onClick={(e) => {
                           e.stopPropagation();
-                          toast.success(copyToClipboard(task.name));
+                          toast.success(copyToClipboard([task.name, task.last_name].filter(Boolean).join(' ')));
                         }} 
                         className="text-gray-300 dark:text-gray-600 hover:text-teal-600 dark:hover:text-teal-400"
                       >

@@ -75,6 +75,7 @@ interface SelfStudent {
   id: string;
   pcaid: string;
   name: string;
+  last_name?: string | null;
   phone?: string | null;
   mail?: string | null;
   stream?: string | null;
@@ -85,6 +86,8 @@ interface SelfStudent {
   address?: string | null;
   nic?: string | null;
   dob?: string | null;
+  father_job?: string | null;
+  mother_job?: string | null;
   gender?: string | null;
   admin?: string | null;
   created_at: string;
@@ -1757,7 +1760,7 @@ export default function SelfEnrolmentManagement() {
                 </div>
                 <div>
                   <h3 className="text-base font-black text-gray-900 dark:text-gray-100">
-                    {viewingStudent.name}
+                    {[viewingStudent.name, viewingStudent.last_name].filter(Boolean).join(' ')}
                   </h3>
                   <p className="text-xs font-mono font-bold text-teal-700 dark:text-teal-400">
                     {viewingStudent.pcaid}
@@ -1809,6 +1812,18 @@ export default function SelfEnrolmentManagement() {
                     {viewingStudent.admin || 'N/A'}
                   </p>
                 </div>
+                {viewingStudent.father_job && (
+                  <div>
+                    <span className="text-[10px] font-bold text-gray-400 uppercase">Father's Job</span>
+                    <p className="font-semibold text-gray-900 dark:text-gray-100">{viewingStudent.father_job}</p>
+                  </div>
+                )}
+                {viewingStudent.mother_job && (
+                  <div>
+                    <span className="text-[10px] font-bold text-gray-400 uppercase">Mother's Job</span>
+                    <p className="font-semibold text-gray-900 dark:text-gray-100">{viewingStudent.mother_job}</p>
+                  </div>
+                )}
                 {viewingStudent.school && (
                   <div className="col-span-2 sm:col-span-3">
                     <span className="text-[10px] font-bold text-gray-400 uppercase">School</span>

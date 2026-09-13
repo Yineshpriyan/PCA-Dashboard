@@ -67,6 +67,7 @@ export interface CallTask {
   id: string;
   pcaid: string;
   name: string;
+  last_name?: string | null;
   proper_batch: string;
   joined_batch: string;
   school: string;
@@ -113,6 +114,7 @@ export interface Student {
   id: string;
   pcaid: string;
   name: string;
+  last_name?: string | null;
   proper_batch: string;
   joined_batch: string;
   school: string;
@@ -129,6 +131,8 @@ export interface Student {
   gender?: string;
   nic?: string | null;
   dob?: string | null;
+  father_job?: string | null;
+  mother_job?: string | null;
   status?: string;
   updated_at?: string;
   deleted_at?: string | null;
