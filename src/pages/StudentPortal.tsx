@@ -74,6 +74,7 @@ export default function StudentPortal() {
   // Editable personal info state
   const [personalForm, setPersonalForm] = useState({
     name: '',
+    last_name: '',
     phone: '',
     whatsapp: '',
     mail: '',
@@ -82,6 +83,8 @@ export default function StudentPortal() {
     nic: '',
     gender: 'Male',
     dob: '',
+    father_job: '',
+    mother_job: '',
   });
 
   // Change password state
@@ -103,6 +106,7 @@ export default function StudentPortal() {
     if (student) {
       setPersonalForm({
         name: student.name || '',
+        last_name: student.last_name || '',
         phone: student.phone || '',
         whatsapp: (student as any).whatsapp || student.phone || '',
         mail: student.mail || '',
@@ -111,6 +115,8 @@ export default function StudentPortal() {
         nic: student.nic || '',
         gender: student.gender || 'Male',
         dob: student.dob || '',
+        father_job: student.father_job || '',
+        mother_job: student.mother_job || '',
       });
     }
   }, [student]);
@@ -336,7 +342,7 @@ export default function StudentPortal() {
               <div className="space-y-1">
                 <div className="flex items-center gap-3 flex-wrap">
                   <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white tracking-tight">
-                    {student?.name}
+                    {[student?.name, student?.last_name].filter(Boolean).join(' ')}
                   </h1>
                   <span className="px-2.5 py-0.5 bg-teal-50 dark:bg-teal-950/40 border border-teal-200 dark:border-teal-800/60 text-teal-700 dark:text-teal-300 rounded-full text-xs font-bold font-mono">
                     {student?.pcaid}
@@ -454,17 +460,32 @@ export default function StudentPortal() {
 
                 {/* Editable Fields */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {/* Full Name */}
-                  <div className="space-y-1.5 sm:col-span-2">
+                  {/* First Name */}
+                  <div className="space-y-1.5">
                     <label className="text-xs font-semibold text-gray-700 dark:text-gray-300">
-                      Full Name <span className="text-red-500">*</span>
+                      First Name <span className="text-red-500">*</span>
                     </label>
                     <input
                       type="text"
                       value={personalForm.name}
                       onChange={(e) => setPersonalForm({ ...personalForm, name: e.target.value })}
                       className="w-full px-4 py-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-medium text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all"
+                      placeholder="e.g. Dinesh"
                       required
+                    />
+                  </div>
+
+                  {/* Last Name */}
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-gray-700 dark:text-gray-300">
+                      Last Name / Family Name
+                    </label>
+                    <input
+                      type="text"
+                      value={personalForm.last_name}
+                      onChange={(e) => setPersonalForm({ ...personalForm, last_name: e.target.value })}
+                      className="w-full px-4 py-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-medium text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all"
+                      placeholder="e.g. Wijesinghe"
                     />
                   </div>
 
@@ -516,12 +537,36 @@ export default function StudentPortal() {
                   </div>
 
                   {/* School */}
-                  <div className="space-y-1.5">
+                  <div className="space-y-1.5 sm:col-span-2">
                     <label className="text-xs font-semibold text-gray-700 dark:text-gray-300">School</label>
                     <input
                       type="text"
                       value={personalForm.school}
                       onChange={(e) => setPersonalForm({ ...personalForm, school: e.target.value })}
+                      className="w-full px-4 py-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-medium text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all"
+                    />
+                  </div>
+
+                  {/* Father's Job */}
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-gray-700 dark:text-gray-300">Father's Job / Occupation</label>
+                    <input
+                      type="text"
+                      value={personalForm.father_job}
+                      onChange={(e) => setPersonalForm({ ...personalForm, father_job: e.target.value })}
+                      placeholder="e.g. Teacher, Businessman, Engineer"
+                      className="w-full px-4 py-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-medium text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all"
+                    />
+                  </div>
+
+                  {/* Mother's Job */}
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-gray-700 dark:text-gray-300">Mother's Job / Occupation</label>
+                    <input
+                      type="text"
+                      value={personalForm.mother_job}
+                      onChange={(e) => setPersonalForm({ ...personalForm, mother_job: e.target.value })}
+                      placeholder="e.g. Accountant, Doctor, Homemaker"
                       className="w-full px-4 py-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-medium text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all"
                     />
                   </div>

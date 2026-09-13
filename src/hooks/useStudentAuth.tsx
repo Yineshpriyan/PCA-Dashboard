@@ -198,6 +198,7 @@ export const StudentAuthProvider: React.FC<{ children: ReactNode }> = ({ childre
       // Allowed personal fields only (prevent touching admin fields like proper_batch, joined_batch, stream, district, etc.)
       const allowedUpdates: Partial<Student> = {
         name: updatedData.name,
+        last_name: updatedData.last_name,
         phone: updatedData.phone,
         mail: updatedData.mail,
         address: updatedData.address,
@@ -205,6 +206,8 @@ export const StudentAuthProvider: React.FC<{ children: ReactNode }> = ({ childre
         nic: updatedData.nic,
         gender: updatedData.gender,
         dob: updatedData.dob || null,
+        father_job: updatedData.father_job,
+        mother_job: updatedData.mother_job,
         updated_at: new Date().toISOString()
       };
 
@@ -218,9 +221,12 @@ export const StudentAuthProvider: React.FC<{ children: ReactNode }> = ({ childre
         .update(payload)
         .eq('pcaid', student.pcaid);
 
-      if (updateErr && (updateErr.message?.includes('dob') || updateErr.hint?.includes('dob'))) {
+      if (updateErr && (updateErr.message?.includes('column') || updateErr.hint?.includes('column') || updateErr.message?.includes('schema'))) {
         const slimPayload = { ...payload };
-        delete (slimPayload as any).dob;
+        if (updateErr.message?.includes('dob') || updateErr.hint?.includes('dob')) delete (slimPayload as any).dob;
+        if (updateErr.message?.includes('last_name') || updateErr.hint?.includes('last_name')) delete (slimPayload as any).last_name;
+        if (updateErr.message?.includes('father_job') || updateErr.hint?.includes('father_job')) delete (slimPayload as any).father_job;
+        if (updateErr.message?.includes('mother_job') || updateErr.hint?.includes('mother_job')) delete (slimPayload as any).mother_job;
         const retry = await supabase
           .from('student')
           .update(slimPayload)
@@ -233,11 +239,12 @@ export const StudentAuthProvider: React.FC<{ children: ReactNode }> = ({ childre
       }
 
       // Also update student_name in student_app_credentials
-      if (payload.name) {
+      if (payload.name || payload.last_name) {
+        const updatedFullName = [payload.name || student.name, payload.last_name || student.last_name].filter(Boolean).join(' ');
         await supabase
           .from('student_app_credentials')
           .update({
-            student_name: payload.name,
+            student_name: updatedFullName,
             updated_at: new Date().toISOString()
           })
           .eq('pcaid', student.pcaid);
