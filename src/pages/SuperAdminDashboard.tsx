@@ -1172,13 +1172,41 @@ export function SignupView() {
     setLoading(true);
     try {
       const email = formData.email.trim();
+      const cleanUsername = formData.username.trim();
 
+      // 1. Pre-check if username already exists in registry
+      const { data: existingUsername } = await supabase
+        .from('user')
+        .select('id')
+        .ilike('username', cleanUsername)
+        .maybeSingle();
+
+      if (existingUsername) {
+        toast.error(`The username "${cleanUsername}" is already taken. Please choose another username.`);
+        setLoading(false);
+        return;
+      }
+
+      // 2. Pre-check if email already exists in registry
+      const { data: existingEmail } = await supabase
+        .from('user')
+        .select('id')
+        .ilike('email', email)
+        .maybeSingle();
+
+      if (existingEmail) {
+        toast.error(`An account with email "${email}" already exists in the database.`);
+        setLoading(false);
+        return;
+      }
+
+      // 3. Create user in Supabase Authentication
       const { data, error: signUpError } = await authSignUpClient.auth.signUp({
         email,
         password: formData.password,
         options: {
           data: {
-            username: formData.username.trim(),
+            username: cleanUsername,
             admin_type: formData.admin_type
           }
         }
@@ -1189,7 +1217,15 @@ export function SignupView() {
       }
 
       if (!data?.user) {
-        throw new Error('Account creation failed');
+        throw new Error('Account creation failed. Please try again.');
+      }
+
+      // Check if user is already registered in Supabase Auth:
+      // When an email already exists in auth.users, Supabase returns identities: [] to prevent email enumeration.
+      if (data.user.identities && data.user.identities.length === 0) {
+        throw new Error(
+          `The email "${email}" is already registered in Supabase Auth. To reuse this email, delete it first from Supabase Dashboard > Authentication > Users, or use a different email address.`
+        );
       }
 
       // Check if trigger automatically created the profile row, otherwise insert manually
@@ -1203,7 +1239,7 @@ export function SignupView() {
       if (!profile) {
         const { error: insertError } = await supabase.from('user').insert({
           id: data.user.id,
-          username: formData.username.trim(),
+          username: cleanUsername,
           email: email,
           admin_type: formData.admin_type,
           joined_date: new Date().toISOString()
@@ -1214,11 +1250,15 @@ export function SignupView() {
           if (insertError.message?.includes('column "email" of relation "user" does not exist') || insertError.code === '42703') {
             const { error: fallbackError } = await supabase.from('user').insert({
               id: data.user.id,
-              username: formData.username.trim(),
+              username: cleanUsername,
               admin_type: formData.admin_type,
               joined_date: new Date().toISOString()
             });
             if (fallbackError) throw fallbackError;
+          } else if (insertError.message?.includes('fk_user_auth_id') || insertError.code === '23503') {
+            throw new Error(
+              `The email "${email}" already exists in Supabase Authentication. Please delete this user from your Supabase Dashboard > Authentication > Users, or register with another email.`
+            );
           } else {
             throw insertError;
           }
@@ -1229,7 +1269,7 @@ export function SignupView() {
           const { error: updateError } = await supabase
             .from('user')
             .update({
-              username: formData.username.trim(),
+              username: cleanUsername,
               email: email,
               admin_type: formData.admin_type
             })
@@ -1240,7 +1280,7 @@ export function SignupView() {
               await supabase
                 .from('user')
                 .update({
-                  username: formData.username.trim(),
+                  username: cleanUsername,
                   admin_type: formData.admin_type
                 })
                 .eq('id', data.user.id);
@@ -1257,7 +1297,13 @@ export function SignupView() {
       setFormData({ username: '', email: '', password: '', admin_type: 'admin' });
       setShowPassword(false);
     } catch (err: any) {
-      toast.error(err.message || 'Failed to create account');
+      if (err.message?.includes('fk_user_auth_id') || err.message?.includes('violates foreign key constraint')) {
+        toast.error(
+          `The email "${formData.email.trim()}" is already registered in Supabase Authentication. Please use a different email or delete the existing user in Supabase Dashboard > Authentication > Users.`
+        );
+      } else {
+        toast.error(err.message || 'Failed to create account');
+      }
     } finally {
       setLoading(false);
     }
