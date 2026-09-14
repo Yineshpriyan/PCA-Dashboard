@@ -638,10 +638,10 @@ export default function StudentRegister() {
                 Physics Cube Academy
               </span>
               <span className="hidden sm:inline-flex text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 bg-teal-50 dark:bg-teal-950/60 text-teal-700 dark:text-teal-400 border border-teal-200 dark:border-teal-800 rounded-full whitespace-nowrap">
-                {t.nav.portalBadge}
+                Student Portal
               </span>
             </div>
-            <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium hidden md:block leading-tight">{t.nav.subtitle}</p>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium hidden md:block leading-tight">Advanced Level Physics Academy Registration</p>
           </div>
         </div>
 

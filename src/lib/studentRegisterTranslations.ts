@@ -182,8 +182,8 @@ export const TRANSLATIONS: Record<StudentRegisterLang, StudentRegisterTranslatio
 
   ta: {
     nav: {
-      portalBadge: 'மாணவர் போர்டல்',
-      subtitle: 'உயர்தர பௌதிகவியல் அகாடமி பதிவு',
+      portalBadge: 'Student Portal',
+      subtitle: 'Advanced Level Physics Academy Registration',
       studentLogin: 'மாணவர் உள்நுழைவு',
       toggleThemeLight: 'வெளிச்ச பயன்முறைக்கு மாறுக',
       toggleThemeDark: 'இருண்ட பயன்முறைக்கு மாறுக',
@@ -265,8 +265,8 @@ export const TRANSLATIONS: Record<StudentRegisterLang, StudentRegisterTranslatio
 
   si: {
     nav: {
-      portalBadge: 'ශිෂ්‍ය පෝටලය',
-      subtitle: 'උසස් පෙළ භෞතික විද්‍යා ඇකඩමි ලියාපදිංචිය',
+      portalBadge: 'Student Portal',
+      subtitle: 'Advanced Level Physics Academy Registration',
       studentLogin: 'ශිෂ්‍ය පිවිසුම',
       toggleThemeLight: 'ආලෝක මාදිලියට මාරු වන්න',
       toggleThemeDark: 'අඳුරු මාදිලියට මාරු වන්න',
