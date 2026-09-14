@@ -1611,6 +1611,7 @@ export function StudentForm({ isModal = false, modalStudent = null, modalLead = 
         ...updatedStudentData,
         name: studentData.name ? studentData.name.trim() : '',
         last_name: studentData.last_name ? studentData.last_name.trim() : null,
+        gender: studentData.gender ? studentData.gender.trim() : null,
         nic: studentData.nic ? studentData.nic.trim() : null,
         dob: studentData.dob ? studentData.dob : null,
         father_job: studentData.father_job ? studentData.father_job.trim() : null,
@@ -1620,7 +1621,6 @@ export function StudentForm({ isModal = false, modalStudent = null, modalLead = 
       };
       // Clean up non-database schema keys
       delete payload.batch_type;
-      delete payload.gender;
 
       let { error: saveError } = await supabase
         .from('student')
@@ -1632,6 +1632,11 @@ export function StudentForm({ isModal = false, modalStudent = null, modalLead = 
         const slimPayload = { ...payload };
         delete slimPayload.batch_type;
         delete slimPayload.gender;
+
+        const colMatch = saveError.message?.match(/Could not find the '([^']+)' column/i);
+        if (colMatch && colMatch[1]) {
+          delete (slimPayload as any)[colMatch[1]];
+        }
         if (saveError.message?.includes('dob') || saveError.hint?.includes('dob')) {
           delete slimPayload.dob;
         }

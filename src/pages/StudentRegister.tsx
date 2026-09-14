@@ -1,9 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useStudentAuth } from '../hooks/useStudentAuth';
 import { SRI_LANKAN_DISTRICTS, DISTRICT_NUMBERS, JoinedBatchItem } from '../types';
 import { cleanStudentNameForZoom, parseEmailUsernameAndDomain, formatCleanEmail } from '../lib/utils';
+import { 
+  StudentRegisterLang, 
+  SUPPORTED_LANGUAGES, 
+  TRANSLATIONS 
+} from '../lib/studentRegisterTranslations';
 import AcademyLogo from '../components/AcademyLogo';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'motion/react';
@@ -22,12 +27,44 @@ import {
   RefreshCw,
   Sun,
   Moon,
-  ChevronDown
+  ChevronDown,
+  Globe
 } from 'lucide-react';
 
 export default function StudentRegister() {
   const navigate = useNavigate();
   const { loginStudent } = useStudentAuth();
+
+  // Language State
+  const [lang, setLang] = useState<StudentRegisterLang>(() => {
+    if (typeof localStorage !== 'undefined') {
+      const stored = localStorage.getItem('pca_student_reg_lang');
+      if (stored === 'en' || stored === 'ta' || stored === 'si') return stored;
+    }
+    return 'ta';
+  });
+  const [isLangMenuOpen, setIsLangMenuOpen] = useState(false);
+  const langMenuRef = useRef<HTMLDivElement>(null);
+
+  const handleLangChange = (newLang: StudentRegisterLang) => {
+    setLang(newLang);
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('pca_student_reg_lang', newLang);
+    }
+  };
+
+  // Close language menu on outside click
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (langMenuRef.current && !langMenuRef.current.contains(event.target as Node)) {
+        setIsLangMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const t = TRANSLATIONS[lang];
 
   // Theme State
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
@@ -140,7 +177,7 @@ export default function StudentRegister() {
     if (!cleanPhone) {
       setPhoneError('');
     } else if (cleanPhone.length !== 9) {
-      setPhoneError('Invalid Phone Number (Must be 9 digits)');
+      setPhoneError(t.errors.phoneInvalid);
     } else {
       setPhoneError('');
     }
@@ -160,7 +197,7 @@ export default function StudentRegister() {
                       username.includes(' ') ||
                       username.includes('@');
     if (isInvalid) {
-      setMailError('Invalid Gmail or iCloud username');
+      setMailError(t.errors.emailInvalid);
     } else {
       setMailError('');
     }
@@ -178,7 +215,7 @@ export default function StudentRegister() {
     const is10Chars = /^\d{9}[vVxX]$/.test(clean);
 
     if (!is12Digits && !is10Chars) {
-      setNicError('NIC must be 12 digits or 10 characters ending with V or X (e.g. 200512345678 or 981234567V)');
+      setNicError(t.errors.nicInvalid);
     } else {
       setNicError('');
     }
@@ -221,7 +258,7 @@ export default function StudentRegister() {
 
     // 2. Validate Batch
     if (!selectedBatch) {
-      toast.error('தொகுதியை தெரிவு செய்யவும் / Please select Batch');
+      toast.error(t.errors.requiredFields);
       return;
     }
 
@@ -232,38 +269,38 @@ export default function StudentRegister() {
 
     if (isRepeat) {
       if (!effectiveProperBatch) {
-        toast.error('முதல் தடவை பரீட்சைக்கு தோற்றிய ஆண்டு அவசியமானது / Proper Batch is required');
+        toast.error(t.errors.properBatchRequired);
         return;
       }
       if (!effectiveJoinedBatch) {
-        toast.error('பரீட்சைக்கு தோற்றவுள்ள ஆண்டு அவசியமானது / Joined Batch is required');
+        toast.error(t.errors.requiredFields);
         return;
       }
     }
 
     // 3. Validate Stream
     if (!stream) {
-      toast.error('பிரிவை தெரிவு செய்யவும் / Please select Stream');
+      toast.error(t.errors.requiredFields);
       return;
     }
 
     // 4. Validate Gender
     if (!gender) {
-      toast.error('பாலை தெரிவு செய்யவும் / Please select Gender');
-      setGenderError('பாலை தெரிவு செய்யவும் / Please select Gender');
+      toast.error(t.errors.genderRequired);
+      setGenderError(t.errors.genderRequired);
       return;
     }
 
     // 5. Validate Phone Number (Same validation as old student form)
     const cleanPhone = phone.replace(/\D/g, '');
     if (!cleanPhone) {
-      toast.error('தொலைபேசி இலக்கம் அவசியமானது / Phone number is required');
-      setPhoneError('Phone number is required');
+      toast.error(t.errors.phoneInvalid);
+      setPhoneError(t.errors.phoneInvalid);
       return;
     }
     if (cleanPhone.length !== 9) {
-      toast.error('Sri Lankan phone number must be exactly 9 digits (e.g., 7X XXX XXXX)');
-      setPhoneError('Invalid Phone Number');
+      toast.error(t.errors.phoneInvalid);
+      setPhoneError(t.errors.phoneInvalid);
       return;
     }
 
@@ -279,8 +316,8 @@ export default function StudentRegister() {
                           username.includes(' ') ||
                           username.includes('@');
         if (isInvalid) {
-          toast.error('Please enter a valid Gmail or iCloud username');
-          setMailError('Invalid Gmail or iCloud username');
+          toast.error(t.errors.emailInvalid);
+          setMailError(t.errors.emailInvalid);
           return;
         }
       }
@@ -293,15 +330,15 @@ export default function StudentRegister() {
       const is10Chars = /^\d{9}[vVxX]$/.test(cleanNic);
 
       if (!is12Digits && !is10Chars) {
-        toast.error('அடையாள அட்டை இலக்கம் தவறானது / NIC must be 12 digits or 10 characters ending with V or X');
-        setNicError('NIC must be 12 digits or 10 characters ending with V or X');
+        toast.error(t.errors.nicInvalid);
+        setNicError(t.errors.nicInvalid);
         return;
       }
     }
 
     // 8. Validate District
     if (!district) {
-      toast.error('மாவட்டத்தை தெரிவு செய்யவும் / Please select District');
+      toast.error(t.errors.requiredFields);
       return;
     }
 
@@ -346,7 +383,7 @@ export default function StudentRegister() {
             student_name: existingStudent.name,
           }, { onConflict: 'pcaid' });
 
-        toast.success(`நீங்கள் ஏற்கனவே பதிவு செய்துள்ளீர்கள்! உங்களுடைய PCA ID: ${existingStudent.pcaid}`);
+        toast.success(`${t.success.alreadyRegistered}! PCA ID: ${existingStudent.pcaid}`);
         setRegisteredResult({
           pcaid: existingStudent.pcaid,
           name: existingStudent.name,
@@ -460,6 +497,7 @@ export default function StudentRegister() {
         mail: finalMail,
         nic: nic.trim().toUpperCase() || null,
         dob: dob || null,
+        gender: gender ? gender.trim() : null,
         school: school.trim() || null,
         father_job: fatherJob.trim() || null,
         mother_job: motherJob.trim() || null,
@@ -476,6 +514,10 @@ export default function StudentRegister() {
       if (insertStudentErr && (insertStudentErr.message?.includes('column') || insertStudentErr.hint?.includes('column') || insertStudentErr.message?.includes('schema'))) {
         console.warn('DB schema mismatch, retrying insert without problematic columns:', insertStudentErr);
         const slimPayload = { ...studentPayload };
+        const colMatch = insertStudentErr.message?.match(/Could not find the '([^']+)' column/i);
+        if (colMatch && colMatch[1]) {
+          delete (slimPayload as any)[colMatch[1]];
+        }
         if (insertStudentErr.message?.includes('dob') || insertStudentErr.hint?.includes('dob')) {
           delete (slimPayload as any).dob;
         }
@@ -554,7 +596,7 @@ export default function StudentRegister() {
         console.warn('Credentials sync warning:', insertCredsErr);
       }
 
-      toast.success('பதிவு வெற்றிகரமாக முடிவடைந்தது! / Registration Successful!');
+      toast.success(t.success.newTitle);
       setRegisteredResult({
         pcaid: finalPcaId,
         name: studentFullName,
@@ -565,7 +607,7 @@ export default function StudentRegister() {
 
     } catch (err: any) {
       console.error('Registration failed:', err);
-      toast.error(err.message || 'Registration failed. Please check your details and retry.');
+      toast.error(err.message || t.errors.genericError);
     } finally {
       setIsSubmitting(false);
     }
@@ -596,20 +638,65 @@ export default function StudentRegister() {
                 Physics Cube Academy
               </span>
               <span className="hidden sm:inline-flex text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 bg-teal-50 dark:bg-teal-950/60 text-teal-700 dark:text-teal-400 border border-teal-200 dark:border-teal-800 rounded-full whitespace-nowrap">
-                Student Portal
+                {t.nav.portalBadge}
               </span>
             </div>
-            <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium hidden md:block leading-tight">Advanced Level Physics Academy Registration</p>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium hidden md:block leading-tight">{t.nav.subtitle}</p>
           </div>
         </div>
 
         <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+          {/* Language Switcher Dropdown (Placed next to theme toggle button) */}
+          <div className="relative" ref={langMenuRef}>
+            <button
+              type="button"
+              onClick={() => setIsLangMenuOpen(prev => !prev)}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 sm:py-2 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg sm:rounded-xl transition-colors cursor-pointer border border-slate-200 dark:border-slate-700 text-xs font-semibold select-none shadow-2xs"
+              title={t.nav.language}
+              aria-label="Select Language"
+              aria-expanded={isLangMenuOpen}
+            >
+              <Globe size={15} className="text-teal-600 dark:text-teal-400 shrink-0" />
+              <span className="text-[11px] sm:text-xs font-bold">
+                {SUPPORTED_LANGUAGES.find(l => l.code === lang)?.nativeLabel || 'English'}
+              </span>
+              <ChevronDown size={12} className={`text-slate-400 transition-transform duration-150 ${isLangMenuOpen ? 'rotate-180' : ''}`} />
+            </button>
+
+            {/* Dropdown Menu */}
+            {isLangMenuOpen && (
+              <div className="absolute right-0 mt-1.5 w-40 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-lg py-1 z-50 animate-in fade-in zoom-in-95 duration-150">
+                {SUPPORTED_LANGUAGES.map(opt => (
+                  <button
+                    key={opt.code}
+                    type="button"
+                    onClick={() => {
+                      handleLangChange(opt.code);
+                      setIsLangMenuOpen(false);
+                    }}
+                    className={`w-full flex items-center justify-between px-3 py-2 text-left text-xs font-medium cursor-pointer transition-colors ${
+                      lang === opt.code
+                        ? 'bg-teal-50 dark:bg-teal-950/60 text-teal-700 dark:text-teal-300 font-bold'
+                        : 'text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800'
+                    }`}
+                  >
+                    <span className="flex items-center gap-1.5">
+                      <span>{opt.nativeLabel}</span>
+                      {opt.code !== 'en' && <span className="text-[10px] text-slate-400 font-normal">({opt.label})</span>}
+                    </span>
+                    {lang === opt.code && <Check size={14} className="text-teal-600 dark:text-teal-400" />}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
           {/* Theme Option Toggle */}
           <button
             type="button"
             onClick={toggleTheme}
             className="p-1.5 sm:p-2 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg sm:rounded-xl transition-colors cursor-pointer border border-slate-200 dark:border-slate-700"
-            title={`Switch to ${theme === 'dark' ? 'Light' : 'Dark'} mode`}
+            title={theme === 'dark' ? t.nav.toggleThemeLight : t.nav.toggleThemeDark}
             aria-label="Toggle Theme"
           >
             {theme === 'dark' ? (
@@ -625,7 +712,7 @@ export default function StudentRegister() {
             className="flex items-center gap-1.5 px-2.5 sm:px-3.5 py-1.5 sm:py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 rounded-lg sm:rounded-xl text-[11px] sm:text-xs font-bold transition-all shadow-xs cursor-pointer whitespace-nowrap"
           >
             <LogIn className="w-3.5 h-3.5 shrink-0" />
-            <span>Student Login</span>
+            <span>{t.nav.studentLogin}</span>
           </Link>
         </div>
       </header>
@@ -652,28 +739,30 @@ export default function StudentRegister() {
                   <div>
                     <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-50 dark:bg-amber-950/60 border border-amber-300 dark:border-amber-700 text-amber-800 dark:text-amber-300 text-xs font-bold rounded-full">
                       <Sparkles className="w-3.5 h-3.5" />
-                      <span>ஏற்கனவே பதிவு செய்யப்பட்டுள்ளது / Already Registered</span>
+                      <span>{t.success.alreadyRegistered}</span>
                     </span>
                   </div>
                 ) : (
                   <div>
                     <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-teal-50 dark:bg-teal-950/60 border border-teal-300 dark:border-teal-700 text-teal-800 dark:text-teal-300 text-xs font-bold rounded-full">
                       <Check className="w-3.5 h-3.5" />
-                      <span>புதிய பதிவு / New Registration</span>
+                      <span>{t.success.newRegistration}</span>
                     </span>
                   </div>
                 )}
                 <h1 className="text-xl sm:text-2xl md:text-3xl font-black text-slate-900 dark:text-white tracking-tight">
-                  {registeredResult.isExisting ? 'உங்கள் PCA ID விபரம்' : 'பதிவு வெற்றிகரமாக முடிவடைந்தது!'}
+                  {registeredResult.isExisting ? t.success.existingTitle : t.success.newTitle}
                 </h1>
                 <p className="text-slate-600 dark:text-slate-300 text-xs sm:text-sm max-w-md mx-auto">
                   {registeredResult.isExisting ? (
                     <>
-                      <strong className="text-teal-600 dark:text-teal-400">{registeredResult.name}</strong>, இந்த தொலைபேசி இலக்கத்திற்கு ஏற்கனவே PCA ID ஒதுக்கப்பட்டுள்ளது. நீங்கள் இதை பயன்படுத்தி உள்நுழையலாம்.
+                      <strong className="text-teal-600 dark:text-teal-400">{registeredResult.name}</strong>, {t.success.existingDesc}
                     </>
                   ) : (
                     <>
-                      Welcome to Physics Cube Academy, <strong className="text-teal-600 dark:text-teal-400">{registeredResult.name}</strong>. Your official PCA ID and student credentials have been generated.
+                      {t.success.newDesc.split('{name}')[0]}
+                      <strong className="text-teal-600 dark:text-teal-400">{registeredResult.name}</strong>
+                      {t.success.newDesc.split('{name}')[1] || ''}
                     </>
                   )}
                 </p>
@@ -684,15 +773,15 @@ export default function StudentRegister() {
                 <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-700">
                   <div className="flex items-center gap-2">
                     <ShieldCheck className="w-4 h-4 sm:w-5 sm:h-5 text-teal-600 dark:text-teal-400" />
-                    <span className="text-[11px] sm:text-xs font-black uppercase tracking-wider text-teal-700 dark:text-teal-300">Your Student Credentials</span>
+                    <span className="text-[11px] sm:text-xs font-black uppercase tracking-wider text-teal-700 dark:text-teal-300">{t.success.credentialsTitle}</span>
                   </div>
-                  <span className="text-[10px] sm:text-[11px] font-semibold text-slate-500 dark:text-slate-400">Save this securely</span>
+                  <span className="text-[10px] sm:text-[11px] font-semibold text-slate-500 dark:text-slate-400">{t.success.saveSecurely}</span>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                   {/* PCA ID / Username */}
                   <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-3.5 sm:p-4 space-y-1.5 shadow-xs">
-                    <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Username (PCA ID)</span>
+                    <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">{t.success.usernameLabel}</span>
                     <div className="flex items-center justify-between gap-2">
                       <span className="text-lg sm:text-2xl font-mono font-black text-slate-900 dark:text-white tracking-wider sm:tracking-widest selection:bg-teal-500">
                         {registeredResult.pcaid}
@@ -701,17 +790,17 @@ export default function StudentRegister() {
                         type="button"
                         onClick={() => copyToClip(registeredResult.pcaid, 'pcaid')}
                         className="flex items-center gap-1.5 px-2.5 py-1.5 bg-teal-50 dark:bg-teal-950/60 hover:bg-teal-100 dark:hover:bg-teal-900 text-teal-600 dark:text-teal-400 rounded-lg transition-colors cursor-pointer border border-teal-100 dark:border-teal-800 text-xs font-bold shrink-0"
-                        title="Copy PCA ID"
+                        title={t.success.copy}
                       >
                         {copiedPcaid ? (
                           <>
                             <Check className="w-3.5 h-3.5 text-green-500" />
-                            <span className="text-green-600 dark:text-green-400">Copied</span>
+                            <span className="text-green-600 dark:text-green-400">{t.success.copied}</span>
                           </>
                         ) : (
                           <>
                             <Copy className="w-3.5 h-3.5" />
-                            <span>Copy</span>
+                            <span>{t.success.copy}</span>
                           </>
                         )}
                       </button>
@@ -720,7 +809,7 @@ export default function StudentRegister() {
 
                   {/* Password */}
                   <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-3.5 sm:p-4 space-y-1.5 shadow-xs">
-                    <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Initial Password</span>
+                    <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">{t.success.passwordLabel}</span>
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-2 font-mono font-black text-slate-900 dark:text-white text-lg sm:text-2xl tracking-wider sm:tracking-widest">
                         {showPassword ? registeredResult.pcaid : '••••••••••'}
@@ -736,17 +825,17 @@ export default function StudentRegister() {
                         type="button"
                         onClick={() => copyToClip(registeredResult.pcaid, 'password')}
                         className="flex items-center gap-1.5 px-2.5 py-1.5 bg-teal-50 dark:bg-teal-950/60 hover:bg-teal-100 dark:hover:bg-teal-900 text-teal-600 dark:text-teal-400 rounded-lg transition-colors cursor-pointer border border-teal-100 dark:border-teal-800 text-xs font-bold shrink-0"
-                        title="Copy Password"
+                        title={t.success.copy}
                       >
                         {copiedPassword ? (
                           <>
                             <Check className="w-3.5 h-3.5 text-green-500" />
-                            <span className="text-green-600 dark:text-green-400">Copied</span>
+                            <span className="text-green-600 dark:text-green-400">{t.success.copied}</span>
                           </>
                         ) : (
                           <>
                             <Copy className="w-3.5 h-3.5" />
-                            <span>Copy</span>
+                            <span>{t.success.copy}</span>
                           </>
                         )}
                       </button>
@@ -758,7 +847,7 @@ export default function StudentRegister() {
                 <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/50 rounded-xl p-3 sm:p-3.5 text-[11px] sm:text-xs text-amber-900 dark:text-amber-300 leading-relaxed flex items-start gap-2.5">
                   <Sparkles className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
                   <div>
-                    <strong>Important:</strong> Your default password is the same as your <strong>PCA ID</strong>. You can use these credentials to sign in to this <strong>Student Portal</strong> and the <strong>PCA Mobile App</strong>.
+                    {t.success.importantNotice}
                   </div>
                 </div>
               </div>
@@ -770,7 +859,7 @@ export default function StudentRegister() {
                   onClick={handleDirectLogin}
                   className="w-full sm:flex-1 py-3 sm:py-3.5 px-6 bg-teal-600 hover:bg-teal-700 active:bg-teal-800 text-white font-bold rounded-xl text-xs sm:text-sm transition-all shadow-sm flex items-center justify-center gap-2 cursor-pointer"
                 >
-                  <span>Open Student Account</span>
+                  <span>{t.success.openAccount}</span>
                   <ArrowRight className="w-4 h-4" />
                 </button>
                 <button
@@ -792,7 +881,7 @@ export default function StudentRegister() {
                   }}
                   className="w-full sm:w-auto py-3 sm:py-3.5 px-6 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold rounded-xl text-xs sm:text-sm transition-colors cursor-pointer border border-slate-200 dark:border-slate-700"
                 >
-                  Register Another Student
+                  {t.success.registerAnother}
                 </button>
               </div>
             </motion.div>
@@ -808,19 +897,19 @@ export default function StudentRegister() {
             >
               {/* Form Header */}
               <div className="border-b border-slate-200 dark:border-slate-800 pb-4 sm:pb-5">
-                <h1 className="text-xl sm:text-2xl md:text-3xl font-black text-slate-900 dark:text-white tracking-tight">Create Your Student Account</h1>
+                <h1 className="text-xl sm:text-2xl md:text-3xl font-black text-slate-900 dark:text-white tracking-tight">{t.form.title}</h1>
                 <p className="text-slate-500 dark:text-slate-400 text-[11px] sm:text-xs md:text-sm mt-1">
-                  உங்கள் விபரங்களை உள்ளிட்டு உங்களுக்கான பிரத்தியேக PCA ID ஐ பெற்றுக்கொள்ளுங்கள்.
+                  {t.form.subtitle}
                 </p>
               </div>
 
               <form onSubmit={handleSubmit} className="space-y-6">
                 
-                {/* 1. பெயர் / First Name & Last Name */}
+                {/* 1. Student Name & Last Name */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-1.5">
                     <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                      மாணவரின் பெயர் / First Name <span className="text-red-500">*</span>
+                      {t.form.firstName} <span className="text-red-500">*</span>
                     </label>
                     <input
                       type="text"
@@ -832,7 +921,7 @@ export default function StudentRegister() {
                           setName(formatted);
                         }
                       }}
-                      placeholder="e.g. Sudarini"
+                      placeholder={t.form.firstNamePlaceholder}
                       className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-medium text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all"
                       required
                     />
@@ -840,7 +929,7 @@ export default function StudentRegister() {
 
                   <div className="space-y-1.5">
                     <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                      தந்தையின் பெயர் (Last Name) <span className="text-red-500">*</span>
+                      {t.form.lastName} <span className="text-red-500">*</span>
                     </label>
                     <input
                       type="text"
@@ -852,17 +941,17 @@ export default function StudentRegister() {
                           setLastName(formatted);
                         }
                       }}
-                      placeholder="e.g. Perera"
+                      placeholder={t.form.lastNamePlaceholder}
                       className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-medium text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all"
                       required
                     />
                   </div>
                 </div>
 
-                {/* 2. தொகுதி / Batch */}
+                {/* 2. Batch */}
                 <div className="space-y-1.5">
                   <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                    தொகுதி / Batch <span className="text-red-500">*</span>
+                    {t.form.batch} <span className="text-red-500">*</span>
                   </label>
                   <select
                     value={selectedBatch}
@@ -906,29 +995,29 @@ export default function StudentRegister() {
                     >
                       <div className="flex items-center gap-2 pb-1 border-b border-teal-100 dark:border-teal-900/60 text-teal-700 dark:text-teal-400 text-xs font-bold uppercase tracking-wider">
                         <BookOpen className="w-3.5 h-3.5" />
-                        <span>Repeat Student Details</span>
+                        <span>{t.form.repeatDetails}</span>
                       </div>
 
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        {/* 3. முதல் தடவை பரீட்சைக்கு தோற்றிய ஆண்டு / Proper Batch */}
+                        {/* Proper Batch */}
                         <div className="space-y-1.5">
                           <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                            முதல் தடவை பரீட்சைக்கு தோற்றிய ஆண்டு / Proper Batch <span className="text-red-500">*</span>
+                            {t.form.properBatch} <span className="text-red-500">*</span>
                           </label>
                           <input
                             type="text"
                             value={properBatch}
                             onChange={(e) => setProperBatch(e.target.value)}
-                            placeholder="e.g. 2025"
+                            placeholder={t.form.properBatchPlaceholder}
                             className="w-full px-4 py-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-medium text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all"
                             required={isRepeatSelected}
                           />
                         </div>
 
-                        {/* 4. பரீட்சைக்கு தோற்றவுள்ள ஆண்டு / Joined Batch */}
+                        {/* Joined Batch */}
                         <div className="space-y-1.5">
                           <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                            பரீட்சைக்கு தோற்றவுள்ள ஆண்டு / Joined Batch <span className="text-red-500">*</span>
+                            {t.form.joinedBatch} <span className="text-red-500">*</span>
                           </label>
                           <select
                             value={joinedBatch}
@@ -954,10 +1043,10 @@ export default function StudentRegister() {
                   )}
                 </AnimatePresence>
 
-                {/* 5. பிரிவு / Stream */}
+                {/* 5. Stream */}
                 <div className="space-y-1.5">
                   <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                    பிரிவு / Stream <span className="text-red-500">*</span>
+                    {t.form.stream} <span className="text-red-500">*</span>
                   </label>
                   <select
                     value={stream}
@@ -965,59 +1054,59 @@ export default function StudentRegister() {
                     className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-medium text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all cursor-pointer"
                     required
                   >
-                    <option value="Biological Science">Biological Science (Bio)</option>
-                    <option value="Physical Science">Physical Science (Maths)</option>
-                    <option value="Non Stream">Non Stream / Other</option>
+                    <option value="Biological Science">{t.form.streamBio}</option>
+                    <option value="Physical Science">{t.form.streamMaths}</option>
+                    <option value="Non Stream">{t.form.streamOther}</option>
                   </select>
                 </div>
 
-                {/* 6. பாடசாலையின் பெயர் / School */}
+                {/* 6. School */}
                 <div className="space-y-1.5">
                   <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                    பாடசாலையின் பெயர் / School
+                    {t.form.school}
                   </label>
                   <input
                     type="text"
                     value={school}
                     onChange={(e) => setSchool(e.target.value)}
-                    placeholder="e.g. Royal College / Ananda College / Jaffna Hindu College"
+                    placeholder={t.form.schoolPlaceholder}
                     className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-medium text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all"
                   />
                 </div>
 
-                {/* பெற்றோரின் தொழில் / Parents' Occupation */}
+                {/* Parents' Occupation */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-1.5">
                     <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                      தந்தையின் தொழில் / Father's Job
+                      {t.form.fatherJob}
                     </label>
                     <input
                       type="text"
                       value={fatherJob}
                       onChange={(e) => setFatherJob(e.target.value)}
-                      placeholder="e.g. Teacher, Engineer, Businessman"
+                      placeholder={t.form.fatherJobPlaceholder}
                       className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-medium text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all"
                     />
                   </div>
 
                   <div className="space-y-1.5">
                     <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                      தாயின் தொழில் / Mother's Job
+                      {t.form.motherJob}
                     </label>
                     <input
                       type="text"
                       value={motherJob}
                       onChange={(e) => setMotherJob(e.target.value)}
-                      placeholder="e.g. Doctor, Accountant, Homemaker"
+                      placeholder={t.form.motherJobPlaceholder}
                       className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-medium text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all"
                     />
                   </div>
                 </div>
 
-                {/* 7. அடையாள அட்டை இலக்கம் / NIC */}
+                {/* 7. NIC */}
                 <div className="space-y-1.5">
                   <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                    அடையாள அட்டை இலக்கம் / NIC
+                    {t.form.nic}
                   </label>
                   <input
                     type="text"
@@ -1027,7 +1116,7 @@ export default function StudentRegister() {
                       if (nicError) setNicError('');
                     }}
                     onBlur={() => handleNicBlur(nic)}
-                    placeholder="e.g. 200512345678 or 981234567V"
+                    placeholder={t.form.nicPlaceholder}
                     className={`w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border rounded-xl text-xs font-medium text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 transition-all ${
                       nicError
                         ? 'border-red-500 focus:ring-red-500/20 focus:border-red-500'
@@ -1039,10 +1128,10 @@ export default function StudentRegister() {
                   )}
                 </div>
 
-                {/* 8. பால் / Gender */}
+                {/* 8. Gender */}
                 <div className="space-y-1.5">
                   <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                    பால் / Gender <span className="text-red-500">*</span>
+                    {t.form.gender} <span className="text-red-500">*</span>
                   </label>
                   <select
                     value={gender}
@@ -1057,20 +1146,20 @@ export default function StudentRegister() {
                     }`}
                     required
                   >
-                    <option value="" disabled>பாலை தெரிவு செய்யவும் / Select Gender</option>
-                    <option value="Male">ஆண் / Male</option>
-                    <option value="Female">பெண் / Female</option>
-                    <option value="Other">ஏனையவை / Other</option>
+                    <option value="" disabled>{t.form.genderSelect}</option>
+                    <option value="Male">{t.form.genderMale}</option>
+                    <option value="Female">{t.form.genderFemale}</option>
+                    <option value="Other">{t.form.genderOther}</option>
                   </select>
                   {genderError && (
                     <span className="text-[11px] text-red-500 font-semibold">{genderError}</span>
                   )}
                 </div>
 
-                {/* 9. பிறந்த திகதி / Date of Birth (DOB) */}
+                {/* 9. Date of Birth (DOB) */}
                 <div className="space-y-1.5">
                   <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                    பிறந்த திகதி / Date of Birth (DOB)
+                    {t.form.dob}
                   </label>
                   <input
                     type="date"
@@ -1081,10 +1170,10 @@ export default function StudentRegister() {
                   />
                 </div>
 
-                {/* 10. தொலைபேசி இலக்கம் / Phone No */}
+                {/* 10. Phone No */}
                 <div className="space-y-1.5">
                   <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                    தொலைபேசி இலக்கம் / Phone No <span className="text-red-500">*</span>
+                    {t.form.phone} <span className="text-red-500">*</span>
                   </label>
                   <div className={`relative flex items-center border rounded-xl overflow-hidden focus-within:ring-2 transition-all bg-slate-50 dark:bg-slate-800 ${
                     phoneError 
@@ -1108,7 +1197,7 @@ export default function StudentRegister() {
                         if (phoneError) setPhoneError('');
                       }}
                       onBlur={() => handlePhoneBlur(phone)}
-                      placeholder="7X XXX XXXX"
+                      placeholder={t.form.phonePlaceholder}
                       className="w-full px-3 py-2 sm:py-2.5 bg-transparent focus:outline-none text-xs font-medium text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500"
                       required
                     />
@@ -1118,10 +1207,10 @@ export default function StudentRegister() {
                   )}
                 </div>
 
-                {/* 10. மின்னஞ்சல் முகவரி / Email Address */}
+                {/* 11. Email Address */}
                 <div className="space-y-1.5">
                   <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                    மின்னஞ்சல் முகவரி / Email Address
+                    {t.form.email}
                   </label>
                   <div className={`relative flex items-center border rounded-xl overflow-hidden focus-within:ring-2 transition-all bg-slate-50 dark:bg-slate-800 ${
                     mailError 
@@ -1146,7 +1235,7 @@ export default function StudentRegister() {
                         if (domain !== mailDomain) setMailDomain(domain);
                         handleMailBlur(username, domain);
                       }}
-                      placeholder="username"
+                      placeholder={t.form.emailPlaceholder}
                       className="w-full px-3 py-2 sm:py-2.5 bg-transparent focus:outline-none text-xs font-medium text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 min-w-0"
                     />
                     <select
@@ -1168,39 +1257,39 @@ export default function StudentRegister() {
                   )}
                 </div>
 
-                {/* 11. முகவரி 1 / Address 1 */}
+                {/* 12. Address 1 */}
                 <div className="space-y-1.5">
                   <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                    முகவரி 1 / Address 1
+                    {t.form.address1}
                   </label>
                   <input
                     type="text"
                     value={address1}
                     onChange={(e) => setAddress1(e.target.value)}
-                    placeholder="e.g. No. 123, Temple Road"
+                    placeholder={t.form.address1Placeholder}
                     className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-medium text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all"
                   />
                 </div>
 
-                {/* 12. முகவரி 2 / Address 2 */}
+                {/* 13. Address 2 */}
                 <div className="space-y-1.5">
                   <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                    முகவரி 2 / Address 2
+                    {t.form.address2}
                   </label>
                   <input
                     type="text"
                     value={address2}
                     onChange={(e) => setAddress2(e.target.value)}
-                    placeholder="e.g. Nallur, Jaffna"
+                    placeholder={t.form.address2Placeholder}
                     className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-medium text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all"
                   />
                 </div>
 
-                {/* 13. மாவட்டம் / District */}
+                {/* 14. District */}
                 <div className="space-y-1.5">
                   <div className="flex items-center gap-2">
                     <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                      மாவட்டம் / District <span className="text-red-500">*</span>
+                      {t.form.district} <span className="text-red-500">*</span>
                     </label>
                     {district && (
                       <span className="text-[10px] font-bold text-teal-700 dark:text-teal-400 bg-teal-50 dark:bg-teal-950/60 border border-teal-200 dark:border-teal-800 px-1.5 py-0.2 rounded-md uppercase tracking-wider">
@@ -1223,7 +1312,7 @@ export default function StudentRegister() {
                 {/* Submit Action */}
                 <div className="pt-4 border-t border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-4">
                   <p className="text-xs text-slate-500 dark:text-slate-400">
-                    விபரங்களை சமர்ப்பித்தவுடன் உங்களுக்கான PCA ID உடனடியாக உருவாக்கப்படும்.
+                    {t.form.footerNote}
                   </p>
 
                   <button
@@ -1234,11 +1323,11 @@ export default function StudentRegister() {
                     {isSubmitting ? (
                       <>
                         <RefreshCw className="w-4 h-4 animate-spin" />
-                        <span>PCA ID உருவாக்கப்படுகிறது...</span>
+                        <span>{t.form.submitting}</span>
                       </>
                     ) : (
                       <>
-                        <span>Submit</span>
+                        <span>{t.form.submit}</span>
                         <ArrowRight className="w-4 h-4" />
                       </>
                     )}
@@ -1252,7 +1341,7 @@ export default function StudentRegister() {
 
       {/* Footer */}
       <footer className="w-full py-4 text-center text-xs text-slate-400 dark:text-slate-600 border-t border-slate-200 dark:border-slate-800 mt-auto">
-        Physics Cube Academy &copy; {new Date().getFullYear()} &bull; Student Registration Portal
+        {t.footer} &copy; {new Date().getFullYear()}
       </footer>
     </div>
   );

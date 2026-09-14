@@ -1807,6 +1807,14 @@ export default function SelfEnrolmentManagement() {
                   <p className="font-semibold text-gray-900 dark:text-gray-100">{viewingStudent.district || 'N/A'}</p>
                 </div>
                 <div>
+                  <span className="text-[10px] font-bold text-gray-400 uppercase">Gender</span>
+                  <p className="font-semibold text-gray-900 dark:text-gray-100">{viewingStudent.gender || 'N/A'}</p>
+                </div>
+                <div>
+                  <span className="text-[10px] font-bold text-gray-400 uppercase">DOB</span>
+                  <p className="font-semibold text-gray-900 dark:text-gray-100">{viewingStudent.dob || 'N/A'}</p>
+                </div>
+                <div>
                   <span className="text-[10px] font-bold text-gray-400 uppercase">Registered By</span>
                   <p className="font-semibold text-gray-900 dark:text-gray-100 capitalize">
                     {viewingStudent.admin || 'N/A'}

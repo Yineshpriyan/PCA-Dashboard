@@ -221,16 +221,45 @@ export const StudentAuthProvider: React.FC<{ children: ReactNode }> = ({ childre
         .update(payload)
         .eq('pcaid', student.pcaid);
 
+      // Graceful fallback if database column (e.g. 'gender', 'dob', 'last_name', 'father_job', 'mother_job') is missing in Postgres
       if (updateErr && (updateErr.message?.includes('column') || updateErr.hint?.includes('column') || updateErr.message?.includes('schema'))) {
+        console.warn('DB schema mismatch during student update, retrying without missing columns:', updateErr);
         const slimPayload = { ...payload };
+
+        // Dynamically strip the missing column reported by PostgREST
+        const colMatch = updateErr.message?.match(/Could not find the '([^']+)' column/i);
+        if (colMatch && colMatch[1]) {
+          delete (slimPayload as any)[colMatch[1]];
+        }
+        if (updateErr.message?.includes('gender') || updateErr.hint?.includes('gender')) delete (slimPayload as any).gender;
         if (updateErr.message?.includes('dob') || updateErr.hint?.includes('dob')) delete (slimPayload as any).dob;
         if (updateErr.message?.includes('last_name') || updateErr.hint?.includes('last_name')) delete (slimPayload as any).last_name;
         if (updateErr.message?.includes('father_job') || updateErr.hint?.includes('father_job')) delete (slimPayload as any).father_job;
         if (updateErr.message?.includes('mother_job') || updateErr.hint?.includes('mother_job')) delete (slimPayload as any).mother_job;
-        const retry = await supabase
+
+        let retry = await supabase
           .from('student')
           .update(slimPayload)
           .eq('pcaid', student.pcaid);
+
+        // If another optional column is also missing, strip it and retry once more
+        if (retry.error && (retry.error.message?.includes('column') || retry.error.hint?.includes('column') || retry.error.message?.includes('schema'))) {
+          const secondMatch = retry.error.message?.match(/Could not find the '([^']+)' column/i);
+          if (secondMatch && secondMatch[1]) {
+            delete (slimPayload as any)[secondMatch[1]];
+          }
+          if (retry.error.message?.includes('gender') || retry.error.hint?.includes('gender')) delete (slimPayload as any).gender;
+          if (retry.error.message?.includes('dob') || retry.error.hint?.includes('dob')) delete (slimPayload as any).dob;
+          if (retry.error.message?.includes('last_name') || retry.error.hint?.includes('last_name')) delete (slimPayload as any).last_name;
+          if (retry.error.message?.includes('father_job') || retry.error.hint?.includes('father_job')) delete (slimPayload as any).father_job;
+          if (retry.error.message?.includes('mother_job') || retry.error.hint?.includes('mother_job')) delete (slimPayload as any).mother_job;
+
+          retry = await supabase
+            .from('student')
+            .update(slimPayload)
+            .eq('pcaid', student.pcaid);
+        }
+
         updateErr = retry.error;
       }
 
