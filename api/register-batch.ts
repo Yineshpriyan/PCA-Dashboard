@@ -15,6 +15,7 @@ interface RegistrationResult {
   status: "Success" | "Failed";
   joinUrl?: string;
   error?: string;
+  webinarId?: string;
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -22,31 +23,50 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
-  const { students, webinarId, eventType } = req.body as { 
+  const { students, webinarId, webinarIds, eventType } = req.body as { 
     students: Student[]; 
-    webinarId: string; 
+    webinarId?: string; 
+    webinarIds?: string[];
     eventType?: "webinar" | "meeting";
   };
 
-  if (!students || !Array.isArray(students) || !webinarId) {
-    return res.status(400).json({ error: "Missing students array or webinarId" });
+  const targetWebinarIds: string[] = [];
+  if (Array.isArray(webinarIds) && webinarIds.length > 0) {
+    webinarIds.forEach(id => {
+      const clean = String(id || '').trim();
+      if (clean && !targetWebinarIds.includes(clean)) {
+        targetWebinarIds.push(clean);
+      }
+    });
+  } else if (webinarId && typeof webinarId === 'string' && webinarId.trim()) {
+    targetWebinarIds.push(webinarId.trim());
+  }
+
+  if (!students || !Array.isArray(students) || targetWebinarIds.length === 0) {
+    return res.status(400).json({ error: "Missing students array or valid webinarId/webinarIds" });
   }
 
   try {
     const token = await getAccessToken();
     const results: RegistrationResult[] = [];
 
-    for (const student of students) {
-      try {
-        const result = await registerStudent(token, webinarId, student, eventType);
-        results.push(result);
-      } catch (err) {
-        // One student's failure should never stop the rest of the batch
-        results.push({
-          email: student.email,
-          status: "Failed",
-          error: err instanceof Error ? err.message : "Unknown error",
-        });
+    for (const currentWebinarId of targetWebinarIds) {
+      for (const student of students) {
+        try {
+          const result = await registerStudent(token, currentWebinarId, student, eventType);
+          results.push({
+            ...result,
+            webinarId: currentWebinarId
+          });
+        } catch (err) {
+          // One student or webinar failure should never stop the rest of the batch
+          results.push({
+            email: student.email,
+            status: "Failed",
+            webinarId: currentWebinarId,
+            error: err instanceof Error ? err.message : "Unknown error",
+          });
+        }
       }
     }
 
@@ -57,13 +77,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 }
 
+let cachedToken: { token: string; expiresAt: number } | null = null;
+
 async function getAccessToken(): Promise<string> {
+  if (cachedToken && Date.now() < cachedToken.expiresAt) {
+    return cachedToken.token;
+  }
+
   const accountId = process.env.ZOOM_ACCOUNT_ID;
   const clientId = process.env.ZOOM_CLIENT_ID;
   const clientSecret = process.env.ZOOM_CLIENT_SECRET;
 
   if (!accountId || !clientId || !clientSecret) {
-    throw new Error("Missing Zoom credentials in environment variables");
+    throw new Error(
+      "Missing Zoom API credentials in environment variables. Please ensure ZOOM_ACCOUNT_ID, ZOOM_CLIENT_ID, and ZOOM_CLIENT_SECRET are configured."
+    );
   }
 
   const basicAuth = Buffer.from(`${clientId}:${clientSecret}`).toString("base64");
@@ -81,10 +109,46 @@ async function getAccessToken(): Promise<string> {
   const data = await response.json();
 
   if (!data.access_token) {
-    throw new Error("Failed to get Zoom access token: " + JSON.stringify(data));
+    const errorDetail = data.reason || data.error_description || data.message || JSON.stringify(data);
+    throw new Error(`Failed to authenticate with Zoom API: ${errorDetail}`);
   }
 
+  // Cache token (Zoom access tokens are valid for 1 hour; cache safely for 45 minutes)
+  cachedToken = {
+    token: data.access_token as string,
+    expiresAt: Date.now() + 45 * 60 * 1000,
+  };
+
   return data.access_token as string;
+}
+
+function parseZoomErrorMessage(data: any, eventId: string): string {
+  if (!data) return "Unknown error from Zoom";
+
+  if (typeof data === "string") return data;
+
+  // Zoom validation array errors: { errors: [ { field: "email", message: "..." } ] }
+  if (data.errors && Array.isArray(data.errors) && data.errors.length > 0) {
+    const details = data.errors
+      .map((e: any) => e.message || (e.field ? `${e.field} is invalid` : ""))
+      .filter(Boolean)
+      .join(", ");
+    if (details) return `${data.message ? data.message + ": " : ""}${details}`;
+  }
+
+  if (data.code === 3001 || data.code === 1001) {
+    return `Webinar/Meeting ID (${eventId}) does not exist. Please check the ID.`;
+  }
+
+  if (data.code === 300 && (data.message || "").toLowerCase().includes("registration has not been enabled")) {
+    return `Registration is not enabled for Webinar/Meeting (${eventId}). Please enable 'Required' registration in your Zoom portal.`;
+  }
+
+  if (data.code === 1002 || (data.message || "").toLowerCase().includes("already registered")) {
+    return "Student is already registered for this webinar/meeting.";
+  }
+
+  return data.message || data.error || JSON.stringify(data);
 }
 
 async function registerStudent(
@@ -156,7 +220,7 @@ async function registerStudent(
     return {
       email,
       status: "Failed",
-      error: data.message || JSON.stringify(data),
+      error: parseZoomErrorMessage(data, cleanId),
     };
   }
 }

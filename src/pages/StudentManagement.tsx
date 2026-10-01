@@ -39,7 +39,9 @@ import {
   CheckSquare,
   Square,
   KeyRound,
-  Clock
+  Clock,
+  Share2,
+  Layers
 } from 'lucide-react';
 import { 
   Student, 
@@ -247,25 +249,155 @@ export function StudentForm({ isModal = false, modalStudent = null, modalLead = 
   // Tabbed Layout State inside Student Form
   const [formActiveTab, setFormActiveTab] = useState<'personal' | 'zoom' | 'activation'>('personal');
 
-  // Zoom Registration State
+  // Zoom Multi-Webinar Registration State
   const [showZoomReg, setShowZoomReg] = useState(false);
-  const [zoomWebinarId, setZoomWebinarId] = useState(() => localStorage.getItem('zoom_last_webinar_id') || '');
+  const [zoomSelectedWebinars, setZoomSelectedWebinars] = useState<{ webinar_id: string; webinar_name: string }[]>(() => {
+    try {
+      const stored = localStorage.getItem('zoom_student_form_selected_webinars');
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [zoomCustomId, setZoomCustomId] = useState('');
+  const [zoomSearchQuery, setZoomSearchQuery] = useState('');
   const [zoomIsRunning, setZoomIsRunning] = useState(false);
-  const [zoomResult, setZoomResult] = useState<{ email: string; status: "Success" | "Failed"; joinUrl?: string; error?: string } | null>(null);
-  const [zoomCopied, setZoomCopied] = useState(false);
+  const [zoomCurrentProgress, setZoomCurrentProgress] = useState('');
+  const [zoomItemResults, setZoomItemResults] = useState<{
+    webinarId: string;
+    webinarName: string;
+    email: string;
+    status: 'Success' | 'Failed';
+    joinUrl?: string;
+    error?: string;
+  }[]>([]);
+  const [zoomCopiedLinks, setZoomCopiedLinks] = useState<{ [key: string]: boolean }>({});
+  const [zoomAllCopied, setZoomAllCopied] = useState(false);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('zoom_student_form_selected_webinars', JSON.stringify(zoomSelectedWebinars));
+    } catch (e) {
+      console.warn("Failed to store student form selected webinars", e);
+    }
+  }, [zoomSelectedWebinars]);
+
+  const toggleZoomWebinar = (w: { webinar_id: string; webinar_name: string }) => {
+    const cleanId = String(w.webinar_id).trim();
+    const exists = zoomSelectedWebinars.some((item) => item.webinar_id === cleanId);
+    if (exists) {
+      setZoomSelectedWebinars((prev) => prev.filter((item) => item.webinar_id !== cleanId));
+    } else {
+      setZoomSelectedWebinars((prev) => [
+        ...prev,
+        { webinar_id: cleanId, webinar_name: w.webinar_name || `Webinar ${cleanId}` }
+      ]);
+    }
+  };
+
+  const selectAllSavedZoomWebinars = () => {
+    const nextList = [...zoomSelectedWebinars];
+    webinars.forEach((w) => {
+      const cleanId = String(w.webinar_id).trim();
+      if (!nextList.some((item) => item.webinar_id === cleanId)) {
+        nextList.push({ webinar_id: cleanId, webinar_name: w.webinar_name });
+      }
+    });
+    setZoomSelectedWebinars(nextList);
+    toast.success(`Selected all ${webinars.length} saved webinars.`);
+  };
+
+  const clearSelectedZoomWebinars = () => {
+    setZoomSelectedWebinars([]);
+    toast.info("Cleared webinar selection.");
+  };
+
+  const addCustomZoomWebinar = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const raw = zoomCustomId.trim();
+    if (!raw) return;
+
+    const ids = raw.split(/[\s,]+/).map((s) => s.trim().replace(/[-\s]/g, "")).filter(Boolean);
+    if (ids.length === 0) return;
+
+    let addedCount = 0;
+    const nextList = [...zoomSelectedWebinars];
+
+    ids.forEach((id) => {
+      if (!nextList.some((item) => item.webinar_id === id)) {
+        const matchSaved = webinars.find((sw) => sw.webinar_id.trim() === id);
+        nextList.push({
+          webinar_id: id,
+          webinar_name: matchSaved ? matchSaved.webinar_name : `Meeting/Webinar ${id}`
+        });
+        addedCount++;
+      }
+    });
+
+    setZoomSelectedWebinars(nextList);
+    setZoomCustomId("");
+    if (addedCount > 0) {
+      toast.success(`Added ${addedCount} webinar ID(s) to selection.`);
+    } else {
+      toast.info("Webinar ID is already selected.");
+    }
+  };
+
+  const removeSelectedZoomWebinar = (webinarId: string) => {
+    setZoomSelectedWebinars((prev) => prev.filter((item) => item.webinar_id !== webinarId));
+  };
+
+  const handleZoomCopyLink = async (webinarId: string, url: string) => {
+    try {
+      await navigator.clipboard.writeText(url);
+      setZoomCopiedLinks((prev) => ({ ...prev, [webinarId]: true }));
+      toast.success("Join URL copied to clipboard!");
+      setTimeout(() => {
+        setZoomCopiedLinks((prev) => ({ ...prev, [webinarId]: false }));
+      }, 2000);
+    } catch {
+      toast.error("Failed to copy URL");
+    }
+  };
+
+  const handleZoomCopyAllLinks = async () => {
+    const successItems = zoomItemResults.filter((r) => r.status === 'Success' && r.joinUrl);
+    if (successItems.length === 0) {
+      toast.error("No successful registration links to copy.");
+      return;
+    }
+
+    const cleanLastName = cleanStudentNameForZoom(studentData.name || '');
+    const textLines = [
+      `Physics Cube Academy - Zoom Registration Links for ${studentData.pcaid || ''} ${cleanLastName}:`,
+      ...successItems.map(
+        (item, idx) => `${idx + 1}. ${item.webinarName} (ID: ${item.webinarId})\n   Join URL: ${item.joinUrl}`
+      )
+    ];
+
+    try {
+      await navigator.clipboard.writeText(textLines.join("\n\n"));
+      setZoomAllCopied(true);
+      toast.success(`Copied all ${successItems.length} Zoom links to clipboard!`);
+      setTimeout(() => setZoomAllCopied(false), 2500);
+    } catch {
+      toast.error("Failed to copy links.");
+    }
+  };
 
   const handleZoomRegister = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    const cleanWebinarId = zoomWebinarId.trim();
+
+    if (zoomSelectedWebinars.length === 0) {
+      toast.error("Please select or add at least one Zoom Webinar or Meeting ID.");
+      return;
+    }
+
     const cleanEmail = (studentData.mail || '').trim();
     const cleanFirstName = (studentData.pcaid || '').trim();
     const rawLastName = (studentData.name || '').trim();
     const cleanLastName = cleanStudentNameForZoom(rawLastName);
 
-    if (!cleanWebinarId) {
-      toast.error("Please enter a valid Zoom Webinar ID.");
-      return;
-    }
     if (!cleanFirstName) {
       toast.error("PCA ID is required for First Name registration on Zoom (from Section 1).");
       return;
@@ -280,69 +412,98 @@ export function StudentForm({ isModal = false, modalStudent = null, modalLead = 
     }
 
     setZoomIsRunning(true);
-    setZoomResult(null);
+    setZoomItemResults([]);
+    setZoomCurrentProgress(`Preparing registration across ${zoomSelectedWebinars.length} webinar(s)...`);
 
-    try {
-      const response = await fetch("/api/register-batch", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          webinarId: cleanWebinarId,
-          students: [
-            {
-              firstName: cleanFirstName,
-              lastName: cleanLastName,
-              email: cleanEmail
-            }
-          ] 
-        }),
-      });
+    const accumulated: {
+      webinarId: string;
+      webinarName: string;
+      email: string;
+      status: 'Success' | 'Failed';
+      joinUrl?: string;
+      error?: string;
+    }[] = [];
 
-      let data: any;
-      const contentType = response.headers.get("content-type") || "";
-      if (contentType.includes("application/json")) {
-        data = await response.json();
-      } else {
-        const text = await response.text();
-        if (text.includes("<!DOCTYPE html") || response.status === 404) {
-          throw new Error("API endpoint not active in local dev server. Vercel Serverless Functions only run on Vercel deployments. Configure your Zoom environment variables in Vercel and deploy to test!");
-        }
-        throw new Error(`Invalid server response: ${response.statusText || response.status}`);
-      }
+    for (let i = 0; i < zoomSelectedWebinars.length; i++) {
+      const targetWebinar = zoomSelectedWebinars[i];
+      setZoomCurrentProgress(
+        `Registering in ${i + 1} of ${zoomSelectedWebinars.length}: ${targetWebinar.webinar_name}...`
+      );
 
-      if (response.ok && data.results && data.results.length > 0) {
-        const resObj = data.results[0];
-        setZoomResult(resObj);
-        if (resObj.status === "Success") {
-          toast.success("Student successfully registered on Zoom!");
-          localStorage.setItem('zoom_last_webinar_id', cleanWebinarId);
+      try {
+        const response = await fetch("/api/register-batch", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ 
+            webinarId: targetWebinar.webinar_id.trim(),
+            students: [
+              {
+                firstName: cleanFirstName,
+                lastName: cleanLastName,
+                email: cleanEmail
+              }
+            ] 
+          }),
+        });
+
+        let data: any;
+        const contentType = response.headers.get("content-type") || "";
+        if (contentType.includes("application/json")) {
+          data = await response.json();
         } else {
-          toast.error(resObj.error || "Zoom registration failed.");
+          const text = await response.text();
+          if (text.includes("<!DOCTYPE html") || response.status === 404) {
+            throw new Error("API endpoint not active in local dev server or Zoom credentials missing.");
+          }
+          throw new Error(`Invalid server response: ${response.statusText || response.status}`);
         }
-      } else {
-        throw new Error(data.error || "Webinar registration failure");
-      }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Unknown registration error";
-      setZoomResult({
-        email: cleanEmail,
-        status: "Failed",
-        error: message
-      });
-      toast.error(message);
-    } finally {
-      setZoomIsRunning(false);
-    }
-  };
 
-  const handleZoomCopy = async (url: string) => {
-    try {
-      await navigator.clipboard.writeText(url);
-      setZoomCopied(true);
-      toast.success("Join URL copied to clipboard!");
-      setTimeout(() => setZoomCopied(false), 2000);
-    } catch (err) {
-      toast.error("Failed to copy URL");
+        if (response.ok && data.results && data.results.length > 0) {
+          const resObj = data.results[0];
+          accumulated.push({
+            webinarId: targetWebinar.webinar_id,
+            webinarName: targetWebinar.webinar_name,
+            email: cleanEmail,
+            status: resObj.status,
+            joinUrl: resObj.joinUrl,
+            error: resObj.error,
+          });
+        } else {
+          accumulated.push({
+            webinarId: targetWebinar.webinar_id,
+            webinarName: targetWebinar.webinar_name,
+            email: cleanEmail,
+            status: "Failed",
+            error: data?.error || data?.message || "Webinar registration rejected request"
+          });
+        }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Unknown registration error";
+        accumulated.push({
+          webinarId: targetWebinar.webinar_id,
+          webinarName: targetWebinar.webinar_name,
+          email: cleanEmail,
+          status: "Failed",
+          error: message
+        });
+      }
+
+      setZoomItemResults([...accumulated]);
+    }
+
+    setZoomIsRunning(false);
+    setZoomCurrentProgress('');
+
+    const successCount = accumulated.filter((r) => r.status === "Success").length;
+    const failCount = accumulated.filter((r) => r.status === "Failed").length;
+
+    if (failCount === 0 && successCount > 0) {
+      toast.success(`Student successfully registered in all ${successCount} webinar(s)!`);
+    } else if (successCount > 0) {
+      toast.warning(`Registered in ${successCount} webinar(s), but ${failCount} failed.`);
+    } else {
+      const firstError = accumulated.find((r) => r.error)?.error;
+      toast.error(firstError || "Registration failed across the selected webinars.");
     }
   };
 
@@ -3369,50 +3530,185 @@ export function StudentForm({ isModal = false, modalStudent = null, modalLead = 
       {/* TAB 2: ZOOM REGISTRATION */}
       {formActiveTab === 'zoom' && (
         <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-6 shadow-sm space-y-6 animate-in fade-in duration-200">
-          <div className="pb-4 border-b border-gray-150 dark:border-gray-800 flex items-center gap-3">
-            <div className="p-3 bg-teal-50 dark:bg-teal-950/40 text-teal-600 dark:text-teal-400 rounded-xl">
-              <Video size={22} />
+          <div className="pb-4 border-b border-gray-150 dark:border-gray-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="p-3 bg-teal-50 dark:bg-teal-950/40 text-teal-600 dark:text-teal-400 rounded-xl">
+                <Video size={22} />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                  <span>Zoom Webinar / Meeting Registration</span>
+                  <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-teal-50 dark:bg-teal-950/60 text-teal-700 dark:text-teal-300 border border-teal-200 dark:border-teal-800">
+                    Multi-Webinar Supported
+                  </span>
+                </h3>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Select one or multiple Zoom webinars/meetings to enroll this student in 1 click.
+                </p>
+              </div>
             </div>
-            <div>
-              <h3 className="text-base font-bold text-gray-900 dark:text-white">Zoom Webinar / Meeting Registration</h3>
-              <p className="text-xs text-gray-500 mt-0.5">
-                Automatically fetches the student PCA ID as First Name and student First Name as Last Name
-              </p>
+
+            <div className="flex items-center gap-2 self-start sm:self-auto">
+              {webinars.length > 0 && (
+                <>
+                  <button
+                    type="button"
+                    onClick={selectAllSavedZoomWebinars}
+                    disabled={zoomIsRunning}
+                    className="text-[11px] font-bold text-teal-600 hover:text-teal-700 dark:text-teal-400 dark:hover:text-teal-300 hover:underline cursor-pointer"
+                  >
+                    Select All Saved
+                  </button>
+                  <span className="text-gray-300 dark:text-gray-700">|</span>
+                </>
+              )}
+              {zoomSelectedWebinars.length > 0 && (
+                <button
+                  type="button"
+                  onClick={clearSelectedZoomWebinars}
+                  disabled={zoomIsRunning}
+                  className="text-[11px] font-bold text-red-500 hover:text-red-600 hover:underline cursor-pointer"
+                >
+                  Clear Selection
+                </button>
+              )}
             </div>
           </div>
 
-          <div className="space-y-5">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-              {/* Webinar Selection */}
-              <div className="md:col-span-2">
-                <label className="block text-xs font-black text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-2">
-                  Select Active Webinar / Meeting ID <span className="text-red-500">*</span>
+          <div className="space-y-6">
+            {/* Step 1: Select Target Webinars (Multi-select) */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-black text-gray-700 dark:text-gray-300 uppercase tracking-wider flex items-center gap-1.5">
+                  <Layers size={14} className="text-teal-600" />
+                  <span>Select Target Webinars / Meetings</span>
+                  <span className="text-red-500">*</span>
                 </label>
-                {webinars.length > 0 ? (
-                  <select
-                    value={zoomWebinarId}
-                    onChange={(e) => setZoomWebinarId(e.target.value)}
-                    disabled={zoomIsRunning}
-                    className="w-full px-4 py-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm font-bold text-gray-800 dark:text-gray-200 focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all shadow-2xs"
-                  >
-                    <option value="">-- Select Webinar / Meeting --</option>
-                    {webinars.map(w => (
-                      <option key={w.id} value={w.webinar_id}>
-                        {w.webinar_name} ({w.webinar_id})
-                      </option>
-                    ))}
-                  </select>
-                ) : (
+                <span className="text-[11px] font-bold text-teal-700 dark:text-teal-400">
+                  {zoomSelectedWebinars.length} selected
+                </span>
+              </div>
+
+              {/* Saved Webinars List with Search */}
+              <div className="bg-gray-50/80 dark:bg-gray-850/60 rounded-xl p-3 border border-gray-200 dark:border-gray-750 space-y-3">
+                <div className="relative">
+                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                   <input
                     type="text"
-                    value={zoomWebinarId}
-                    onChange={(e) => setZoomWebinarId(e.target.value)}
-                    placeholder="Enter Zoom Webinar / Meeting ID (e.g. 84930219481)"
-                    className="w-full px-4 py-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm font-bold text-gray-800 dark:text-gray-200 focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all shadow-2xs"
+                    placeholder="Search saved academy webinars..."
+                    value={zoomSearchQuery}
+                    onChange={(e) => setZoomSearchQuery(e.target.value)}
+                    disabled={zoomIsRunning}
+                    className="w-full pl-8 pr-3 py-1.5 text-xs bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-teal-500"
                   />
+                </div>
+
+                {webinars.length > 0 ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1">
+                    {webinars
+                      .filter((w) => {
+                        const q = zoomSearchQuery.toLowerCase();
+                        return w.webinar_name.toLowerCase().includes(q) || w.webinar_id.toLowerCase().includes(q);
+                      })
+                      .map((w) => {
+                        const isChecked = zoomSelectedWebinars.some((item) => item.webinar_id === w.webinar_id.trim());
+                        return (
+                          <div
+                            key={w.id}
+                            onClick={() => !zoomIsRunning && toggleZoomWebinar(w)}
+                            className={`flex items-start gap-2.5 p-2.5 rounded-lg border text-left cursor-pointer transition-all ${
+                              isChecked
+                                ? "bg-teal-50/90 dark:bg-teal-950/40 border-teal-300 dark:border-teal-700 text-teal-950 dark:text-teal-200 shadow-2xs"
+                                : "bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:border-gray-300"
+                            } ${zoomIsRunning ? "opacity-60 cursor-not-allowed" : ""}`}
+                          >
+                            <div className="mt-0.5 shrink-0 text-teal-600 dark:text-teal-400">
+                              {isChecked ? <CheckSquare size={16} /> : <Square size={16} className="text-gray-400" />}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <div className="text-xs font-bold truncate leading-tight">
+                                {w.webinar_name}
+                              </div>
+                              <div className="text-[10px] font-mono text-gray-500 dark:text-gray-400 mt-0.5">
+                                ID: {w.webinar_id}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                  </div>
+                ) : (
+                  <div className="py-2 text-center text-xs text-gray-400">
+                    No saved webinars in database. Enter a custom ID below.
+                  </div>
                 )}
               </div>
 
+              {/* Add Custom Webinar ID */}
+              <div className="flex flex-col sm:flex-row gap-2">
+                <input
+                  type="text"
+                  placeholder="Or enter custom Webinar / Meeting ID (e.g. 84930219481)"
+                  value={zoomCustomId}
+                  onChange={(e) => setZoomCustomId(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      addCustomZoomWebinar();
+                    }
+                  }}
+                  disabled={zoomIsRunning}
+                  className="flex-1 px-3.5 py-2 text-xs bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-teal-500 font-mono"
+                />
+                <button
+                  type="button"
+                  onClick={() => addCustomZoomWebinar()}
+                  disabled={zoomIsRunning || !zoomCustomId.trim()}
+                  className="flex items-center justify-center gap-1.5 px-4 py-2 bg-gray-800 hover:bg-gray-900 dark:bg-gray-700 dark:hover:bg-gray-600 text-white text-xs font-bold rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shrink-0"
+                >
+                  <Plus size={14} />
+                  <span>Add ID</span>
+                </button>
+              </div>
+
+              {/* Selected Webinars Chips */}
+              {zoomSelectedWebinars.length > 0 && (
+                <div className="space-y-1.5 pt-1">
+                  <div className="text-[10px] font-black uppercase tracking-wider text-gray-400">
+                    Selected for Registration ({zoomSelectedWebinars.length})
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {zoomSelectedWebinars.map((item) => (
+                      <span
+                        key={item.webinar_id}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-teal-100/90 dark:bg-teal-900/60 text-teal-900 dark:text-teal-200 rounded-lg text-xs font-medium border border-teal-300 dark:border-teal-700 shadow-2xs"
+                      >
+                        <Video size={13} className="text-teal-600 dark:text-teal-400 shrink-0" />
+                        <span className="font-bold truncate max-w-[200px]" title={item.webinar_name}>
+                          {item.webinar_name}
+                        </span>
+                        <span className="text-[10px] font-mono text-teal-700 dark:text-teal-300">
+                          ({item.webinar_id})
+                        </span>
+                        {!zoomIsRunning && (
+                          <button
+                            type="button"
+                            onClick={() => removeSelectedZoomWebinar(item.webinar_id)}
+                            className="hover:bg-teal-200 dark:hover:bg-teal-800 p-0.5 rounded-full text-teal-700 dark:text-teal-300 cursor-pointer ml-0.5"
+                            title="Remove"
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        )}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Step 2: Student Details Confirmation */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-gray-150 dark:border-gray-800">
               {/* Prefilled First Name (from PCA ID) */}
               <div>
                 <div className="flex items-center justify-between mb-1">
@@ -3437,7 +3733,7 @@ export function StudentForm({ isModal = false, modalStudent = null, modalLead = 
                 )}
               </div>
 
-              {/* Prefilled Last Name (from Clean Student Name without Initials) */}
+              {/* Prefilled Last Name */}
               <div>
                 <div className="flex items-center justify-between mb-1">
                   <label className="block text-xs font-bold text-gray-600 dark:text-gray-400 uppercase tracking-wider">
@@ -3488,59 +3784,168 @@ export function StudentForm({ isModal = false, modalStudent = null, modalLead = 
               </div>
             </div>
 
-            {/* Submit button */}
-            <div className="flex justify-end pt-2">
+            {/* Action Button & Running Indicator */}
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-2">
+              <div className="text-xs text-gray-500 font-medium">
+                {zoomSelectedWebinars.length === 0 ? (
+                  <span className="text-amber-600 dark:text-amber-400 font-bold">
+                    ⚠ Please select at least 1 webinar above.
+                  </span>
+                ) : (
+                  <span>
+                    Will register student across <strong className="text-teal-600 dark:text-teal-400 font-black">{zoomSelectedWebinars.length}</strong> webinar(s).
+                  </span>
+                )}
+              </div>
+
               <button
                 type="button"
                 onClick={() => handleZoomRegister()}
-                disabled={zoomIsRunning || !zoomWebinarId || !studentData.pcaid || !studentData.name || !studentData.mail}
+                disabled={zoomIsRunning || zoomSelectedWebinars.length === 0 || !studentData.pcaid || !studentData.name || !studentData.mail}
                 className="flex items-center gap-2 px-8 py-3.5 bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs rounded-xl transition-all shadow-md active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
               >
                 {zoomIsRunning ? (
                   <>
                     <Loader2 size={16} className="animate-spin" />
-                    <span>REGISTERING ON ZOOM...</span>
+                    <span>REGISTERING ACROSS WEBINARS...</span>
                   </>
                 ) : (
                   <>
-                    <span>REGISTER ON ZOOM NOW</span>
+                    <span>REGISTER ON ZOOM NOW ({zoomSelectedWebinars.length} WEBINARS)</span>
                     <ArrowRight size={16} />
                   </>
                 )}
               </button>
             </div>
 
-            {/* Zoom Result Banner */}
-            {zoomResult && (
-              <div className="mt-4 p-4 rounded-xl border border-teal-200/80 dark:border-teal-800 bg-teal-50/60 dark:bg-teal-950/40">
-                {zoomResult.status === 'Success' ? (
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2 text-green-700 dark:text-green-400 font-bold text-xs">
-                      <CheckCircle2 size={16} />
-                      <span>Student registered successfully on Zoom!</span>
-                    </div>
-                    {zoomResult.joinUrl && (
-                      <div className="flex items-center justify-between gap-3 bg-white dark:bg-gray-850 p-2.5 rounded-lg border border-teal-200/50 dark:border-gray-750">
-                        <span className="text-xs font-mono text-teal-600 dark:text-teal-400 truncate flex-1 select-all">
-                          {zoomResult.joinUrl}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => zoomResult.joinUrl && handleZoomCopy(zoomResult.joinUrl)}
-                          className="flex items-center gap-1 px-3 py-1 bg-teal-600 text-white rounded-lg text-xs font-bold hover:bg-teal-700 transition-colors cursor-pointer"
-                        >
-                          {zoomCopied ? <Check size={14} /> : <Copy size={14} />}
-                          <span>{zoomCopied ? 'Copied' : 'Copy Link'}</span>
-                        </button>
+            {/* Live Progress Banner */}
+            {zoomIsRunning && (
+              <div className="p-3.5 rounded-xl bg-teal-50 dark:bg-teal-950/40 border border-teal-200 dark:border-teal-800 flex items-center gap-3 animate-pulse">
+                <Loader2 size={18} className="animate-spin text-teal-600 dark:text-teal-400 shrink-0" />
+                <span className="text-xs font-bold text-teal-900 dark:text-teal-200">
+                  {zoomCurrentProgress || "Registering student on Zoom..."}
+                </span>
+              </div>
+            )}
+
+            {/* Multi-Webinar Registration Results Cards */}
+            {zoomItemResults.length > 0 && (
+              <div className="space-y-4 pt-4 border-t border-gray-150 dark:border-gray-800">
+                {/* Results Header */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-gray-150 dark:border-gray-800">
+                  <div>
+                    <h4 className="text-sm font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                      {zoomItemResults.every(r => r.status === 'Success') ? (
+                        <>
+                          <CheckCircle2 size={18} className="text-green-500" />
+                          <span>All {zoomItemResults.length} Webinars Registered Successfully!</span>
+                          <Sparkles size={15} className="text-amber-500" />
+                        </>
+                      ) : zoomItemResults.some(r => r.status === 'Success') ? (
+                        <>
+                          <AlertTriangle size={18} className="text-amber-500" />
+                          <span>
+                            Partially Completed: {zoomItemResults.filter(r => r.status === 'Success').length} Succeeded, {zoomItemResults.filter(r => r.status === 'Failed').length} Failed
+                          </span>
+                        </>
+                      ) : (
+                        <>
+                          <XCircle size={18} className="text-red-500" />
+                          <span>Registration Failed for All Selected Webinars</span>
+                        </>
+                      )}
+                    </h4>
+                  </div>
+
+                  {zoomItemResults.some(r => r.status === 'Success' && r.joinUrl) && (
+                    <button
+                      type="button"
+                      onClick={handleZoomCopyAllLinks}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer self-start sm:self-auto shrink-0 shadow-2xs"
+                    >
+                      {zoomAllCopied ? <Check size={14} /> : <Share2 size={14} />}
+                      <span>{zoomAllCopied ? "Copied All Links!" : "Copy All Join Links"}</span>
+                    </button>
+                  )}
+                </div>
+
+                {/* Per-Webinar Cards */}
+                <div className="space-y-3">
+                  {zoomItemResults.map((res) => {
+                    const isSuccess = res.status === 'Success';
+                    const isCopied = zoomCopiedLinks[res.webinarId];
+
+                    return (
+                      <div
+                        key={res.webinarId}
+                        className={`p-3.5 rounded-xl border transition-all ${
+                          isSuccess
+                            ? "bg-green-50/50 dark:bg-green-950/20 border-green-200/80 dark:border-green-800/60"
+                            : "bg-red-50/50 dark:bg-red-950/20 border-red-200/80 dark:border-red-800/60"
+                        }`}
+                      >
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            {isSuccess ? (
+                              <CheckCircle2 size={16} className="text-green-600 dark:text-green-400 shrink-0" />
+                            ) : (
+                              <XCircle size={16} className="text-red-500 dark:text-red-400 shrink-0" />
+                            )}
+                            <div>
+                              <span className="text-xs font-bold text-gray-900 dark:text-white">
+                                {res.webinarName}
+                              </span>
+                              <span className="text-[11px] font-mono text-gray-500 dark:text-gray-400 ml-2">
+                                (ID: {res.webinarId})
+                              </span>
+                            </div>
+                          </div>
+
+                          <span
+                            className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full self-start sm:self-auto ${
+                              isSuccess
+                                ? "bg-green-100 text-green-800 dark:bg-green-900/60 dark:text-green-300"
+                                : "bg-red-100 text-red-800 dark:bg-red-900/60 dark:text-red-300"
+                            }`}
+                          >
+                            {res.status}
+                          </span>
+                        </div>
+
+                        {isSuccess && res.joinUrl ? (
+                          <div className="mt-2.5 flex items-center justify-between gap-2 bg-white dark:bg-gray-850 p-2 rounded-lg border border-green-200/60 dark:border-gray-750">
+                            <span className="text-xs font-mono text-teal-700 dark:text-teal-400 truncate flex-1 select-all">
+                              {res.joinUrl}
+                            </span>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <button
+                                type="button"
+                                onClick={() => handleZoomCopyLink(res.webinarId, res.joinUrl!)}
+                                className="flex items-center gap-1 px-2.5 py-1 bg-teal-600 hover:bg-teal-700 text-white rounded-md text-[11px] font-bold transition-colors cursor-pointer"
+                              >
+                                {isCopied ? <Check size={13} /> : <Copy size={13} />}
+                                <span>{isCopied ? "Copied" : "Copy Link"}</span>
+                              </button>
+                              <a
+                                href={res.joinUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="p-1 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
+                                title="Open Link"
+                              >
+                                <ExternalLink size={14} />
+                              </a>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="mt-2 text-xs text-red-600 dark:text-red-400">
+                            <strong>Reason:</strong> {res.error || "Zoom registration failed for this webinar."}
+                          </div>
+                        )}
                       </div>
-                    )}
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-2 text-red-600 dark:text-red-400 font-bold text-xs">
-                    <XCircle size={16} />
-                    <span>Failed: {zoomResult.error || 'Unknown error'}</span>
-                  </div>
-                )}
+                    );
+                  })}
+                </div>
               </div>
             )}
           </div>
