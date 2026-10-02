@@ -497,6 +497,28 @@ export function StudentForm({ isModal = false, modalStudent = null, modalLead = 
     const successCount = accumulated.filter((r) => r.status === "Success").length;
     const failCount = accumulated.filter((r) => r.status === "Failed").length;
 
+    // Save strictly SUCCESSFUL registrations to zoom_registration table (errors are never saved)
+    const successfulItems = accumulated.filter((r) => r.status === "Success");
+    if (successfulItems.length > 0 && cleanFirstName) {
+      try {
+        const toSave = successfulItems.map(r => ({
+          pcaid: cleanFirstName,
+          webinar_id: r.webinarId,
+          webinar_name: r.webinarName || null,
+          student_name: cleanLastName || null,
+          email: cleanEmail,
+          event_type: 'webinar',
+          join_url: r.joinUrl || null,
+          status: 'Success',
+          registered_by: user?.username || 'admin',
+          registered_at: new Date().toISOString()
+        }));
+        await supabase.from('zoom_registration').upsert(toSave, { onConflict: 'pcaid,webinar_id' });
+      } catch (err) {
+        console.warn('Failed saving to zoom_registration:', err);
+      }
+    }
+
     if (failCount === 0 && successCount > 0) {
       toast.success(`Student successfully registered in all ${successCount} webinar(s)!`);
     } else if (successCount > 0) {

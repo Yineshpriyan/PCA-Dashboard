@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, useLocation, useSearchParams } from 'react-router-dom';
-import { Video, UserPlus, History, Trash2, Users, ClipboardList, PlusCircle, LayoutDashboard, Folder, Key, Layers, Bell } from 'lucide-react';
+import { Video, UserPlus, History, Trash2, Users, ClipboardList, PlusCircle, LayoutDashboard, Folder, Key, Layers, Bell, CreditCard } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useAuth } from '../hooks/useAuth';
 
@@ -257,3 +257,42 @@ export function ActivationNavTabs() {
     </div>
   );
 }
+
+export function AnalysisNavTabs() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeTab = searchParams.get('tab') || 'side-by-side';
+
+  const setTab = (tab: string) => {
+    setSearchParams({ tab });
+  };
+
+  return (
+    <div className="flex items-center gap-1.5 p-1 bg-gray-100/80 dark:bg-gray-800/80 rounded-2xl w-fit border border-gray-200/80 dark:border-gray-700/80 shadow-2xs overflow-x-auto">
+      <button
+        onClick={() => setTab('side-by-side')}
+        className={cn(
+          "flex items-center gap-2 px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap",
+          activeTab === 'side-by-side'
+            ? "bg-white dark:bg-gray-900 text-teal-700 dark:text-teal-300 shadow-xs border border-teal-100 dark:border-teal-900/40 font-extrabold"
+            : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-white/50 dark:hover:bg-gray-700/50"
+        )}
+      >
+        <CreditCard size={14} className={activeTab === 'side-by-side' ? "text-teal-600 dark:text-teal-400" : "text-gray-400"} />
+        <span>Side-by-Side (Payment & Zoom)</span>
+      </button>
+      <button
+        onClick={() => setTab('continuity')}
+        className={cn(
+          "flex items-center gap-2 px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap",
+          activeTab === 'continuity'
+            ? "bg-white dark:bg-gray-900 text-teal-700 dark:text-teal-300 shadow-xs border border-teal-100 dark:border-teal-900/40 font-extrabold"
+            : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-white/50 dark:hover:bg-gray-700/50"
+        )}
+      >
+        <Users size={14} className={activeTab === 'continuity' ? "text-teal-600 dark:text-teal-400" : "text-gray-400"} />
+        <span>Monthly Retention & Continuity</span>
+      </button>
+    </div>
+  );
+}
+

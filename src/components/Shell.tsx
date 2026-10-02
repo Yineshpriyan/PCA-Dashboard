@@ -22,7 +22,8 @@ import {
   Trash2,
   Smartphone,
   UserCheck,
-  CreditCard
+  CreditCard,
+  BarChart3
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { logTransaction } from '../lib/transactions';
@@ -30,7 +31,7 @@ import { cn, playNotificationSound } from '../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
 import { supabase } from '../lib/supabase';
 import { toast } from 'sonner';
-import { TokenNavTabs, LeadNavTabs, ZoomNavTabs, AuditNavTabs, AdminNavTabs, ActivationNavTabs } from './NavTabs';
+import { TokenNavTabs, LeadNavTabs, ZoomNavTabs, AuditNavTabs, AdminNavTabs, ActivationNavTabs, AnalysisNavTabs } from './NavTabs';
 import { Issue } from '../types';
 import AcademyLogo from './AcademyLogo';
 
@@ -93,6 +94,17 @@ const navSections: NavSection[] = [
         path: '/admin/self-enrolment', 
         matchPaths: ['/admin/self-enrolment', '/admin/self-registered'],
         icon: <CreditCard size={18} />, 
+        roles: ['admin', 'super_admin'] 
+      },
+    ]
+  },
+  {
+    title: 'Analysis',
+    items: [
+      { 
+        label: 'Analysis', 
+        path: '/admin/analysis', 
+        icon: <BarChart3 size={18} />, 
         roles: ['admin', 'super_admin'] 
       },
     ]
@@ -331,6 +343,8 @@ export function Topbar({
       activeLabel = 'Students';
     } else if (location.pathname === '/admin/self-enrolment' || location.pathname === '/admin/self-registered') {
       activeLabel = 'Payment & Registration BULK';
+    } else if (location.pathname === '/admin/analysis') {
+      activeLabel = 'Analysis';
     }
   }
 
@@ -367,6 +381,9 @@ export function Topbar({
             )}
             {(location.pathname === '/super-admin/admins' || location.pathname === '/super-admin/signup') && (
               <AdminNavTabs />
+            )}
+            {location.pathname === '/admin/analysis' && (
+              <AnalysisNavTabs />
             )}
           </div>
         )}

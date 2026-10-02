@@ -935,6 +935,33 @@ export default function SelfEnrolmentManagement() {
       const successCount = allResults.filter(r => r.status === 'Success').length;
       const failCount = allResults.filter(r => r.status === 'Failed').length;
 
+      // Save strictly SUCCESSFUL registrations to zoom_registration table (errors are never saved)
+      const successItems = allResults.filter(r => r.status === 'Success' && r.pcaid && r.pcaid !== 'N/A' && r.webinarId);
+      if (successItems.length > 0) {
+        try {
+          const toInsert = successItems.map(r => ({
+            pcaid: r.pcaid,
+            webinar_id: r.webinarId,
+            webinar_name: r.webinarName || null,
+            student_name: r.name || null,
+            email: r.email,
+            event_type: eventType,
+            join_url: r.joinUrl || null,
+            status: 'Success',
+            registered_by: user?.username || 'admin',
+            registered_at: new Date().toISOString()
+          }));
+          const { error: regDbErr } = await supabase
+            .from('zoom_registration')
+            .upsert(toInsert, { onConflict: 'pcaid,webinar_id' });
+          if (regDbErr) {
+            console.warn('Could not save to zoom_registration table:', regDbErr);
+          }
+        } catch (dbErr) {
+          console.warn('zoom_registration write failed:', dbErr);
+        }
+      }
+
       // Log transaction
       await logTransaction({
         admin_username: user?.username || 'admin',

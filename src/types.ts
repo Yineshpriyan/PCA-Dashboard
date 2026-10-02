@@ -254,4 +254,19 @@ export interface AppNotification {
   updated_at?: string;
 }
 
+export interface ZoomRegistrationRecord {
+  id: string;
+  pcaid: string;
+  webinar_id: string;
+  webinar_name?: string | null;
+  student_name?: string | null;
+  email: string;
+  event_type: 'webinar' | 'meeting';
+  join_url?: string | null;
+  status: 'Success' | 'Failed' | 'Cancelled';
+  registered_by?: string | null;
+  registered_at: string;
+  deleted_at?: string | null;
+}
+
 
