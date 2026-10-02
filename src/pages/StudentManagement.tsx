@@ -4205,6 +4205,8 @@ export function StudentExplorer() {
     packages: [] as string[],
     startDate: '',
     endDate: '',
+    paymentStartDate: '',
+    paymentEndDate: '',
     pcaid: '',
     studentType: '',
     paymentStatus: ''
@@ -4224,6 +4226,8 @@ export function StudentExplorer() {
         packages: [],
         startDate: '',
         endDate: '',
+        paymentStartDate: '',
+        paymentEndDate: '',
         pcaid: '',
         studentType: '',
         paymentStatus: ''
@@ -4482,7 +4486,7 @@ export function StudentExplorer() {
       while (true) {
         const { data: payData, error: payError } = await supabase
           .from('payment')
-          .select('id, pcaid, class_type, package_type, type, paid_date, payment, installment(paid_amount, deleted_at)')
+          .select('id, pcaid, class_type, package_type, type, paid_date, payment, installment(paid_amount, paid_date, deleted_at)')
           .is('deleted_at', null)
           .range(paymentPage * pageSize, (paymentPage + 1) * pageSize - 1);
 
@@ -4913,7 +4917,7 @@ export function StudentExplorer() {
       (filters.studentType === 'Scholarship' && isScholarship) ||
       (filters.studentType === 'Paid' && !isScholarship);
 
-    // Date Range Logic
+    // Date Range Logic (Registration Date)
     const studentDate = s.created_at ? new Date(s.created_at).setHours(0,0,0,0) : null;
     const start = filters.startDate ? new Date(filters.startDate).setHours(0,0,0,0) : null;
     const end = filters.endDate ? new Date(filters.endDate).setHours(0,0,0,0) : null;
@@ -4924,6 +4928,33 @@ export function StudentExplorer() {
       if (end && studentDate > end) matchesDateRange = false;
     } else if (start || end) {
       matchesDateRange = false;
+    }
+
+    // Payment Date Range Logic (Payment / Installment Paid Date)
+    const pStart = filters.paymentStartDate ? new Date(filters.paymentStartDate).setHours(0,0,0,0) : null;
+    const pEnd = filters.paymentEndDate ? new Date(filters.paymentEndDate).setHours(23,59,59,999) : null;
+    
+    let matchesPaymentDateRange = true;
+    if (pStart || pEnd) {
+      const studentPayments = explorerPayments.filter(p => p.pcaid === s.pcaid);
+      if (studentPayments.length === 0) {
+        matchesPaymentDateRange = false;
+      } else {
+        matchesPaymentDateRange = studentPayments.some(p => {
+          if (p.paid_date) {
+            const pTime = new Date(p.paid_date).setHours(0,0,0,0);
+            if ((!pStart || pTime >= pStart) && (!pEnd || pTime <= pEnd)) return true;
+          }
+          const insts = (p.installment || p.installments || []).filter((inst: any) => !inst.deleted_at);
+          return insts.some((inst: any) => {
+            if (inst.paid_date) {
+              const instTime = new Date(inst.paid_date).setHours(0,0,0,0);
+              return (!pStart || instTime >= pStart) && (!pEnd || instTime <= pEnd);
+            }
+            return false;
+          });
+        });
+      }
     }
 
     // Payment Status Logic
@@ -4945,7 +4976,7 @@ export function StudentExplorer() {
       })
     );
 
-    return matchesSearch && matchesPcaidSearch && matchesDistrict && matchesProperBatch && matchesJoinedBatch && matchesClasses && matchesPackages && matchesDateRange && matchesStudentType && matchesYear && matchesPaymentStatus;
+    return matchesSearch && matchesPcaidSearch && matchesDistrict && matchesProperBatch && matchesJoinedBatch && matchesClasses && matchesPackages && matchesDateRange && matchesPaymentDateRange && matchesStudentType && matchesYear && matchesPaymentStatus;
   });
 
   return (
@@ -5412,34 +5443,78 @@ export function StudentExplorer() {
 
               <div className="bg-gray-100 w-px my-1 hidden sm:block" />
 
-              {/* Date Range Filter */}
-              <div className="flex items-center px-2 py-1.5 w-full sm:w-auto border-t sm:border-t-0 sm:border-l border-gray-100 mt-1 sm:mt-0">
-                <Calendar size={14} className="text-gray-400 mr-2 flex-shrink-0" />
+              {/* Registration Date Range Filter */}
+              <div className="flex items-center px-2 py-1.5 w-full sm:w-auto border-t sm:border-t-0 sm:border-l border-gray-100 dark:border-gray-800 mt-1 sm:mt-0" title="Filter by Student Registration Date">
+                <span className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase mr-1.5 whitespace-nowrap">Reg:</span>
+                <Calendar size={13} className="text-gray-400 mr-1.5 flex-shrink-0" />
                 <div className="flex items-center gap-1 flex-1">
                   <input 
                     type="date"
                     value={filters.startDate}
                     onChange={(e) => setFilters({ ...filters, startDate: e.target.value })}
-                    className="text-[10px] font-bold text-gray-600 border-none outline-none bg-transparent cursor-pointer flex-1"
-                    title="From Date"
+                    className="text-[10px] font-bold text-gray-600 dark:text-gray-300 border-none outline-none bg-transparent cursor-pointer flex-1"
+                    title="Registration From Date"
                   />
-                  <span className="text-[10px] text-gray-300 font-bold">to</span>
+                  <span className="text-[10px] text-gray-300 dark:text-gray-600 font-bold">to</span>
                   <input 
                     type="date"
                     value={filters.endDate}
                     onChange={(e) => setFilters({ ...filters, endDate: e.target.value })}
-                    className="text-[10px] font-bold text-gray-600 border-none outline-none bg-transparent cursor-pointer flex-1"
-                    title="To Date"
+                    className="text-[10px] font-bold text-gray-600 dark:text-gray-300 border-none outline-none bg-transparent cursor-pointer flex-1"
+                    title="Registration To Date"
                   />
+                  {(filters.startDate || filters.endDate) && (
+                    <button
+                      onClick={() => setFilters({ ...filters, startDate: '', endDate: '' })}
+                      className="text-gray-400 hover:text-red-500 ml-0.5 cursor-pointer"
+                      title="Clear Registration Date"
+                    >
+                      <X size={12} />
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <div className="bg-gray-100 dark:bg-gray-800 w-px my-1 hidden sm:block" />
+
+              {/* Payment Date Range Filter */}
+              <div className="flex items-center px-2 py-1.5 w-full sm:w-auto border-t sm:border-t-0 sm:border-l border-gray-100 dark:border-gray-800 mt-1 sm:mt-0" title="Filter by Payment / Installment Date">
+                <span className="text-[10px] font-black text-teal-600 dark:text-teal-400 uppercase mr-1.5 whitespace-nowrap">Paid:</span>
+                <CreditCard size={13} className="text-teal-600 dark:text-teal-400 mr-1.5 flex-shrink-0" />
+                <div className="flex items-center gap-1 flex-1">
+                  <input 
+                    type="date"
+                    value={filters.paymentStartDate}
+                    onChange={(e) => setFilters({ ...filters, paymentStartDate: e.target.value })}
+                    className="text-[10px] font-bold text-teal-700 dark:text-teal-300 border-none outline-none bg-transparent cursor-pointer flex-1"
+                    title="Payment From Date"
+                  />
+                  <span className="text-[10px] text-gray-300 dark:text-gray-600 font-bold">to</span>
+                  <input 
+                    type="date"
+                    value={filters.paymentEndDate}
+                    onChange={(e) => setFilters({ ...filters, paymentEndDate: e.target.value })}
+                    className="text-[10px] font-bold text-teal-700 dark:text-teal-300 border-none outline-none bg-transparent cursor-pointer flex-1"
+                    title="Payment To Date"
+                  />
+                  {(filters.paymentStartDate || filters.paymentEndDate) && (
+                    <button
+                      onClick={() => setFilters({ ...filters, paymentStartDate: '', paymentEndDate: '' })}
+                      className="text-gray-400 hover:text-red-500 ml-0.5 cursor-pointer"
+                      title="Clear Payment Date"
+                    >
+                      <X size={12} />
+                    </button>
+                  )}
                 </div>
               </div>
 
               {/* Clear Filters Button */}
-              {(filters.district || filters.classes.length > 0 || filters.packages.length > 0 || filters.startDate || filters.endDate || filters.search || filters.properBatch || filters.joinedBatch || filters.pcaid || filters.studentType || filters.month || filters.year || filters.paymentStatus) && (
+              {(filters.district || filters.classes.length > 0 || filters.packages.length > 0 || filters.startDate || filters.endDate || filters.paymentStartDate || filters.paymentEndDate || filters.search || filters.properBatch || filters.joinedBatch || filters.pcaid || filters.studentType || filters.month || filters.year || filters.paymentStatus) && (
                 <>
-                  <div className="bg-gray-100 w-px my-1 hidden sm:block" />
+                  <div className="bg-gray-100 dark:bg-gray-800 w-px my-1 hidden sm:block" />
                   <button
-                    onClick={() => setFilters({ district: '', classes: [], packages: [], startDate: '', endDate: '', search: '', properBatch: '', joinedBatch: '', pcaid: '', studentType: '', month: '', year: '', paymentStatus: '' })}
+                    onClick={() => setFilters({ district: '', classes: [], packages: [], startDate: '', endDate: '', paymentStartDate: '', paymentEndDate: '', search: '', properBatch: '', joinedBatch: '', pcaid: '', studentType: '', month: '', year: '', paymentStatus: '' })}
                     className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg font-bold text-xs transition-colors cursor-pointer whitespace-nowrap border border-red-100 ml-1"
                     title="Clear All Filters"
                   >
