@@ -33,7 +33,9 @@ import {
   Sparkles,
   ArrowRight,
   ShieldCheck,
-  FileSpreadsheet
+  FileSpreadsheet,
+  Plus,
+  Trash2
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { SRI_LANKAN_DISTRICTS } from '../types';
@@ -97,6 +99,11 @@ interface SelfStudent {
   latestPayment?: PaymentRecord | null;
 }
 
+interface SelectedZoomWebinar {
+  webinar_id: string;
+  webinar_name: string;
+}
+
 interface ZoomRegistrationResult {
   pcaid: string;
   name: string;
@@ -104,6 +111,8 @@ interface ZoomRegistrationResult {
   status: 'Success' | 'Failed';
   joinUrl?: string;
   error?: string;
+  webinarId?: string;
+  webinarName?: string;
 }
 
 const DURATIONS = [
@@ -191,13 +200,36 @@ export default function SelfEnrolmentManagement() {
   const [showPaymentResultModal, setShowPaymentResultModal] = useState(false);
   const [paymentResults, setPaymentResults] = useState<PaymentProcessResult[]>([]);
 
-  // Section 2: Zoom Webinar State
-  const [webinarId, setWebinarId] = useState(() => localStorage.getItem('zoom_last_webinar_id') || '');
+  // Section 2: Zoom Multi-Webinar State
+  const [selectedWebinars, setSelectedWebinars] = useState<SelectedZoomWebinar[]>(() => {
+    try {
+      const stored = localStorage.getItem('zoom_self_enrolment_selected_webinars');
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [customWebinarId, setCustomWebinarId] = useState('');
+  const [webinarSearchFilter, setWebinarSearchFilter] = useState('');
   const [eventType, setEventType] = useState<'webinar' | 'meeting'>('webinar');
   const [isRegisteringWebinar, setIsRegisteringWebinar] = useState(false);
-  const [webinarProgress, setWebinarProgress] = useState<{ done: number; total: number }>({ done: 0, total: 0 });
+  const [webinarProgress, setWebinarProgress] = useState<{ done: number; total: number; currentWebinarName?: string }>({ done: 0, total: 0 });
   const [webinarResults, setWebinarResults] = useState<ZoomRegistrationResult[]>([]);
   const [showWebinarResultsModal, setShowWebinarResultsModal] = useState(false);
+  const [zoomCopiedLinks, setZoomCopiedLinks] = useState<{ [key: string]: boolean }>({});
+  const [zoomAllCopied, setZoomAllCopied] = useState(false);
+  const [modalWebinarFilter, setModalWebinarFilter] = useState<string>('all');
+  const [modalStatusFilter, setModalStatusFilter] = useState<'all' | 'success' | 'failed'>('all');
+  const [modalSearchQuery, setModalSearchQuery] = useState('');
+
+  // Persist selected webinars to localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem('zoom_self_enrolment_selected_webinars', JSON.stringify(selectedWebinars));
+    } catch (e) {
+      console.warn('Failed to save selected webinars to localStorage', e);
+    }
+  }, [selectedWebinars]);
 
   // Detail modal state
   const [viewingStudent, setViewingStudent] = useState<SelfStudent | null>(null);
@@ -637,11 +669,154 @@ export default function SelfEnrolmentManagement() {
     }
   };
 
-  // Section 2: Execute Zoom Webinar Registration
+  // Section 2: Zoom Multi-Webinar Selection Handlers
+  const toggleWebinarSelection = (w: { webinar_id: string; webinar_name: string }) => {
+    const cleanId = String(w.webinar_id).trim();
+    setSelectedWebinars((prev) => {
+      const exists = prev.some((item) => item.webinar_id === cleanId);
+      if (exists) {
+        return prev.filter((item) => item.webinar_id !== cleanId);
+      } else {
+        return [...prev, { webinar_id: cleanId, webinar_name: w.webinar_name }];
+      }
+    });
+  };
+
+  const handleSelectAllSavedWebinars = () => {
+    const nextList = [...selectedWebinars];
+    webinars.forEach((w) => {
+      const cleanId = String(w.webinar_id).trim();
+      if (!nextList.some((item) => item.webinar_id === cleanId)) {
+        nextList.push({ webinar_id: cleanId, webinar_name: w.webinar_name });
+      }
+    });
+    setSelectedWebinars(nextList);
+    toast.success(`Selected all ${webinars.length} saved webinars.`);
+  };
+
+  const handleClearSelectedWebinars = () => {
+    setSelectedWebinars([]);
+    toast.info("Cleared webinar selection.");
+  };
+
+  const handleAddCustomWebinar = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const raw = customWebinarId.trim();
+    if (!raw) return;
+
+    const ids = raw.split(/[\s,]+/).map((s) => s.trim().replace(/[-\s]/g, "")).filter(Boolean);
+    if (ids.length === 0) return;
+
+    let addedCount = 0;
+    const nextList = [...selectedWebinars];
+
+    ids.forEach((id) => {
+      if (!nextList.some((item) => item.webinar_id === id)) {
+        const matchSaved = webinars.find((sw) => String(sw.webinar_id).trim() === id);
+        nextList.push({
+          webinar_id: id,
+          webinar_name: matchSaved ? matchSaved.webinar_name : `Meeting/Webinar ${id}`
+        });
+        addedCount++;
+      }
+    });
+
+    setSelectedWebinars(nextList);
+    setCustomWebinarId("");
+    if (addedCount > 0) {
+      toast.success(`Added ${addedCount} webinar ID(s) to selection.`);
+    } else {
+      toast.info("Webinar ID is already selected.");
+    }
+  };
+
+  const handleRemoveSelectedWebinar = (webinarIdToRemove: string) => {
+    setSelectedWebinars((prev) => prev.filter((item) => item.webinar_id !== webinarIdToRemove));
+  };
+
+  // Filter saved webinars by search query
+  const filteredWebinars = useMemo(() => {
+    if (!webinarSearchFilter.trim()) return webinars;
+    const q = webinarSearchFilter.toLowerCase().trim();
+    return webinars.filter((w) => 
+      w.webinar_name.toLowerCase().includes(q) || String(w.webinar_id).includes(q)
+    );
+  }, [webinars, webinarSearchFilter]);
+
+  // Copy single join link
+  const handleCopySingleZoomLink = async (key: string, url: string) => {
+    try {
+      await navigator.clipboard.writeText(url);
+      setZoomCopiedLinks(prev => ({ ...prev, [key]: true }));
+      toast.success("Join URL copied to clipboard!");
+      setTimeout(() => {
+        setZoomCopiedLinks(prev => ({ ...prev, [key]: false }));
+      }, 2000);
+    } catch {
+      toast.error("Failed to copy link");
+    }
+  };
+
+  // Copy all join links formatted
+  const handleCopyAllZoomLinks = async () => {
+    const successItems = webinarResults.filter(r => r.status === 'Success' && r.joinUrl);
+    if (successItems.length === 0) {
+      toast.error("No successful registration links to copy.");
+      return;
+    }
+
+    const lines = [
+      `Physics Cube Academy - Zoom Registration Links (${new Date().toLocaleDateString()}):`,
+      ...successItems.map((r, idx) => 
+        `${idx + 1}. [${r.pcaid}] ${r.name} - ${r.webinarName || 'Webinar'} (ID: ${r.webinarId || '-'})\n   Join URL: ${r.joinUrl}`
+      )
+    ];
+
+    try {
+      await navigator.clipboard.writeText(lines.join("\n\n"));
+      setZoomAllCopied(true);
+      toast.success(`Copied ${successItems.length} join link(s) to clipboard!`);
+      setTimeout(() => setZoomAllCopied(false), 2000);
+    } catch {
+      toast.error("Failed to copy links");
+    }
+  };
+
+  // Unique webinars in results
+  const uniqueWebinarsInResults = useMemo(() => {
+    const map = new Map<string, string>();
+    webinarResults.forEach(r => {
+      if (r.webinarId) {
+        map.set(r.webinarId, r.webinarName || `Webinar ${r.webinarId}`);
+      }
+    });
+    return Array.from(map.entries()).map(([id, name]) => ({ id, name }));
+  }, [webinarResults]);
+
+  // Filtered modal results
+  const filteredModalResults = useMemo(() => {
+    return webinarResults.filter((r) => {
+      if (modalWebinarFilter !== 'all' && r.webinarId !== modalWebinarFilter) {
+        return false;
+      }
+      if (modalStatusFilter === 'success' && r.status !== 'Success') return false;
+      if (modalStatusFilter === 'failed' && r.status !== 'Failed') return false;
+      if (modalSearchQuery.trim()) {
+        const q = modalSearchQuery.toLowerCase().trim();
+        const matchPca = (r.pcaid || '').toLowerCase().includes(q);
+        const matchName = (r.name || '').toLowerCase().includes(q);
+        const matchEmail = (r.email || '').toLowerCase().includes(q);
+        const matchWeb = (r.webinarName || '').toLowerCase().includes(q) || (r.webinarId || '').includes(q);
+        return matchPca || matchName || matchEmail || matchWeb;
+      }
+      return true;
+    });
+  }, [webinarResults, modalWebinarFilter, modalStatusFilter, modalSearchQuery]);
+
+  // Section 2: Execute Zoom Multi-Webinar Registration
   const handleRegisterWebinar = async () => {
-    const cleanWebinarId = webinarId.trim();
-    if (!cleanWebinarId) {
-      toast.error('Please enter or select a valid Zoom Webinar/Meeting ID');
+    if (selectedWebinars.length === 0) {
+      toast.error('Please select or add at least one Zoom Webinar/Meeting ID');
       return;
     }
 
@@ -650,92 +825,111 @@ export default function SelfEnrolmentManagement() {
       return;
     }
 
+    // Map students: FirstName = PCA ID, LastName = Clean Student Name without Initials, Email = Student Mail
+    const targetPayload = selectedStudents.map(s => ({
+      pcaid: s.pcaid,
+      firstName: s.pcaid, // requirement: Firstname from PCAID
+      lastName: cleanStudentNameForZoom(s.name), // requirement: Lastname from clean name (initials removed)
+      email: (s.mail && s.mail.trim()) ? s.mail.trim() : `${s.pcaid.toLowerCase()}@physicsacademy.lk`
+    }));
+
+    const totalRegistrations = selectedWebinars.length * targetPayload.length;
     setIsRegisteringWebinar(true);
     setWebinarResults([]);
-    setWebinarProgress({ done: 0, total: selectedStudents.length });
+    setWebinarProgress({ done: 0, total: totalRegistrations });
     setShowWebinarResultsModal(true);
 
     const allResults: ZoomRegistrationResult[] = [];
     const BATCH_SIZE = 10;
+    let completedCount = 0;
 
     try {
-      // Save last webinar ID
-      localStorage.setItem('zoom_last_webinar_id', cleanWebinarId);
+      // Loop over every selected webinar sequentially
+      for (let wIdx = 0; wIdx < selectedWebinars.length; wIdx++) {
+        const currentWebinar = selectedWebinars[wIdx];
+        const cleanWebinarId = currentWebinar.webinar_id.trim();
 
-      // Map students: FirstName = PCA ID, LastName = Clean Student Name without Initials, Email = Student Mail
-      const targetPayload = selectedStudents.map(s => ({
-        firstName: s.pcaid, // requirement: Firstname from PCAID
-        lastName: cleanStudentNameForZoom(s.name), // requirement: Lastname from clean name (initials removed)
-        email: s.mail?.trim() || `${s.pcaid.toLowerCase()}@physicsacademy.lk`
-      }));
+        // Process students in batches of 10
+        for (let i = 0; i < targetPayload.length; i += BATCH_SIZE) {
+          const batchSlice = targetPayload.slice(i, i + BATCH_SIZE);
 
-      for (let i = 0; i < targetPayload.length; i += BATCH_SIZE) {
-        const batchSlice = targetPayload.slice(i, i + BATCH_SIZE);
-
-        try {
-          const response = await fetch('/api/register-batch', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              webinarId: cleanWebinarId,
-              eventType: eventType,
-              students: batchSlice
-            })
-          });
-
-          let data: any;
-          const contentType = response.headers.get('content-type') || '';
-          if (contentType.includes('application/json')) {
-            data = await response.json();
-          } else {
-            const text = await response.text();
-            throw new Error(`Server returned status ${response.status}: ${text.slice(0, 100)}`);
-          }
-
-          if (response.ok && data.results) {
-            const mappedBatchResults: ZoomRegistrationResult[] = (data.results as any[]).map(res => {
-              const matchedStudent = selectedStudents.find(
-                s => (s.mail && s.mail.toLowerCase() === res.email.toLowerCase()) || (s.pcaid.toLowerCase() === res.firstName?.toLowerCase())
-              );
-              return {
-                pcaid: matchedStudent?.pcaid || res.firstName || 'N/A',
-                name: matchedStudent?.name || res.lastName || 'Student',
-                email: res.email,
-                status: res.status,
-                joinUrl: res.joinUrl,
-                error: res.error
-              };
+          try {
+            const response = await fetch('/api/register-batch', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                webinarId: cleanWebinarId,
+                eventType: eventType,
+                students: batchSlice.map(s => ({
+                  firstName: s.firstName,
+                  lastName: s.lastName,
+                  email: s.email
+                }))
+              })
             });
-            allResults.push(...mappedBatchResults);
-          } else {
-            // Batch failed
+
+            let data: any;
+            const contentType = response.headers.get('content-type') || '';
+            if (contentType.includes('application/json')) {
+              data = await response.json();
+            } else {
+              const text = await response.text();
+              throw new Error(`Server returned status ${response.status}: ${text.slice(0, 100)}`);
+            }
+
+            if (response.ok && data.results) {
+              const mappedBatchResults: ZoomRegistrationResult[] = (data.results as any[]).map(res => {
+                const matchedStudent = selectedStudents.find(
+                  s => (s.mail && s.mail.toLowerCase() === res.email?.toLowerCase()) || (s.pcaid.toLowerCase() === res.firstName?.toLowerCase())
+                );
+                return {
+                  pcaid: matchedStudent?.pcaid || res.firstName || 'N/A',
+                  name: matchedStudent?.name || res.lastName || 'Student',
+                  email: res.email,
+                  status: res.status,
+                  joinUrl: res.joinUrl,
+                  error: res.error,
+                  webinarId: cleanWebinarId,
+                  webinarName: currentWebinar.webinar_name
+                };
+              });
+              allResults.push(...mappedBatchResults);
+            } else {
+              // Batch failed
+              batchSlice.forEach(s => {
+                allResults.push({
+                  pcaid: s.pcaid,
+                  name: s.lastName,
+                  email: s.email,
+                  status: 'Failed',
+                  error: data.error || data.message || 'Registration failed',
+                  webinarId: cleanWebinarId,
+                  webinarName: currentWebinar.webinar_name
+                });
+              });
+            }
+          } catch (err: any) {
             batchSlice.forEach(s => {
               allResults.push({
-                pcaid: s.firstName,
+                pcaid: s.pcaid,
                 name: s.lastName,
                 email: s.email,
                 status: 'Failed',
-                error: data.error || 'Registration failed'
+                error: err.message || 'API request failure',
+                webinarId: cleanWebinarId,
+                webinarName: currentWebinar.webinar_name
               });
             });
           }
-        } catch (err: any) {
-          batchSlice.forEach(s => {
-            allResults.push({
-              pcaid: s.firstName,
-              name: s.lastName,
-              email: s.email,
-              status: 'Failed',
-              error: err.message || 'API request failure'
-            });
-          });
-        }
 
-        setWebinarProgress({
-          done: Math.min(i + BATCH_SIZE, targetPayload.length),
-          total: targetPayload.length
-        });
-        setWebinarResults([...allResults]);
+          completedCount += batchSlice.length;
+          setWebinarProgress({
+            done: completedCount,
+            total: totalRegistrations,
+            currentWebinarName: currentWebinar.webinar_name
+          });
+          setWebinarResults([...allResults]);
+        }
       }
 
       const successCount = allResults.filter(r => r.status === 'Success').length;
@@ -746,14 +940,16 @@ export default function SelfEnrolmentManagement() {
         admin_username: user?.username || 'admin',
         action_type: 'INSERT',
         entity_type: 'webinar_registration',
-        entity_id: cleanWebinarId,
-        details: `Zoom Webinar ${cleanWebinarId} registered: ${successCount} successful, ${failCount} failed.`
+        entity_id: selectedWebinars.map(w => w.webinar_id).join(', '),
+        details: `Zoom Multi-Webinar Registration: ${selectedWebinars.length} webinars, ${selectedStudents.length} students. ${successCount} successful, ${failCount} failed.`
       });
 
-      if (successCount > 0) {
-        toast.success(`Zoom registration complete! ${successCount} successful, ${failCount} failed.`);
+      if (successCount > 0 && failCount === 0) {
+        toast.success(`Zoom registration complete! All ${successCount} registrations successful across ${selectedWebinars.length} webinar(s).`);
+      } else if (successCount > 0) {
+        toast.success(`Zoom registration complete: ${successCount} successful, ${failCount} failed.`);
       } else {
-        toast.error(`Zoom registration finished with ${failCount} errors.`);
+        toast.error(`Zoom registration finished with ${failCount} failures.`);
       }
     } catch (err: any) {
       console.error("Zoom batch error:", err);
@@ -763,15 +959,17 @@ export default function SelfEnrolmentManagement() {
     }
   };
 
-  // Helper to copy join links CSV
+  // Helper to export CSV
   const handleExportZoomCsv = () => {
     if (webinarResults.length === 0) return;
 
-    const headers = ['PCA ID', 'Name', 'Email', 'Status', 'Join URL', 'Error'];
+    const headers = ['PCA ID', 'Name', 'Email', 'Webinar Name', 'Webinar ID', 'Status', 'Join URL', 'Error'];
     const rows = webinarResults.map(r => [
       `"${r.pcaid}"`,
       `"${r.name}"`,
       `"${r.email}"`,
+      `"${r.webinarName || ''}"`,
+      `"${r.webinarId || ''}"`,
       `"${r.status}"`,
       `"${r.joinUrl || ''}"`,
       `"${r.error || ''}"`
@@ -781,7 +979,7 @@ export default function SelfEnrolmentManagement() {
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement('a');
     link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `zoom_registration_${webinarId || 'webinar'}_${new Date().toISOString().split('T')[0]}.csv`);
+    link.setAttribute('download', `zoom_registration_results_${new Date().toISOString().split('T')[0]}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -806,7 +1004,7 @@ export default function SelfEnrolmentManagement() {
         {/* ============================================================ */}
         {/* LEFT COLUMN: Collapsible Action Panels (Payment & Webinar)  */}
         {/* ============================================================ */}
-        <div className="lg:col-span-4 space-y-4 sticky top-20">
+        <div className="lg:col-span-4 space-y-4 lg:sticky lg:top-20 lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto lg:overscroll-y-contain lg:pr-2 pb-6">
           
           {/* Selected Count Indicator Banner */}
           <div className="p-3.5 rounded-2xl bg-gradient-to-r from-teal-50 to-blue-50 dark:from-teal-950/40 dark:to-blue-950/40 border border-teal-100 dark:border-teal-900/40 shadow-xs flex items-center justify-between">
@@ -1090,43 +1288,160 @@ export default function SelfEnrolmentManagement() {
             {isWebinarOpen && (
               <div className="p-4 space-y-3.5">
                 
-                {/* Webinar ID text input & Preset Selector */}
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-gray-700 dark:text-gray-300 flex items-center justify-between">
-                    <span>Webinar / Meeting ID <span className="text-red-500">*</span></span>
+                {/* Header with Title & Quick Actions */}
+                <div className="flex items-center justify-between gap-1 pb-1 border-b border-gray-150 dark:border-gray-800">
+                  <div className="flex items-center gap-1.5">
+                    <label className="text-xs font-black text-gray-800 dark:text-gray-200">
+                      Target Webinars / Meetings
+                    </label>
+                    <span className="text-[10px] font-extrabold px-1.5 py-0.2 rounded-full bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                      Multi
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1.5 text-[11px] font-bold">
                     {webinars.length > 0 && (
-                      <span className="text-[10px] font-normal text-gray-400">{webinars.length} configured</span>
+                      <>
+                        <button
+                          type="button"
+                          onClick={handleSelectAllSavedWebinars}
+                          disabled={isRegisteringWebinar}
+                          className="text-blue-600 hover:text-blue-700 dark:text-blue-400 hover:underline cursor-pointer"
+                        >
+                          Select All ({webinars.length})
+                        </button>
+                        <span className="text-gray-300 dark:text-gray-700">|</span>
+                      </>
                     )}
-                  </label>
-                  
-                  {/* Preset dropdown if webinars exist */}
-                  {webinars.length > 0 && (
-                    <select
-                      onChange={(e) => {
-                        if (e.target.value) setWebinarId(e.target.value);
-                      }}
-                      className="w-full mb-2 px-3 py-1.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-xs text-gray-700 dark:text-gray-300"
-                    >
-                      <option value="">-- Choose from configured webinars --</option>
-                      {webinars.map(w => (
-                        <option key={w.id} value={w.webinar_id}>
-                          {w.webinar_name} ({w.webinar_id})
-                        </option>
-                      ))}
-                    </select>
-                  )}
-
-                  <input
-                    type="text"
-                    value={webinarId}
-                    onChange={(e) => setWebinarId(e.target.value)}
-                    placeholder="e.g. 84567891234"
-                    className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-mono font-medium text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-                  />
+                    {selectedWebinars.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={handleClearSelectedWebinars}
+                        disabled={isRegisteringWebinar}
+                        className="text-red-500 hover:text-red-600 hover:underline cursor-pointer"
+                      >
+                        Clear
+                      </button>
+                    )}
+                  </div>
                 </div>
 
+                {/* Search Filter for Saved Webinars */}
+                {webinars.length > 0 && (
+                  <div className="relative">
+                    <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                    <input
+                      type="text"
+                      value={webinarSearchFilter}
+                      onChange={(e) => setWebinarSearchFilter(e.target.value)}
+                      placeholder="Filter saved webinars..."
+                      disabled={isRegisteringWebinar}
+                      className="w-full pl-7 pr-3 py-1.5 text-xs bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    />
+                  </div>
+                )}
+
+                {/* Saved Webinars List (Scrollable Checklist) */}
+                {webinars.length > 0 ? (
+                  <div className="max-h-40 overflow-y-auto space-y-1.5 pr-1 border border-gray-200 dark:border-gray-750 rounded-xl p-2 bg-gray-50/50 dark:bg-gray-850/50">
+                    {filteredWebinars.length > 0 ? (
+                      filteredWebinars.map((w) => {
+                        const isChecked = selectedWebinars.some((sw) => sw.webinar_id === String(w.webinar_id).trim());
+                        return (
+                          <div
+                            key={w.id}
+                            onClick={() => !isRegisteringWebinar && toggleWebinarSelection({ webinar_id: String(w.webinar_id).trim(), webinar_name: w.webinar_name })}
+                            className={`flex items-start gap-2 p-2 rounded-lg border text-left cursor-pointer transition-all ${
+                              isChecked
+                                ? 'bg-blue-50 dark:bg-blue-950/40 border-blue-300 dark:border-blue-700 text-blue-950 dark:text-blue-200 shadow-2xs'
+                                : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:border-gray-300'
+                            } ${isRegisteringWebinar ? 'opacity-60 cursor-not-allowed' : ''}`}
+                          >
+                            <div className="mt-0.5 shrink-0 text-blue-600 dark:text-blue-400">
+                              {isChecked ? <CheckSquare size={15} /> : <Square size={15} className="text-gray-400" />}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="text-xs font-bold truncate leading-tight">{w.webinar_name}</p>
+                              <p className="text-[10px] font-mono text-gray-500 dark:text-gray-400 mt-0.5">ID: {w.webinar_id}</p>
+                            </div>
+                          </div>
+                        );
+                      })
+                    ) : (
+                      <p className="text-center py-2 text-xs text-gray-400">No webinars matching filter</p>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-xs text-gray-400 italic">No saved webinars configured.</p>
+                )}
+
+                {/* Custom Webinar ID Input */}
+                <div className="space-y-1">
+                  <label className="text-[11px] font-bold text-gray-600 dark:text-gray-400">
+                    Add Custom Webinar / Meeting ID
+                  </label>
+                  <div className="flex gap-1.5">
+                    <input
+                      type="text"
+                      value={customWebinarId}
+                      onChange={(e) => setCustomWebinarId(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleAddCustomWebinar();
+                        }
+                      }}
+                      placeholder="e.g. 84567891234, 82091392615"
+                      disabled={isRegisteringWebinar}
+                      className="flex-1 px-2.5 py-1.5 text-xs font-mono bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleAddCustomWebinar}
+                      disabled={isRegisteringWebinar || !customWebinarId.trim()}
+                      className="px-3 py-1.5 bg-gray-800 hover:bg-gray-900 dark:bg-gray-700 text-white rounded-lg text-xs font-bold transition-colors disabled:opacity-50 cursor-pointer shrink-0"
+                    >
+                      + Add
+                    </button>
+                  </div>
+                </div>
+
+                {/* Selected Webinars Chips */}
+                {selectedWebinars.length > 0 && (
+                  <div className="space-y-1.5 pt-1">
+                    <div className="flex items-center justify-between text-[11px] font-bold text-gray-600 dark:text-gray-400">
+                      <span>Selected Webinars ({selectedWebinars.length}):</span>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto pr-1">
+                      {selectedWebinars.map((item) => (
+                        <span
+                          key={item.webinar_id}
+                          className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-100/80 dark:bg-blue-900/50 text-blue-900 dark:text-blue-200 rounded-md text-[11px] font-medium border border-blue-200 dark:border-blue-800 shadow-2xs"
+                        >
+                          <Video size={11} className="text-blue-600 shrink-0" />
+                          <span className="truncate max-w-[130px]" title={item.webinar_name}>
+                            {item.webinar_name}
+                          </span>
+                          <span className="font-mono text-[9px] text-blue-700 dark:text-blue-300">
+                            ({item.webinar_id})
+                          </span>
+                          {!isRegisteringWebinar && (
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveSelectedWebinar(item.webinar_id)}
+                              className="hover:bg-blue-200 dark:hover:bg-blue-800 p-0.5 rounded text-blue-700 dark:text-blue-300 cursor-pointer ml-0.5"
+                              title="Remove"
+                            >
+                              <X size={10} />
+                            </button>
+                          )}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {/* Event Type Toggle */}
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 pt-1">
                   <button
                     type="button"
                     onClick={() => setEventType('webinar')}
@@ -1154,9 +1469,14 @@ export default function SelfEnrolmentManagement() {
                 {/* Requirement note banner */}
                 <div className="p-2.5 rounded-xl bg-blue-50/70 dark:bg-blue-950/30 border border-blue-100 dark:border-blue-900/40 text-[11px] text-blue-900 dark:text-blue-200 flex items-start gap-2">
                   <Info size={14} className="text-blue-600 shrink-0 mt-0.5" />
-                  <p className="leading-tight">
-                    Student format: <strong>First Name = PCA ID</strong>, <strong>Last Name = Student Name</strong>.
-                  </p>
+                  <div className="leading-tight">
+                    <p>Student format: <strong>First Name = PCA ID</strong>, <strong>Last Name = Student Name</strong>.</p>
+                    {selectedCount > 0 && selectedWebinars.length > 0 && (
+                      <p className="mt-1 font-bold text-blue-700 dark:text-blue-300">
+                        Total: {selectedCount} student(s) × {selectedWebinars.length} webinar(s) = {selectedCount * selectedWebinars.length} registrations.
+                      </p>
+                    )}
+                  </div>
                 </div>
 
                 {/* Register Button */}
@@ -1164,9 +1484,9 @@ export default function SelfEnrolmentManagement() {
                   <button
                     type="button"
                     onClick={handleRegisterWebinar}
-                    disabled={isRegisteringWebinar || selectedCount === 0 || !webinarId.trim()}
+                    disabled={isRegisteringWebinar || selectedCount === 0 || selectedWebinars.length === 0}
                     className={`w-full py-2.5 px-4 rounded-xl text-xs font-bold text-white transition-all shadow-xs flex items-center justify-center gap-2 cursor-pointer ${
-                      selectedCount === 0 || isRegisteringWebinar || !webinarId.trim()
+                      selectedCount === 0 || isRegisteringWebinar || selectedWebinars.length === 0
                         ? 'bg-gray-300 dark:bg-gray-800 text-gray-500 cursor-not-allowed'
                         : 'bg-blue-600 hover:bg-blue-700 active:bg-blue-800'
                     }`}
@@ -1174,15 +1494,31 @@ export default function SelfEnrolmentManagement() {
                     {isRegisteringWebinar ? (
                       <>
                         <RefreshCw size={14} className="animate-spin" />
-                        <span>Registering {webinarProgress.done}/{webinarProgress.total}...</span>
+                        <span>
+                          Registering {webinarProgress.done}/{webinarProgress.total}...
+                        </span>
                       </>
                     ) : (
                       <>
                         <Video size={14} />
-                        <span>Register</span>
+                        <span>
+                          {selectedWebinars.length > 0 && selectedCount > 0
+                            ? `Register ${selectedCount} Students in ${selectedWebinars.length} Webinar(s)`
+                            : 'Register'}
+                        </span>
                       </>
                     )}
                   </button>
+                  {selectedCount === 0 && (
+                    <p className="text-[10px] text-gray-400 text-center mt-1">
+                      Check students in the list on the right first
+                    </p>
+                  )}
+                  {selectedCount > 0 && selectedWebinars.length === 0 && (
+                    <p className="text-[10px] text-amber-600 dark:text-amber-400 text-center mt-1">
+                      Select at least 1 webinar from the checklist above
+                    </p>
+                  )}
                 </div>
 
                 {/* View Previous Results button if available */}
@@ -1589,25 +1925,36 @@ export default function SelfEnrolmentManagement() {
       {/* ============================================================ */}
       {showWebinarResultsModal && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl w-full max-w-3xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl w-full max-w-4xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
             
             {/* Modal Header */}
             <div className="p-4 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between bg-gray-50 dark:bg-gray-800/60">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-blue-100 dark:bg-blue-950 text-blue-600 dark:text-blue-300 flex items-center justify-center">
-                  <Video size={18} />
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-blue-100 dark:bg-blue-950 text-blue-600 dark:text-blue-300 flex items-center justify-center">
+                  <Video size={19} />
                 </div>
                 <div>
                   <h3 className="text-base font-black text-gray-900 dark:text-gray-100">
-                    Zoom Webinar Registration Results
+                    Zoom Multi-Webinar Registration Results
                   </h3>
                   <p className="text-xs text-gray-500 dark:text-gray-400">
-                    Webinar ID: <strong className="font-mono text-blue-600 dark:text-blue-400">{webinarId}</strong>
+                    Total: <strong className="text-blue-600 dark:text-blue-400">{webinarResults.length}</strong> registration(s) across <strong className="text-blue-600 dark:text-blue-400">{uniqueWebinarsInResults.length}</strong> webinar(s)
                   </p>
                 </div>
               </div>
 
               <div className="flex items-center gap-2">
+                {webinarResults.filter(r => r.status === 'Success' && r.joinUrl).length > 0 && !isRegisteringWebinar && (
+                  <button
+                    type="button"
+                    onClick={handleCopyAllZoomLinks}
+                    className="px-3 py-1.5 rounded-xl bg-teal-50 dark:bg-teal-950/70 border border-teal-200 dark:border-teal-800 hover:bg-teal-100 text-xs font-bold text-teal-800 dark:text-teal-300 flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
+                    title="Copy all join URLs to clipboard"
+                  >
+                    {zoomAllCopied ? <Check size={14} className="text-teal-600" /> : <Copy size={14} />}
+                    <span>{zoomAllCopied ? "Copied All!" : "Copy All Links"}</span>
+                  </button>
+                )}
                 {webinarResults.length > 0 && !isRegisteringWebinar && (
                   <button
                     type="button"
@@ -1621,7 +1968,7 @@ export default function SelfEnrolmentManagement() {
                 <button
                   type="button"
                   onClick={() => setShowWebinarResultsModal(false)}
-                  className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 rounded-lg"
+                  className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 rounded-lg cursor-pointer"
                 >
                   <X size={18} />
                 </button>
@@ -1637,7 +1984,14 @@ export default function SelfEnrolmentManagement() {
                   <div className="flex items-center justify-between text-xs font-bold text-blue-900 dark:text-blue-200">
                     <span className="flex items-center gap-2">
                       <RefreshCw size={14} className="animate-spin text-blue-600" />
-                      Registering students with Zoom API...
+                      <span>
+                        Registering students with Zoom API...
+                        {webinarProgress.currentWebinarName && (
+                          <strong className="ml-1 text-blue-700 dark:text-blue-300 font-bold">
+                            ({webinarProgress.currentWebinarName})
+                          </strong>
+                        )}
+                      </span>
                     </span>
                     <span>{webinarProgress.done} / {webinarProgress.total}</span>
                   </div>
@@ -1652,9 +2006,9 @@ export default function SelfEnrolmentManagement() {
 
               {/* Summary Stats */}
               {webinarResults.length > 0 && (
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   <div className="p-3 bg-gray-50 dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700">
-                    <p className="text-[10px] font-bold text-gray-500 uppercase">Total Processed</p>
+                    <p className="text-[10px] font-bold text-gray-500 uppercase">Total Registrations</p>
                     <p className="text-lg font-black text-gray-900 dark:text-gray-100">{webinarResults.length}</p>
                   </div>
                   <div className="p-3 bg-emerald-50 dark:bg-emerald-950/40 rounded-xl border border-emerald-200 dark:border-emerald-900/40">
@@ -1669,70 +2023,180 @@ export default function SelfEnrolmentManagement() {
                       {webinarResults.filter(r => r.status === 'Failed').length}
                     </p>
                   </div>
+                  <div className="p-3 bg-blue-50 dark:bg-blue-950/40 rounded-xl border border-blue-200 dark:border-blue-900/40">
+                    <p className="text-[10px] font-bold text-blue-700 uppercase">Webinars Covered</p>
+                    <p className="text-lg font-black text-blue-700 dark:text-blue-400">
+                      {uniqueWebinarsInResults.length}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* In-Modal Filter Bar */}
+              {webinarResults.length > 0 && (
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-2.5 pt-1">
+                  <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto">
+                    {/* Status Tabs */}
+                    <div className="flex bg-gray-100 dark:bg-gray-800 p-0.5 rounded-lg border border-gray-200 dark:border-gray-700 text-xs">
+                      <button
+                        type="button"
+                        onClick={() => setModalStatusFilter('all')}
+                        className={`px-2.5 py-1 rounded-md font-bold transition-all cursor-pointer ${
+                          modalStatusFilter === 'all'
+                            ? 'bg-white dark:bg-gray-900 text-gray-900 dark:text-white shadow-2xs'
+                            : 'text-gray-500 hover:text-gray-800 dark:hover:text-gray-200'
+                        }`}
+                      >
+                        All ({webinarResults.length})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setModalStatusFilter('success')}
+                        className={`px-2.5 py-1 rounded-md font-bold transition-all cursor-pointer ${
+                          modalStatusFilter === 'success'
+                            ? 'bg-white dark:bg-gray-900 text-emerald-700 dark:text-emerald-400 shadow-2xs'
+                            : 'text-gray-500 hover:text-gray-800 dark:hover:text-gray-200'
+                        }`}
+                      >
+                        Success ({webinarResults.filter(r => r.status === 'Success').length})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setModalStatusFilter('failed')}
+                        className={`px-2.5 py-1 rounded-md font-bold transition-all cursor-pointer ${
+                          modalStatusFilter === 'failed'
+                            ? 'bg-white dark:bg-gray-900 text-rose-700 dark:text-rose-400 shadow-2xs'
+                            : 'text-gray-500 hover:text-gray-800 dark:hover:text-gray-200'
+                        }`}
+                      >
+                        Failed ({webinarResults.filter(r => r.status === 'Failed').length})
+                      </button>
+                    </div>
+
+                    {/* Webinar Dropdown Filter */}
+                    {uniqueWebinarsInResults.length > 1 && (
+                      <select
+                        value={modalWebinarFilter}
+                        onChange={(e) => setModalWebinarFilter(e.target.value)}
+                        className="px-2.5 py-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-xs font-medium text-gray-700 dark:text-gray-300"
+                      >
+                        <option value="all">All Webinars ({uniqueWebinarsInResults.length})</option>
+                        {uniqueWebinarsInResults.map(w => (
+                          <option key={w.id} value={w.id}>
+                            {w.name} ({w.id})
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+
+                  {/* Search Input */}
+                  <div className="relative w-full sm:w-64">
+                    <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                    <input
+                      type="text"
+                      value={modalSearchQuery}
+                      onChange={(e) => setModalSearchQuery(e.target.value)}
+                      placeholder="Search results..."
+                      className="w-full pl-7 pr-3 py-1 text-xs bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-gray-900 dark:text-gray-100 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    />
+                  </div>
                 </div>
               )}
 
               {/* Table of results */}
-              <div className="border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden">
+              <div className="border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden max-h-[380px] overflow-y-auto">
                 <table className="w-full text-left text-xs">
-                  <thead className="bg-gray-50 dark:bg-gray-800 text-gray-500 dark:text-gray-400 text-[10px] font-bold uppercase">
+                  <thead className="sticky top-0 z-10 bg-gray-50 dark:bg-gray-800 text-gray-500 dark:text-gray-400 text-[10px] font-bold uppercase shadow-2xs border-b border-gray-200 dark:border-gray-750">
                     <tr>
                       <th className="p-2.5">PCA ID</th>
                       <th className="p-2.5">Student Name</th>
+                      <th className="p-2.5">Webinar</th>
                       <th className="p-2.5">Status</th>
                       <th className="p-2.5">Join Link / Error</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-                    {webinarResults.map((r, idx) => (
-                      <tr key={idx} className="hover:bg-gray-50/50 dark:hover:bg-gray-800/30">
-                        <td className="p-2.5 font-mono font-bold text-teal-700 dark:text-teal-400">
-                          {r.pcaid}
-                        </td>
-                        <td className="p-2.5 font-semibold text-gray-900 dark:text-gray-100">
-                          {r.name}
-                        </td>
-                        <td className="p-2.5">
-                          {r.status === 'Success' ? (
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300">
-                              Success
-                            </span>
-                          ) : (
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 dark:bg-rose-950 text-rose-800 dark:text-rose-300">
-                              Failed
-                            </span>
-                          )}
-                        </td>
-                        <td className="p-2.5">
-                          {r.joinUrl ? (
-                            <div className="flex items-center gap-1.5 max-w-xs">
-                              <span className="truncate text-blue-600 dark:text-blue-400 text-[11px] font-mono">
-                                {r.joinUrl}
-                              </span>
-                              <button
-                                type="button"
-                                onClick={() => copyToClipboard(r.joinUrl!, 'Join URL')}
-                                className="p-1 text-gray-400 hover:text-blue-600"
-                                title="Copy Link"
-                              >
-                                <Copy size={12} />
-                              </button>
-                            </div>
-                          ) : (
-                            <span className="text-rose-600 dark:text-rose-400 text-[11px]">
-                              {r.error || 'Registration failed'}
-                            </span>
-                          )}
+                    {filteredModalResults.length === 0 ? (
+                      <tr>
+                        <td colSpan={5} className="py-8 text-center text-gray-400 text-xs">
+                          No results matching filter
                         </td>
                       </tr>
-                    ))}
+                    ) : (
+                      filteredModalResults.map((r, idx) => {
+                        const copyKey = `${r.webinarId}_${r.pcaid}_${idx}`;
+                        const isCopied = zoomCopiedLinks[copyKey];
+
+                        return (
+                          <tr key={idx} className="hover:bg-gray-50/50 dark:hover:bg-gray-800/30">
+                            <td className="p-2.5 font-mono font-bold text-teal-700 dark:text-teal-400 whitespace-nowrap">
+                              {r.pcaid}
+                            </td>
+                            <td className="p-2.5 font-semibold text-gray-900 dark:text-gray-100">
+                              <div>{r.name}</div>
+                              <div className="text-[10px] font-mono text-gray-400">{r.email}</div>
+                            </td>
+                            <td className="p-2.5">
+                              <div className="font-bold text-gray-800 dark:text-gray-200 truncate max-w-[200px]" title={r.webinarName}>
+                                {r.webinarName || `Webinar ${r.webinarId}`}
+                              </div>
+                              <div className="font-mono text-[10px] text-gray-500 dark:text-gray-400">
+                                ID: {r.webinarId || '-'}
+                              </div>
+                            </td>
+                            <td className="p-2.5 whitespace-nowrap">
+                              {r.status === 'Success' ? (
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300">
+                                  Success
+                                </span>
+                              ) : (
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 dark:bg-rose-950 text-rose-800 dark:text-rose-300">
+                                  Failed
+                                </span>
+                              )}
+                            </td>
+                            <td className="p-2.5">
+                              {r.joinUrl ? (
+                                <div className="flex items-center gap-1.5 max-w-sm">
+                                  <a
+                                    href={r.joinUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="truncate text-blue-600 dark:text-blue-400 text-[11px] font-mono hover:underline"
+                                    title={r.joinUrl}
+                                  >
+                                    {r.joinUrl}
+                                  </a>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleCopySingleZoomLink(copyKey, r.joinUrl!)}
+                                    className="p-1 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors cursor-pointer shrink-0"
+                                    title="Copy Link"
+                                  >
+                                    {isCopied ? <Check size={12} className="text-emerald-600" /> : <Copy size={12} />}
+                                  </button>
+                                </div>
+                              ) : (
+                                <span className="text-rose-600 dark:text-rose-400 text-[11px]">
+                                  {r.error || 'Registration failed'}
+                                </span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
                   </tbody>
                 </table>
               </div>
             </div>
 
             {/* Modal Footer */}
-            <div className="p-3 bg-gray-50 dark:bg-gray-800 border-t border-gray-200 dark:border-gray-800 flex justify-end">
+            <div className="p-3 bg-gray-50 dark:bg-gray-800 border-t border-gray-200 dark:border-gray-800 flex items-center justify-between">
+              <span className="text-xs text-gray-500 dark:text-gray-400">
+                Showing {filteredModalResults.length} of {webinarResults.length} registration records
+              </span>
               <button
                 type="button"
                 onClick={() => setShowWebinarResultsModal(false)}

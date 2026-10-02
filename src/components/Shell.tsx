@@ -21,7 +21,8 @@ import {
   Home,
   Trash2,
   Smartphone,
-  UserCheck
+  UserCheck,
+  CreditCard
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { logTransaction } from '../lib/transactions';
@@ -81,14 +82,19 @@ const navSections: NavSection[] = [
     title: 'Student Enrolment',
     items: [
       { label: 'New Student', path: '/admin/student-form', icon: <Settings size={18} />, roles: ['admin', 'super_admin'] },
+      { label: 'Students', path: '/admin/student-explorer', icon: <Users size={18} />, roles: ['admin', 'super_admin'] },
+    ]
+  },
+  {
+    title: 'Payment & Registration',
+    items: [
       { 
-        label: 'Self Enrolment', 
+        label: 'Payment & Registration BULK', 
         path: '/admin/self-enrolment', 
         matchPaths: ['/admin/self-enrolment', '/admin/self-registered'],
-        icon: <UserCheck size={18} />, 
+        icon: <CreditCard size={18} />, 
         roles: ['admin', 'super_admin'] 
       },
-      { label: 'Students', path: '/admin/student-explorer', icon: <Users size={18} />, roles: ['admin', 'super_admin'] },
     ]
   },
   {
@@ -323,6 +329,8 @@ export function Topbar({
       activeLabel = 'Dashboard';
     } else if (location.pathname === '/admin/student-explorer') {
       activeLabel = 'Students';
+    } else if (location.pathname === '/admin/self-enrolment' || location.pathname === '/admin/self-registered') {
+      activeLabel = 'Payment & Registration BULK';
     }
   }
 
