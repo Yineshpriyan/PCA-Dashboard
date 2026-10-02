@@ -24,7 +24,6 @@ import {
   Share2
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
-import { ZoomNavTabs } from "../components/NavTabs";
 import { cleanStudentNameForZoom } from "../lib/utils";
 import { supabase } from "../lib/supabase";
 
@@ -413,18 +412,15 @@ export default function RegisterIndividualStudent() {
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-8 space-y-6">
-      {/* Top Navigation Tabs */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-xl font-black text-gray-900 dark:text-white flex items-center gap-2">
-            <Video className="text-teal-600 dark:text-teal-400" size={24} />
-            Individual Student Zoom Registration
-          </h1>
-          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-            Register a single student into <strong className="text-teal-700 dark:text-teal-300">multiple Zoom webinars or meetings at the same time</strong> with 1-click batching.
-          </p>
-        </div>
-        <ZoomNavTabs />
+      {/* Top Header */}
+      <div>
+        <h1 className="text-xl font-black text-gray-900 dark:text-white flex items-center gap-2">
+          <Video className="text-teal-600 dark:text-teal-400" size={24} />
+          Individual Student Zoom Registration
+        </h1>
+        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+          Register a single student into <strong className="text-teal-700 dark:text-teal-300">multiple Zoom webinars or meetings at the same time</strong> with 1-click batching.
+        </p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
