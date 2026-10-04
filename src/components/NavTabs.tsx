@@ -278,7 +278,7 @@ export function AnalysisNavTabs() {
         )}
       >
         <CreditCard size={14} className={activeTab === 'side-by-side' ? "text-teal-600 dark:text-teal-400" : "text-gray-400"} />
-        <span>Side-by-Side (Payment & Zoom)</span>
+        <span>Payment vs Zoom</span>
       </button>
       <button
         onClick={() => setTab('continuity')}

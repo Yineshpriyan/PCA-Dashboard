@@ -59,7 +59,7 @@ export default function AnalysisManagement() {
 
   const [payYearFilter, setPayYearFilter] = useState<string>(currentYearStr);
   const [payMonthFilter, setPayMonthFilter] = useState<string>(currentMonthName);
-  const [payClassFilter, setPayClassFilter] = useState<string>('all');
+  const [payClassFilter, setPayClassFilter] = useState<string>('none');
   const [paySearchQuery, setPaySearchQuery] = useState<string>('');
   const [payMissingSearchQuery, setPayMissingSearchQuery] = useState<string>('');
 
@@ -68,7 +68,7 @@ export default function AnalysisManagement() {
   // ---------------------------------------------------------------------------
   const [zoomYearFilter, setZoomYearFilter] = useState<string>(currentYearStr);
   const [zoomMonthFilter, setZoomMonthFilter] = useState<string>(currentMonthName);
-  const [selectedWebinarId, setSelectedWebinarId] = useState<string>('all');
+  const [selectedWebinarId, setSelectedWebinarId] = useState<string>('none');
   const [zoomSearchQuery, setZoomSearchQuery] = useState<string>('');
   const [zoomMissingSearchQuery, setZoomMissingSearchQuery] = useState<string>('');
 
@@ -167,11 +167,6 @@ export default function AnalysisManagement() {
       if (zoomRegRes.data) setZoomRegistrations(zoomRegRes.data as ZoomRegistrationRecord[]);
       if (classesRes.data) setClasses(classesRes.data);
       if (webinarsRes.data) setWebinars(webinarsRes.data);
-
-      // Auto-select first webinar if none selected
-      if (webinarsRes.data && webinarsRes.data.length > 0 && selectedWebinarId === 'all') {
-        setSelectedWebinarId(webinarsRes.data[0].webinar_id);
-      }
     } catch (err: any) {
       console.error('Error fetching analysis data:', err);
       toast.error('Failed to load analysis records: ' + (err.message || 'Unknown error'));
@@ -262,6 +257,7 @@ export default function AnalysisManagement() {
         if (!monthMatch) return false;
 
         // 2. Class match:
+        if (payClassFilter === 'none') return false;
         if (payClassFilter === 'all') return true;
 
         const cLower = payClassFilter.toLowerCase().trim();
@@ -367,7 +363,8 @@ export default function AnalysisManagement() {
     return zoomRegistrations.filter(zr => {
       if (zr.status !== 'Success') return false;
 
-      // Webinar filter
+      // Webinar filter: if none selected, return nothing
+      if (selectedWebinarId === 'none') return false;
       if (selectedWebinarId !== 'all') {
         if (zr.webinar_id?.trim() !== selectedWebinarId.trim()) return false;
       }
@@ -398,6 +395,7 @@ export default function AnalysisManagement() {
   // Set of PCA IDs who are successfully registered for the active webinar
   const zoomRegisteredPcaidsSet = useMemo(() => {
     const set = new Set<string>();
+    if (selectedWebinarId === 'none') return set;
     zoomRegistrations.forEach(zr => {
       if (zr.status === 'Success' && zr.pcaid) {
         if (selectedWebinarId === 'all' || zr.webinar_id?.trim() === selectedWebinarId.trim()) {
@@ -409,11 +407,16 @@ export default function AnalysisManagement() {
   }, [zoomRegistrations, selectedWebinarId]);
 
   // ===========================================================================
-  // MISSING LIST 1 (LEFT SECTION B): Enrolled Students with NO Payment
-  // LOGIC: Students who have payment record for that specific class type (=month + class type)
-  // but hasn't registered for the selected webinar yet.
+  // MISSING LIST 1 (LEFT SECTION B): Paid Students NOT on Zoom
+  // LOGIC: Students who have a payment record for that specific class type (=month + class type)
+  // in that selected year, but have NOT registered for the selected webinar yet.
   // ===========================================================================
   const paidStudentsMissingWebinarList = useMemo(() => {
+    // If no webinar or class is selected, return empty list
+    if (selectedWebinarId === 'none' || payClassFilter === 'none') {
+      return [];
+    }
+
     // Unique list of paid students (by PCA ID) from the left panel
     const uniquePaidMap = new Map<string, typeof paidStudentsList[0]>();
     paidStudentsList.forEach(p => {
@@ -441,14 +444,19 @@ export default function AnalysisManagement() {
 
       return true;
     });
-  }, [paidStudentsList, zoomRegisteredPcaidsSet, payMissingSearchQuery, studentMap]);
+  }, [paidStudentsList, zoomRegisteredPcaidsSet, payMissingSearchQuery, studentMap, selectedWebinarId, payClassFilter]);
 
   // ===========================================================================
-  // MISSING LIST 2 (RIGHT SECTION B): Paid Students NOT on Zoom
-  // LOGIC: Students who are registered for the selected webinar but has NO payment
+  // MISSING LIST 2 (RIGHT SECTION B): Enrolled Students with NO Payment (Unpaid on Zoom)
+  // LOGIC: Students who are registered for the selected webinar, but have NO payment
   // records for the specific class type (=month + class type) in that selected year.
   // ===========================================================================
   const zoomRegistrantsMissingPaymentList = useMemo(() => {
+    // If no webinar or class is selected, return empty list
+    if (selectedWebinarId === 'none' || payClassFilter === 'none') {
+      return [];
+    }
+
     // Unique Zoom registrants for the active webinar
     const uniqueZoomMap = new Map<string, typeof zoomRegistrations[0]>();
     zoomRegistrations.forEach(zr => {
@@ -484,7 +492,7 @@ export default function AnalysisManagement() {
 
       return true;
     });
-  }, [zoomRegistrations, selectedWebinarId, paidPcaidsSet, zoomMissingSearchQuery, studentMap]);
+  }, [zoomRegistrations, selectedWebinarId, paidPcaidsSet, zoomMissingSearchQuery, studentMap, payClassFilter]);
 
   // Toggle selection for registering missing students
   const toggleSelectMissingPcaid = (pcaid: string) => {
@@ -501,10 +509,14 @@ export default function AnalysisManagement() {
     }
   };
 
+  // Condition: Missing lists display ONLY when both Class Type and Webinar Name have valid selections (not 'none')
+  const isMissingSectionVisible = payClassFilter !== 'none' && selectedWebinarId !== 'none';
+
   // Register missing students to selected webinar directly from the dashboard!
   const handleRegisterMissingOnZoom = async () => {
-    if (!selectedWebinarId || selectedWebinarId === 'all') {
-      toast.error('Please choose a specific webinar from the Webinar dropdown above before registering.');
+    const cleanWebinarId = (selectedWebinarId || '').trim();
+    if (!cleanWebinarId || cleanWebinarId === 'all' || cleanWebinarId === 'none') {
+      toast.error('Please choose a specific webinar from the Webinar Name dropdown in Zoom Registration Analysis before registering.');
       return;
     }
 
@@ -520,8 +532,8 @@ export default function AnalysisManagement() {
     setIsRegisteringMissing(true);
     setRegisterProgress({ done: 0, total: targetList.length });
 
-    const webinarObj = allWebinars.find(w => w.webinar_id === selectedWebinarId);
-    const webinarName = webinarObj?.webinar_name || `Webinar ${selectedWebinarId}`;
+    const webinarObj = allWebinars.find(w => w.webinar_id.trim() === cleanWebinarId);
+    const webinarName = webinarObj?.webinar_name || `Webinar ${cleanWebinarId}`;
 
     const BATCH_SIZE = 10;
     const successfulToSave: any[] = [];
@@ -548,7 +560,7 @@ export default function AnalysisManagement() {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              webinarId: selectedWebinarId.trim(),
+              webinarId: cleanWebinarId,
               eventType: 'webinar',
               students: payload.map(p => ({
                 firstName: p.firstName,
@@ -567,7 +579,7 @@ export default function AnalysisManagement() {
                   const matched = payload.find(p => p.email.toLowerCase() === r.email?.toLowerCase() || p.firstName.toLowerCase() === r.firstName?.toLowerCase());
                   successfulToSave.push({
                     pcaid: matched?.pcaid || r.firstName,
-                    webinar_id: selectedWebinarId.trim(),
+                    webinar_id: cleanWebinarId,
                     webinar_name: webinarName,
                     student_name: matched?.lastName || 'Student',
                     email: r.email,
@@ -598,12 +610,12 @@ export default function AnalysisManagement() {
         if (insertErr) {
           console.error('zoom_registration upsert error:', insertErr);
         }
-        toast.success(`Successfully registered and saved ${successfulToSave.length} student(s) on Zoom!`);
+        toast.success(`Successfully registered and saved ${successfulToSave.length} student(s) to Webinar: ${webinarName} (ID: ${cleanWebinarId})!`);
         // Refresh analysis data
         await fetchData();
         setSelectedMissingZoomPcaids([]);
       } else {
-        toast.error('Could not complete registrations. Please verify Zoom credentials or webinar settings.');
+        toast.error(`Could not complete registrations for Webinar ID: ${cleanWebinarId}. Please verify Zoom credentials or webinar settings.`);
       }
     } catch (err: any) {
       toast.error('Registration process failed: ' + (err.message || 'Unknown error'));
@@ -830,6 +842,15 @@ export default function AnalysisManagement() {
     setTimeout(() => setCopiedKey(null), 2500);
   };
 
+  const handleCopySinglePcaid = (pcaid: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    if (!pcaid) return;
+    navigator.clipboard.writeText(pcaid.trim());
+    setCopiedKey(pcaid.trim());
+    toast.success(`Copied PCA ID: ${pcaid.trim()}`);
+    setTimeout(() => setCopiedKey(null), 2000);
+  };
+
   return (
     <div className="pt-0 px-0 pb-6 max-w-[1680px] mx-auto space-y-2 -mt-2 sm:-mt-3">
       {/* Top Utility Bar (Refresh Data) */}
@@ -872,7 +893,7 @@ export default function AnalysisManagement() {
                       <h2 className="text-base font-black text-gray-900 dark:text-white uppercase tracking-wider">
                         Payment Analysis
                       </h2>
-                      <p className="text-[11px] text-gray-500 font-medium">Verify payments & catch students with missing fees</p>
+                      <p className="text-[11px] text-gray-500 font-medium">Verify payments & catch paid students missing webinar access</p>
                     </div>
                   </div>
                   <span className="px-2.5 py-1 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 rounded-full text-xs font-black border border-emerald-200 dark:border-emerald-800/60">
@@ -926,6 +947,7 @@ export default function AnalysisManagement() {
                       onChange={(e) => setPayClassFilter(e.target.value)}
                       className="w-full h-9 px-2.5 text-xs bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg font-semibold text-gray-800 dark:text-gray-200 focus:ring-2 focus:ring-emerald-500 outline-none"
                     >
+                      <option value="none">None</option>
                       <option value="all">All Classes</option>
                       {baseClassTypes.map(c => (
                         <option key={c} value={c}>{c}</option>
@@ -935,7 +957,7 @@ export default function AnalysisManagement() {
                 </div>
 
                 {/* Active Combined Filter Indicator */}
-                {payClassFilter !== 'all' && payMonthFilter !== 'all' && (
+                {payClassFilter !== 'all' && payClassFilter !== 'none' && payMonthFilter !== 'all' && (
                   <div className="mt-2.5 flex items-center justify-between px-3 py-1.5 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 rounded-lg text-xs font-bold text-emerald-800 dark:text-emerald-300 animate-in fade-in duration-150">
                     <div className="flex items-center gap-1.5">
                       <span className="text-[10px] uppercase font-black tracking-wider text-emerald-600 dark:text-emerald-400">Combined:</span>
@@ -1004,17 +1026,36 @@ export default function AnalysisManagement() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-                      {paidStudentsList.length === 0 ? (
+                      {payClassFilter === 'none' ? (
+                        <tr>
+                          <td colSpan={5} className="py-28 text-center text-gray-500 font-medium">
+                            <CreditCard size={24} className="mx-auto mb-2 text-gray-400" />
+                            Please select a <strong>Class Type</strong> from Filter 3 above to view paid students.
+                          </td>
+                        </tr>
+                      ) : paidStudentsList.length === 0 ? (
                         <tr>
                           <td colSpan={5} className="py-28 text-center text-gray-400 font-medium">
-                            No payment records found for {payMonthFilter} {payYearFilter !== 'all' ? payYearFilter : ''}
+                            No payment records found for {payClassFilter !== 'all' ? `${payClassFilter} • ` : ''}{payMonthFilter} {payYearFilter !== 'all' ? payYearFilter : ''}
                           </td>
                         </tr>
                       ) : (
                         paidStudentsList.slice(0, 100).map((p, idx) => (
                           <tr key={`${p.pcaid}-${p.paymentId || idx}`} className="hover:bg-emerald-50/40 dark:hover:bg-emerald-950/20 transition-colors">
                             <td className="py-2 px-3 font-mono font-bold text-gray-900 dark:text-gray-100">
-                              {p.pcaid}
+                              <button
+                                type="button"
+                                onClick={(e) => handleCopySinglePcaid(p.pcaid, e)}
+                                className="inline-flex items-center gap-1.5 px-1.5 py-0.5 rounded text-xs font-mono font-bold text-gray-800 dark:text-gray-200 hover:bg-emerald-100 dark:hover:bg-emerald-950/60 transition-colors group cursor-pointer border border-transparent hover:border-emerald-300 dark:hover:border-emerald-700"
+                                title="Click to copy PCA ID"
+                              >
+                                <span>{p.pcaid}</span>
+                                {copiedKey === p.pcaid ? (
+                                  <Check size={12} className="text-emerald-600 dark:text-emerald-400 animate-in zoom-in duration-100" />
+                                ) : (
+                                  <Copy size={11} className="text-gray-400 group-hover:text-emerald-700 dark:group-hover:text-emerald-300 transition-colors" />
+                                )}
+                              </button>
                             </td>
                             <td className="py-2 px-3 font-semibold text-gray-800 dark:text-gray-200 truncate max-w-[140px]" title={p.name}>
                               {p.name}
@@ -1041,170 +1082,187 @@ export default function AnalysisManagement() {
 
               {/* ============================================================= */}
               {/* SECTION B: MISSING LIST (PAID BUT NOT REGISTERED ON WEBINAR)  */}
+              {/* Only display when both Payment Analysis (Class Type) and Zoom Registration Analysis (Webinar Name) are not None */}
               {/* ============================================================= */}
-              <div className="pt-3 border-t border-gray-200 dark:border-gray-800 space-y-2">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                  <div>
-                    <div className="flex items-center gap-1.5">
-                      <AlertTriangle size={15} className="text-amber-500" />
-                      <span className="text-xs font-black text-amber-700 dark:text-amber-400 uppercase tracking-wider">
-                        MISSING List: Enrolled Students with NO Payment
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-gray-500">
-                      Paid for {payClassFilter !== 'all' ? payClassFilter : 'Class'} ({payMonthFilter} {payYearFilter !== 'all' ? payYearFilter : ''}), but hasn't registered for {activeWebinarObj?.webinar_name || 'selected webinar'} yet
-                    </p>
-                  </div>
-
-                  <span className="self-start sm:self-center px-2 py-0.5 bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 rounded-md text-[11px] font-black border border-amber-300 dark:border-amber-800">
-                    Missing Webinar: {paidStudentsMissingWebinarList.length}
-                  </span>
-                </div>
-
-                {/* Missing Actions Bar + Register Button */}
-                <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
-                  <div className="flex items-center gap-2">
-                    <div className="relative w-36">
-                      <Search size={13} className="absolute left-2.5 top-2.5 text-gray-400" />
-                      <input
-                        type="text"
-                        placeholder="Search missing..."
-                        value={payMissingSearchQuery}
-                        onChange={(e) => setPayMissingSearchQuery(e.target.value)}
-                        className="w-full h-7 pl-7 pr-2 text-[11px] bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md outline-none focus:ring-1 focus:ring-amber-500"
-                      />
+              {isMissingSectionVisible && (
+                <div className="pt-3 border-t border-gray-200 dark:border-gray-800 space-y-2 animate-in fade-in duration-200">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div>
+                      <div className="flex items-center gap-1.5">
+                        <AlertTriangle size={15} className="text-amber-500" />
+                        <span className="text-xs font-black text-amber-700 dark:text-amber-400 uppercase tracking-wider">
+                          MISSING List: Paid Students NOT on Zoom
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-gray-500">
+                        Students who have a payment record for {payClassFilter !== 'all' ? payClassFilter : 'Class'} ({payMonthFilter} {payYearFilter !== 'all' ? payYearFilter : ''}), but have NOT registered for {activeWebinarObj?.webinar_name || 'selected webinar'} yet
+                      </p>
                     </div>
 
-                    <button
-                      onClick={handleSelectAllMissingZoom}
-                      disabled={paidStudentsMissingWebinarList.length === 0}
-                      className="h-7 px-2 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-md text-[10px] font-bold transition-all cursor-pointer disabled:opacity-40"
-                    >
-                      {selectedMissingZoomPcaids.length === paidStudentsMissingWebinarList.length && paidStudentsMissingWebinarList.length > 0
-                        ? 'Deselect All'
-                        : 'Select All'}
-                    </button>
-                  </div>
-
-                  <div className="flex items-center gap-1.5">
-                    {/* One-Click Register Missing on Zoom */}
-                    <button
-                      onClick={handleRegisterMissingOnZoom}
-                      disabled={isRegisteringMissing || paidStudentsMissingWebinarList.length === 0 || selectedWebinarId === 'all'}
-                      className="h-7 px-3 bg-amber-600 hover:bg-amber-700 text-white rounded-md text-[11px] font-black tracking-wide flex items-center gap-1.5 transition-all shadow-sm cursor-pointer disabled:opacity-50"
-                      title="Directly register missing students on Zoom for the selected webinar"
-                    >
-                      <Sparkles size={12} className={isRegisteringMissing ? 'animate-spin' : ''} />
-                      <span>
-                        {isRegisteringMissing
-                          ? `Registering (${registerProgress.done}/${registerProgress.total})...`
-                          : selectedMissingZoomPcaids.length > 0
-                          ? `Register ${selectedMissingZoomPcaids.length} on Zoom`
-                          : `Register All (${paidStudentsMissingWebinarList.length}) on Zoom`}
+                    <div className="flex items-center gap-2 self-start sm:self-center">
+                      <span className="px-2 py-0.5 bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 rounded-md text-[11px] font-black border border-amber-300 dark:border-amber-800">
+                        Paid • Missing Zoom: {paidStudentsMissingWebinarList.length}
                       </span>
-                    </button>
-
-                    <button
-                      onClick={() => handleCopyPcaids(paidStudentsMissingWebinarList.map(s => s.pcaid), 'left-missing-pcaids')}
-                      disabled={paidStudentsMissingWebinarList.length === 0}
-                      className="h-7 px-2 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-md text-[11px] font-bold flex items-center gap-1 transition-all cursor-pointer disabled:opacity-40"
-                      title="Copy PCA IDs"
-                    >
-                      {copiedKey === 'left-missing-pcaids' ? <Check size={12} className="text-emerald-600" /> : <Copy size={12} />}
-                      <span>Copy IDs</span>
-                    </button>
-
-                    <button
-                      onClick={() => {
-                        exportToCSV(
-                          `missing_webinar_registrations_${payClassFilter}_${payMonthFilter}`,
-                          ['PCA ID', 'Name', 'Phone', 'Batch', 'Paid Class', 'Amount', 'Paid Date'],
-                          paidStudentsMissingWebinarList.map(s => [s.pcaid, s.name, s.phone || '', s.proper_batch || '', s.class_type, s.payment, s.paid_date])
-                        );
-                      }}
-                      disabled={paidStudentsMissingWebinarList.length === 0}
-                      className="h-7 px-2.5 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-md text-[11px] font-bold flex items-center gap-1 transition-all cursor-pointer disabled:opacity-40"
-                    >
-                      <Download size={12} />
-                      <span>Export</span>
-                    </button>
+                    </div>
                   </div>
-                </div>
 
-                {/* Table of Paid Students Missing Zoom Webinar */}
-                <div className="border border-amber-200 dark:border-amber-900/40 rounded-xl overflow-hidden h-[320px] overflow-y-auto scrollbar-thin bg-amber-50/20 dark:bg-amber-950/10">
-                  <table className="w-full text-left text-xs">
-                    <thead className="sticky top-0 z-10 bg-amber-100 dark:bg-amber-950 text-amber-900 dark:text-amber-300 font-bold border-b border-amber-200 dark:border-amber-800 text-[10px] uppercase tracking-wider">
-                      <tr>
-                        <th className="py-2.5 px-2.5 w-7 text-center">
-                          <input
-                            type="checkbox"
-                            checked={selectedMissingZoomPcaids.length > 0 && selectedMissingZoomPcaids.length === paidStudentsMissingWebinarList.length}
-                            onChange={handleSelectAllMissingZoom}
-                            className="rounded border-gray-300 text-amber-600 focus:ring-amber-500 cursor-pointer"
-                          />
-                        </th>
-                        <th className="py-2.5 px-2">PCA ID</th>
-                        <th className="py-2.5 px-3">Student Name</th>
-                        <th className="py-2.5 px-2">Phone</th>
-                        <th className="py-2.5 px-2">Paid Class</th>
-                        <th className="py-2.5 px-3 text-right">Paid Date</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-amber-100 dark:divide-amber-900/30">
-                      {paidStudentsMissingWebinarList.length === 0 ? (
-                        <tr>
-                          <td colSpan={6} className="py-24 text-center text-emerald-600 dark:text-emerald-400 font-bold">
-                            🎉 100% Zoom Coverage! All paid students are registered on Zoom for {activeWebinarObj?.webinar_name || 'the selected webinar'}.
-                          </td>
-                        </tr>
-                      ) : (
-                        paidStudentsMissingWebinarList.slice(0, 100).map((p) => {
-                          const isChecked = selectedMissingZoomPcaids.includes(p.pcaid);
-                          return (
-                            <tr
-                              key={p.pcaid}
-                              onClick={() => toggleSelectMissingPcaid(p.pcaid)}
-                              className={`cursor-pointer transition-colors ${
-                                isChecked
-                                  ? 'bg-amber-100/70 dark:bg-amber-900/40'
-                                  : 'hover:bg-amber-100/30 dark:hover:bg-amber-900/20'
-                              }`}
-                            >
-                              <td className="py-2 px-2.5 text-center" onClick={(e) => e.stopPropagation()}>
-                                <input
-                                  type="checkbox"
-                                  checked={isChecked}
-                                  onChange={() => toggleSelectMissingPcaid(p.pcaid)}
-                                  className="rounded border-gray-300 text-amber-600 focus:ring-amber-500 cursor-pointer"
-                                />
-                              </td>
-                              <td className="py-2 px-2 font-mono font-bold text-gray-900 dark:text-gray-100">
-                                {p.pcaid}
-                              </td>
-                              <td className="py-2 px-3 font-semibold text-gray-800 dark:text-gray-200 truncate max-w-[130px]" title={p.name}>
-                                {p.name}
-                              </td>
-                              <td className="py-2 px-2 font-mono text-gray-600 dark:text-gray-400">
-                                {p.phone || '-'}
-                              </td>
-                              <td className="py-2 px-2 text-[11px] text-gray-600 dark:text-gray-400 truncate max-w-[120px]">
-                                {p.class_type}
-                              </td>
-                              <td className="py-2 px-3 text-right text-[11px] font-mono text-gray-500">
-                                {p.paid_date}
-                              </td>
-                            </tr>
+                  {/* Missing Actions Bar + Register Button */}
+                  <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                    <div className="flex items-center gap-2">
+                      <div className="relative w-36">
+                        <Search size={13} className="absolute left-2.5 top-2.5 text-gray-400" />
+                        <input
+                          type="text"
+                          placeholder="Search missing..."
+                          value={payMissingSearchQuery}
+                          onChange={(e) => setPayMissingSearchQuery(e.target.value)}
+                          className="w-full h-7 pl-7 pr-2 text-[11px] bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md outline-none focus:ring-1 focus:ring-amber-500"
+                        />
+                      </div>
+
+                      <button
+                        onClick={handleSelectAllMissingZoom}
+                        disabled={paidStudentsMissingWebinarList.length === 0}
+                        className="h-7 px-2 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-md text-[10px] font-bold transition-all cursor-pointer disabled:opacity-40"
+                      >
+                        {selectedMissingZoomPcaids.length === paidStudentsMissingWebinarList.length && paidStudentsMissingWebinarList.length > 0
+                          ? 'Deselect All'
+                          : 'Select All'}
+                      </button>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {/* One-Click Register Missing on Zoom with target Webinar ID */}
+                      <button
+                        onClick={handleRegisterMissingOnZoom}
+                        disabled={isRegisteringMissing || paidStudentsMissingWebinarList.length === 0 || selectedWebinarId === 'all' || selectedWebinarId === 'none'}
+                        className="h-7 px-3 bg-amber-600 hover:bg-amber-700 text-white rounded-md text-[11px] font-black tracking-wide flex items-center gap-1.5 transition-all shadow-sm cursor-pointer disabled:opacity-50"
+                        title={`Directly register missing students to Zoom Webinar: ${activeWebinarObj?.webinar_name || selectedWebinarId} (ID: ${selectedWebinarId})`}
+                      >
+                        <Sparkles size={12} className={isRegisteringMissing ? 'animate-spin' : ''} />
+                        <span>
+                          {isRegisteringMissing
+                            ? `Registering (${registerProgress.done}/${registerProgress.total})...`
+                            : selectedMissingZoomPcaids.length > 0
+                            ? `Register ${selectedMissingZoomPcaids.length} to Zoom (${selectedWebinarId})`
+                            : `Register All (${paidStudentsMissingWebinarList.length}) to Zoom (${selectedWebinarId})`}
+                        </span>
+                      </button>
+
+                      <button
+                        onClick={() => handleCopyPcaids(paidStudentsMissingWebinarList.map(s => s.pcaid), 'left-missing-pcaids')}
+                        disabled={paidStudentsMissingWebinarList.length === 0}
+                        className="h-7 px-2 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-md text-[11px] font-bold flex items-center gap-1 transition-all cursor-pointer disabled:opacity-40"
+                        title="Copy PCA IDs"
+                      >
+                        {copiedKey === 'left-missing-pcaids' ? <Check size={12} className="text-emerald-600" /> : <Copy size={12} />}
+                        <span>Copy IDs</span>
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          exportToCSV(
+                            `missing_webinar_registrations_${payClassFilter}_${payMonthFilter}`,
+                            ['PCA ID', 'Name', 'Phone', 'Batch', 'Paid Class', 'Amount', 'Paid Date'],
+                            paidStudentsMissingWebinarList.map(s => [s.pcaid, s.name, s.phone || '', s.proper_batch || '', s.class_type, s.payment, s.paid_date])
                           );
-                        })
-                      )}
-                    </tbody>
-                  </table>
+                        }}
+                        disabled={paidStudentsMissingWebinarList.length === 0}
+                        className="h-7 px-2.5 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-md text-[11px] font-bold flex items-center gap-1 transition-all cursor-pointer disabled:opacity-40"
+                      >
+                        <Download size={12} />
+                        <span>Export</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Table of Paid Students Missing Zoom Webinar */}
+                  <div className="border border-amber-200 dark:border-amber-900/40 rounded-xl overflow-hidden h-[320px] overflow-y-auto scrollbar-thin bg-amber-50/20 dark:bg-amber-950/10">
+                    <table className="w-full text-left text-xs">
+                      <thead className="sticky top-0 z-10 bg-amber-100 dark:bg-amber-950 text-amber-900 dark:text-amber-300 font-bold border-b border-amber-200 dark:border-amber-800 text-[10px] uppercase tracking-wider">
+                        <tr>
+                          <th className="py-2.5 px-2.5 w-7 text-center">
+                            <input
+                              type="checkbox"
+                              checked={selectedMissingZoomPcaids.length > 0 && selectedMissingZoomPcaids.length === paidStudentsMissingWebinarList.length}
+                              onChange={handleSelectAllMissingZoom}
+                              className="rounded border-gray-300 text-amber-600 focus:ring-amber-500 cursor-pointer"
+                            />
+                          </th>
+                          <th className="py-2.5 px-2">PCA ID</th>
+                          <th className="py-2.5 px-3">Student Name</th>
+                          <th className="py-2.5 px-2">Phone</th>
+                          <th className="py-2.5 px-2">Paid Class</th>
+                          <th className="py-2.5 px-3 text-right">Paid Date</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-amber-100 dark:divide-amber-900/30">
+                        {paidStudentsMissingWebinarList.length === 0 ? (
+                          <tr>
+                            <td colSpan={6} className="py-24 text-center text-emerald-600 dark:text-emerald-400 font-bold">
+                              🎉 100% Zoom Coverage! All paid students are registered on Zoom for {activeWebinarObj?.webinar_name || 'the selected webinar'}.
+                            </td>
+                          </tr>
+                        ) : (
+                          paidStudentsMissingWebinarList.slice(0, 100).map((p) => {
+                            const isChecked = selectedMissingZoomPcaids.includes(p.pcaid);
+                            return (
+                              <tr
+                                key={p.pcaid}
+                                onClick={() => toggleSelectMissingPcaid(p.pcaid)}
+                                className={`cursor-pointer transition-colors ${
+                                  isChecked
+                                    ? 'bg-amber-100/70 dark:bg-amber-900/40'
+                                    : 'hover:bg-amber-100/30 dark:hover:bg-amber-900/20'
+                                }`}
+                              >
+                                <td className="py-2 px-2.5 text-center" onClick={(e) => e.stopPropagation()}>
+                                  <input
+                                    type="checkbox"
+                                    checked={isChecked}
+                                    onChange={() => toggleSelectMissingPcaid(p.pcaid)}
+                                    className="rounded border-gray-300 text-amber-600 focus:ring-amber-500 cursor-pointer"
+                                  />
+                                </td>
+                                <td className="py-2 px-2 font-mono font-bold text-gray-900 dark:text-gray-100" onClick={(e) => e.stopPropagation()}>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => handleCopySinglePcaid(p.pcaid, e)}
+                                    className="inline-flex items-center gap-1.5 px-1.5 py-0.5 rounded text-xs font-mono font-bold text-gray-800 dark:text-gray-200 hover:bg-amber-200 dark:hover:bg-amber-900/60 hover:text-amber-950 dark:hover:text-amber-100 transition-colors group cursor-pointer border border-transparent hover:border-amber-300 dark:hover:border-amber-700"
+                                    title="Click to copy PCA ID"
+                                  >
+                                    <span>{p.pcaid}</span>
+                                    {copiedKey === p.pcaid ? (
+                                      <Check size={12} className="text-emerald-600 dark:text-emerald-400 animate-in zoom-in duration-100" />
+                                    ) : (
+                                      <Copy size={11} className="text-gray-400 group-hover:text-amber-700 dark:group-hover:text-amber-300 transition-colors" />
+                                    )}
+                                  </button>
+                                </td>
+                                <td className="py-2 px-3 font-semibold text-gray-800 dark:text-gray-200 truncate max-w-[130px]" title={p.name}>
+                                  {p.name}
+                                </td>
+                                <td className="py-2 px-2 font-mono text-gray-600 dark:text-gray-400">
+                                  {p.phone || '-'}
+                                </td>
+                                <td className="py-2 px-2 text-[11px] text-gray-600 dark:text-gray-400 truncate max-w-[120px]">
+                                  {p.class_type}
+                                </td>
+                                <td className="py-2 px-3 text-right text-[11px] font-mono text-gray-500">
+                                  {p.paid_date}
+                                </td>
+                              </tr>
+                            );
+                          })
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                  {paidStudentsMissingWebinarList.length > 100 && (
+                    <p className="text-[10px] text-gray-400 text-right">Showing top 100 of {paidStudentsMissingWebinarList.length}. Export CSV for all.</p>
+                  )}
                 </div>
-                {paidStudentsMissingWebinarList.length > 100 && (
-                  <p className="text-[10px] text-gray-400 text-right">Showing top 100 of {paidStudentsMissingWebinarList.length}. Export CSV for all.</p>
-                )}
-              </div>
+              )}
             </div>
           </div>
 
@@ -1225,7 +1283,7 @@ export default function AnalysisManagement() {
                       <h2 className="text-base font-black text-gray-900 dark:text-white uppercase tracking-wider">
                         Zoom Registration Analysis
                       </h2>
-                      <p className="text-[11px] text-gray-500 font-medium">Verify webinar registrations & catch paid students missing access</p>
+                      <p className="text-[11px] text-gray-500 font-medium">Verify webinar registrations & catch attendees with NO payment</p>
                     </div>
                   </div>
                   <span className="px-2.5 py-1 bg-teal-50 dark:bg-teal-950/40 text-teal-700 dark:text-teal-400 rounded-full text-xs font-black border border-teal-200 dark:border-teal-800/60">
@@ -1279,6 +1337,7 @@ export default function AnalysisManagement() {
                       onChange={(e) => setSelectedWebinarId(e.target.value)}
                       className="w-full h-9 px-2.5 text-xs bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg font-semibold text-gray-800 dark:text-gray-200 focus:ring-2 focus:ring-teal-500 outline-none"
                     >
+                      <option value="none">None</option>
                       <option value="all">All Webinars</option>
                       {allWebinars.map(w => (
                         <option key={w.webinar_id} value={w.webinar_id}>
@@ -1345,7 +1404,14 @@ export default function AnalysisManagement() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-                      {zoomRegisteredList.length === 0 ? (
+                      {selectedWebinarId === 'none' ? (
+                        <tr>
+                          <td colSpan={4} className="py-28 text-center text-gray-500 font-medium">
+                            <Video size={24} className="mx-auto mb-2 text-gray-400" />
+                            Please select a <strong>Webinar</strong> from Filter 3 above to view registrants.
+                          </td>
+                        </tr>
+                      ) : zoomRegisteredList.length === 0 ? (
                         <tr>
                           <td colSpan={4} className="py-28 text-center text-gray-400 font-medium">
                             No Zoom registrations recorded yet for this webinar in {zoomMonthFilter}
@@ -1355,7 +1421,19 @@ export default function AnalysisManagement() {
                         zoomRegisteredList.slice(0, 100).map((zr, idx) => (
                           <tr key={`${zr.pcaid}-${zr.webinar_id}-${idx}`} className="hover:bg-teal-50/40 dark:hover:bg-teal-950/20 transition-colors">
                             <td className="py-2 px-3 font-mono font-bold text-gray-900 dark:text-gray-100">
-                              {zr.pcaid}
+                              <button
+                                type="button"
+                                onClick={(e) => handleCopySinglePcaid(zr.pcaid, e)}
+                                className="inline-flex items-center gap-1.5 px-1.5 py-0.5 rounded text-xs font-mono font-bold text-gray-800 dark:text-gray-200 hover:bg-teal-100 dark:hover:bg-teal-950/60 transition-colors group cursor-pointer border border-transparent hover:border-teal-300 dark:hover:border-teal-700"
+                                title="Click to copy PCA ID"
+                              >
+                                <span>{zr.pcaid}</span>
+                                {copiedKey === zr.pcaid ? (
+                                  <Check size={12} className="text-emerald-600 dark:text-emerald-400 animate-in zoom-in duration-100" />
+                                ) : (
+                                  <Copy size={11} className="text-gray-400 group-hover:text-teal-700 dark:group-hover:text-teal-300 transition-colors" />
+                                )}
+                              </button>
                             </td>
                             <td className="py-2 px-3 font-semibold text-gray-800 dark:text-gray-200 truncate max-w-[140px]" title={zr.student_name || ''}>
                               {zr.student_name || 'Student'}
@@ -1392,140 +1470,167 @@ export default function AnalysisManagement() {
 
               {/* ============================================================= */}
               {/* SECTION B: MISSING LIST (REGISTERED ON ZOOM BUT NO PAYMENT)   */}
+              {/* Only display when both Payment Analysis (Class Type) and Zoom Registration Analysis (Webinar Name) are not None */}
               {/* ============================================================= */}
-              <div className="pt-3 border-t border-gray-200 dark:border-gray-800 space-y-2">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                  <div>
-                    <div className="flex items-center gap-1.5">
-                      <AlertTriangle size={15} className="text-rose-500" />
-                      <span className="text-xs font-black text-rose-700 dark:text-rose-400 uppercase tracking-wider">
-                        MISSING List: Paid Students NOT on Zoom
-                      </span>
+              {isMissingSectionVisible && (
+                <div className="pt-3 border-t border-gray-200 dark:border-gray-800 space-y-2 animate-in fade-in duration-200">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div>
+                      <div className="flex items-center gap-1.5">
+                        <AlertTriangle size={15} className="text-rose-500" />
+                        <span className="text-xs font-black text-rose-700 dark:text-rose-400 uppercase tracking-wider">
+                          MISSING List: Enrolled Students with NO Payment
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-gray-500">
+                        Students registered for {activeWebinarObj?.webinar_name || 'selected webinar'} who have NO payment records for {payClassFilter !== 'all' ? payClassFilter : 'Class'} ({payMonthFilter} {payYearFilter !== 'all' ? payYearFilter : ''})
+                      </p>
                     </div>
-                    <p className="text-[11px] text-gray-500">
-                      Students registered for {activeWebinarObj?.webinar_name || 'selected webinar'} who have NO payment records for {payClassFilter !== 'all' ? payClassFilter : 'Class'} ({payMonthFilter} {payYearFilter !== 'all' ? payYearFilter : ''})
-                    </p>
+
+                    <span className="self-start sm:self-center px-2 py-0.5 bg-rose-100 dark:bg-rose-950/60 text-rose-800 dark:text-rose-300 rounded-md text-[11px] font-black border border-rose-300 dark:border-rose-800">
+                      On Zoom • Unpaid: {zoomRegistrantsMissingPaymentList.length}
+                    </span>
                   </div>
 
-                  <span className="self-start sm:self-center px-2 py-0.5 bg-rose-100 dark:bg-rose-950/60 text-rose-800 dark:text-rose-300 rounded-md text-[11px] font-black border border-rose-300 dark:border-rose-800">
-                    Unpaid: {zoomRegistrantsMissingPaymentList.length}
-                  </span>
-                </div>
+                  {/* Missing Actions Bar */}
+                  <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                    <div className="relative w-40">
+                      <Search size={13} className="absolute left-2.5 top-2.5 text-gray-400" />
+                      <input
+                        type="text"
+                        placeholder="Search unpaid attendees..."
+                        value={zoomMissingSearchQuery}
+                        onChange={(e) => setZoomMissingSearchQuery(e.target.value)}
+                        className="w-full h-7 pl-7 pr-2 text-[11px] bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md outline-none focus:ring-1 focus:ring-rose-500"
+                      />
+                    </div>
 
-                {/* Missing Actions Bar */}
-                <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
-                  <div className="relative w-40">
-                    <Search size={13} className="absolute left-2.5 top-2.5 text-gray-400" />
-                    <input
-                      type="text"
-                      placeholder="Search unpaid attendees..."
-                      value={zoomMissingSearchQuery}
-                      onChange={(e) => setZoomMissingSearchQuery(e.target.value)}
-                      className="w-full h-7 pl-7 pr-2 text-[11px] bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md outline-none focus:ring-1 focus:ring-rose-500"
-                    />
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        onClick={() => handleCopyPcaids(zoomRegistrantsMissingPaymentList.map(zr => zr.pcaid), 'right-missing-pcaids')}
+                        disabled={zoomRegistrantsMissingPaymentList.length === 0}
+                        className="h-7 px-2.5 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-md text-[11px] font-bold flex items-center gap-1 transition-all cursor-pointer disabled:opacity-40"
+                        title="Copy PCA IDs of unpaid webinar attendees"
+                      >
+                        {copiedKey === 'right-missing-pcaids' ? <Check size={12} className="text-emerald-600" /> : <Copy size={12} />}
+                        <span>Copy IDs</span>
+                      </button>
+
+                      <button
+                        onClick={() => handleCopyPhones(zoomRegistrantsMissingPaymentList.map(zr => {
+                          const s = studentMap.get(zr.pcaid?.trim().toUpperCase());
+                          return s?.phone || zr.email || '';
+                        }), 'right-missing-phones')}
+                        disabled={zoomRegistrantsMissingPaymentList.length === 0}
+                        className="h-7 px-2.5 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/60 text-rose-800 dark:text-rose-300 border border-rose-200 dark:border-rose-800/80 rounded-md text-[11px] font-bold flex items-center gap-1 transition-all cursor-pointer disabled:opacity-40"
+                        title="Copy phone numbers / contacts for WhatsApp payment reminders"
+                      >
+                        {copiedKey === 'right-missing-phones' ? <Check size={12} className="text-emerald-600" /> : <Phone size={12} />}
+                        <span>Copy Phones</span>
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          exportToCSV(
+                            `unpaid_webinar_attendees_${selectedWebinarId}_${payMonthFilter}`,
+                            ['PCA ID', 'Student Name', 'Email', 'Webinar Name', 'Webinar ID', 'Registered At', 'Payment Status'],
+                            zoomRegistrantsMissingPaymentList.map(zr => [
+                              zr.pcaid,
+                              zr.student_name || 'Student',
+                              zr.email,
+                              zr.webinar_name || '',
+                              zr.webinar_id,
+                              zr.registered_at,
+                              `Unpaid for ${payClassFilter} (${payMonthFilter} ${payYearFilter !== 'all' ? payYearFilter : ''})`
+                            ])
+                          );
+                        }}
+                        disabled={zoomRegistrantsMissingPaymentList.length === 0}
+                        className="h-7 px-2.5 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-md text-[11px] font-bold flex items-center gap-1 transition-all cursor-pointer disabled:opacity-40"
+                      >
+                        <Download size={12} />
+                        <span>Export</span>
+                      </button>
+                    </div>
                   </div>
 
-                  <div className="flex items-center gap-1.5">
-                    <button
-                      onClick={() => handleCopyPcaids(zoomRegistrantsMissingPaymentList.map(zr => zr.pcaid), 'right-missing-pcaids')}
-                      disabled={zoomRegistrantsMissingPaymentList.length === 0}
-                      className="h-7 px-2.5 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-md text-[11px] font-bold flex items-center gap-1 transition-all cursor-pointer disabled:opacity-40"
-                      title="Copy PCA IDs of unpaid webinar attendees"
-                    >
-                      {copiedKey === 'right-missing-pcaids' ? <Check size={12} className="text-emerald-600" /> : <Copy size={12} />}
-                      <span>Copy IDs</span>
-                    </button>
-
-                    <button
-                      onClick={() => handleCopyPhones(zoomRegistrantsMissingPaymentList.map(zr => {
-                        const s = studentMap.get(zr.pcaid?.trim().toUpperCase());
-                        return s?.phone || zr.email || '';
-                      }), 'right-missing-phones')}
-                      disabled={zoomRegistrantsMissingPaymentList.length === 0}
-                      className="h-7 px-2.5 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/60 text-rose-800 dark:text-rose-300 border border-rose-200 dark:border-rose-800/80 rounded-md text-[11px] font-bold flex items-center gap-1 transition-all cursor-pointer disabled:opacity-40"
-                      title="Copy phone numbers / contacts for WhatsApp payment reminders"
-                    >
-                      {copiedKey === 'right-missing-phones' ? <Check size={12} className="text-emerald-600" /> : <Copy size={12} />}
-                      <span>Copy Contacts</span>
-                    </button>
-
-                    <button
-                      onClick={() => {
-                        exportToCSV(
-                          `unpaid_webinar_attendees_${selectedWebinarId}_${payMonthFilter}`,
-                          ['PCA ID', 'Student Name', 'Email', 'Webinar Name', 'Webinar ID', 'Registered At', 'Payment Status'],
-                          zoomRegistrantsMissingPaymentList.map(zr => [
-                            zr.pcaid,
-                            zr.student_name || 'Student',
-                            zr.email,
-                            zr.webinar_name || '',
-                            zr.webinar_id,
-                            zr.registered_at,
-                            `Unpaid for ${payClassFilter} (${payMonthFilter} ${payYearFilter !== 'all' ? payYearFilter : ''})`
-                          ])
-                        );
-                      }}
-                      disabled={zoomRegistrantsMissingPaymentList.length === 0}
-                      className="h-7 px-2.5 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-md text-[11px] font-bold flex items-center gap-1 transition-all cursor-pointer disabled:opacity-40"
-                    >
-                      <Download size={12} />
-                      <span>Export</span>
-                    </button>
-                  </div>
-                </div>
-
-                {/* Table of Zoom Registered Students Missing Payment */}
-                <div className="border border-rose-200 dark:border-rose-900/40 rounded-xl overflow-hidden h-[320px] overflow-y-auto scrollbar-thin bg-rose-50/20 dark:bg-rose-950/10">
-                  <table className="w-full text-left text-xs">
-                    <thead className="sticky top-0 z-10 bg-rose-100 dark:bg-rose-950 text-rose-900 dark:text-rose-300 font-bold border-b border-rose-200 dark:border-rose-800 text-[10px] uppercase tracking-wider">
-                      <tr>
-                        <th className="py-2.5 px-3">PCA ID</th>
-                        <th className="py-2.5 px-3">Student Name</th>
-                        <th className="py-2.5 px-2">Email</th>
-                        <th className="py-2.5 px-2">Webinar</th>
-                        <th className="py-2.5 px-3 text-right">Status</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-rose-100 dark:divide-rose-900/30">
-                      {zoomRegistrantsMissingPaymentList.length === 0 ? (
+                  {/* Table of Zoom Registered Students Missing Payment */}
+                  <div className="border border-rose-200 dark:border-rose-900/40 rounded-xl overflow-hidden h-[320px] overflow-y-auto scrollbar-thin bg-rose-50/20 dark:bg-rose-950/10">
+                    <table className="w-full text-left text-xs">
+                      <thead className="sticky top-0 z-10 bg-rose-100 dark:bg-rose-950 text-rose-900 dark:text-rose-300 font-bold border-b border-rose-200 dark:border-rose-800 text-[10px] uppercase tracking-wider">
                         <tr>
-                          <td colSpan={5} className="py-24 text-center text-teal-600 dark:text-teal-400 font-bold">
-                            🎉 Perfect audit! All students registered for this webinar have verified payment records.
-                          </td>
+                          <th className="py-2.5 px-3">PCA ID</th>
+                          <th className="py-2.5 px-3">Student Name</th>
+                          <th className="py-2.5 px-2">Email</th>
+                          <th className="py-2.5 px-2">Webinar</th>
+                          <th className="py-2.5 px-3 text-right">Status</th>
                         </tr>
-                      ) : (
-                        zoomRegistrantsMissingPaymentList.slice(0, 100).map((zr) => (
-                          <tr
-                            key={zr.pcaid + zr.webinar_id}
-                            className="hover:bg-rose-100/40 dark:hover:bg-rose-900/30 transition-colors"
-                          >
-                            <td className="py-2 px-3 font-mono font-bold text-gray-900 dark:text-gray-100">
-                              {zr.pcaid}
-                            </td>
-                            <td className="py-2 px-3 font-semibold text-gray-800 dark:text-gray-200 truncate max-w-[130px]" title={zr.student_name || ''}>
-                              {zr.student_name || 'Student'}
-                            </td>
-                            <td className="py-2 px-2 text-[11px] text-gray-600 dark:text-gray-400 truncate max-w-[140px]" title={zr.email}>
-                              {zr.email}
-                            </td>
-                            <td className="py-2 px-2 text-[11px] text-gray-600 dark:text-gray-400 truncate max-w-[120px]" title={zr.webinar_name || zr.webinar_id}>
-                              {zr.webinar_name || zr.webinar_id}
-                            </td>
-                            <td className="py-2 px-3 text-right">
-                              <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800">
-                                Unpaid
-                              </span>
+                      </thead>
+                      <tbody className="divide-y divide-rose-100 dark:divide-rose-900/30">
+                        {selectedWebinarId === 'none' ? (
+                          <tr>
+                            <td colSpan={5} className="py-24 text-center text-gray-500 font-medium">
+                              Please select a <strong>Webinar</strong> from Filter 3 above to audit unpaid attendees.
                             </td>
                           </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
+                        ) : payClassFilter === 'none' ? (
+                          <tr>
+                            <td colSpan={5} className="py-24 text-center text-rose-700 dark:text-rose-400 font-medium">
+                              Please select a <strong>Class Type</strong> in the Payment Analysis panel to check payment records.
+                            </td>
+                          </tr>
+                        ) : zoomRegistrantsMissingPaymentList.length === 0 ? (
+                          <tr>
+                            <td colSpan={5} className="py-24 text-center text-teal-600 dark:text-teal-400 font-bold">
+                              🎉 Perfect audit! All students registered for this webinar have verified payment records.
+                            </td>
+                          </tr>
+                        ) : (
+                          zoomRegistrantsMissingPaymentList.slice(0, 100).map((zr) => (
+                            <tr
+                              key={zr.pcaid + zr.webinar_id}
+                              className="hover:bg-rose-100/40 dark:hover:bg-rose-900/30 transition-colors"
+                            >
+                              <td className="py-2 px-3 font-mono font-bold text-gray-900 dark:text-gray-100">
+                                <button
+                                  type="button"
+                                  onClick={(e) => handleCopySinglePcaid(zr.pcaid, e)}
+                                  className="inline-flex items-center gap-1.5 px-1.5 py-0.5 rounded text-xs font-mono font-bold text-gray-800 dark:text-gray-200 hover:bg-rose-200 dark:hover:bg-rose-900/60 hover:text-rose-950 dark:hover:text-rose-100 transition-colors group cursor-pointer border border-transparent hover:border-rose-300 dark:hover:border-rose-700"
+                                  title="Click to copy PCA ID"
+                                >
+                                  <span>{zr.pcaid}</span>
+                                  {copiedKey === zr.pcaid ? (
+                                    <Check size={12} className="text-emerald-600 dark:text-emerald-400 animate-in zoom-in duration-100" />
+                                  ) : (
+                                    <Copy size={11} className="text-gray-400 group-hover:text-rose-700 dark:group-hover:text-rose-300 transition-colors" />
+                                  )}
+                                </button>
+                              </td>
+                              <td className="py-2 px-3 font-semibold text-gray-800 dark:text-gray-200 truncate max-w-[130px]" title={zr.student_name || ''}>
+                                {zr.student_name || 'Student'}
+                              </td>
+                              <td className="py-2 px-2 text-[11px] text-gray-600 dark:text-gray-400 truncate max-w-[140px]" title={zr.email}>
+                                {zr.email}
+                              </td>
+                              <td className="py-2 px-2 text-[11px] text-gray-600 dark:text-gray-400 truncate max-w-[120px]" title={zr.webinar_name || zr.webinar_id}>
+                                {zr.webinar_name || zr.webinar_id}
+                              </td>
+                              <td className="py-2 px-3 text-right">
+                                <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800">
+                                  Unpaid
+                                </span>
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                  {zoomRegistrantsMissingPaymentList.length > 100 && (
+                    <p className="text-[10px] text-gray-400 text-right">Showing top 100 of {zoomRegistrantsMissingPaymentList.length}. Export CSV for all.</p>
+                  )}
                 </div>
-                {zoomRegistrantsMissingPaymentList.length > 100 && (
-                  <p className="text-[10px] text-gray-400 text-right">Showing top 100 of {zoomRegistrantsMissingPaymentList.length}. Export CSV for all.</p>
-                )}
-              </div>
+              )}
             </div>
           </div>
         </div>
