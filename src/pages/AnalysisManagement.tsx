@@ -17,6 +17,8 @@ import {
   TrendingUp,
   Users,
   Calendar,
+  CalendarRange,
+  Award,
   Sparkles,
   Phone,
   MessageSquare,
@@ -31,6 +33,108 @@ const MONTH_NAMES = [
   'January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December'
 ];
+
+// Short month labels matching the user's sketch: Jan, Feb, Mar, Apr, May, June, July, August, Sep, Oct, Nov, Dec
+const MONTH_SHORT_LABELS = [
+  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'June',
+  'July', 'August', 'Sep', 'Oct', 'Nov', 'Dec'
+];
+
+function checkPaymentMatchesClassMonthYear(
+  p: Payment,
+  targetClass: string,
+  targetMonth: string,
+  targetYear: string
+): boolean {
+  if (!p.paid_date && !p.class_type) return false;
+
+  // 1. Year check
+  let pYear = '';
+  let pMonth = '';
+  if (p.paid_date) {
+    const dateParts = p.paid_date.split('-');
+    if (dateParts.length >= 2) {
+      pYear = dateParts[0];
+      const pMonthIdx = parseInt(dateParts[1], 10) - 1;
+      if (pMonthIdx >= 0 && pMonthIdx < 12) {
+        pMonth = MONTH_NAMES[pMonthIdx];
+      }
+    }
+  }
+
+  if (targetYear !== 'all') {
+    const yearInClass = (p.class_type || '').includes(targetYear);
+    const yearInDate = pYear === targetYear;
+    if (!yearInClass && !yearInDate) return false;
+  }
+
+  // 2. Class & Month match on raw items
+  const rawItems: string[] = [];
+  if (p.class_type) {
+    p.class_type.split(',').forEach(item => {
+      const trimmed = item.trim();
+      if (trimmed) rawItems.push(trimmed);
+    });
+  }
+  if (p.package_type) {
+    p.package_type.split(',').forEach(item => {
+      const trimmed = item.trim();
+      if (trimmed) rawItems.push(trimmed);
+    });
+  }
+  if (rawItems.length === 0) {
+    rawItems.push(p.class_type || p.package_type || 'General');
+  }
+
+  const cLower = targetClass.toLowerCase().trim();
+  const mLower = targetMonth.toLowerCase().trim();
+
+  return rawItems.some(item => {
+    // 2a. Class check: First, verify this specific item belongs to the selected class
+    if (targetClass === 'none') return false;
+    if (targetClass !== 'all') {
+      let baseItem = item;
+      const foundMonth = MONTH_NAMES.find(m => 
+        item.endsWith(` ${m}`) || 
+        item.endsWith(` - ${m}`) || 
+        item.toLowerCase().includes(`- ${m.toLowerCase()}`)
+      );
+      if (foundMonth) {
+        baseItem = item.replace(new RegExp(`[- ]*${foundMonth}\\b`, 'gi'), '').trim();
+      }
+      const baseLower = baseItem.toLowerCase().trim();
+      const isClassMatch = baseLower === cLower || baseLower.includes(cLower) || cLower.includes(baseLower);
+      if (!isClassMatch) return false;
+    }
+
+    // 2b. Month check:
+    // If the class item explicitly specifies a month (e.g. "MaxouT September", "MaxouT - August"):
+    // That specified month takes 100% strict priority over paid_date!
+    // For example, paying on Aug 30 for "MaxouT September" is a September fee payment.
+    if (targetMonth === 'all') return true;
+
+    const itemLower = item.toLowerCase();
+    let explicitMonth: string | null = null;
+    for (const m of MONTH_NAMES) {
+      if (itemLower.includes(m.toLowerCase())) {
+        explicitMonth = m;
+        break;
+      }
+      if (m.toLowerCase() === 'september' && /\bsep\b/i.test(itemLower)) {
+        explicitMonth = 'September';
+        break;
+      }
+    }
+
+    if (explicitMonth) {
+      // If the item explicitly names a month, it MUST match targetMonth
+      return explicitMonth.toLowerCase() === mLower;
+    }
+
+    // Fallback: If no month is named in the class item string, use the payment's paid_date month
+    return pMonth.toLowerCase() === mLower;
+  });
+}
 
 export default function AnalysisManagement() {
   const { user } = useAuth();
@@ -78,14 +182,24 @@ export default function AnalysisManagement() {
   const [registerProgress, setRegisterProgress] = useState<{ done: number; total: number }>({ done: 0, total: 0 });
 
   // ---------------------------------------------------------------------------
-  // CONTINUITY TAB FILTERS
+  // CONTINUITY TAB FILTERS & MODES
   // ---------------------------------------------------------------------------
+  const [continuityMode, setContinuityMode] = useState<'multi-month' | 'two-month'>('multi-month');
+
+  // Mode 1: 2-Month Comparison (Month A vs Month B)
   const [baselineMonth, setBaselineMonth] = useState<string>(MONTH_NAMES[(currentMonthIdx + 11) % 12]); // Previous month
   const [targetMonth, setTargetMonth] = useState<string>(currentMonthName); // Current month
   const [continuityYear, setContinuityYear] = useState<string>(currentYearStr);
   const [continuityClassFilter, setContinuityClassFilter] = useState<string>('all');
   const [continuitySearchQuery, setContinuitySearchQuery] = useState<string>('');
   const [continuitySegment, setContinuitySegment] = useState<'all' | 'continuous' | 'churned' | 'new' | 'reactivated'>('all');
+
+  // Mode 2: Multi-Month Timeline & All-Months Matrix (User Sketch)
+  const [multiYear, setMultiYear] = useState<string>(currentYearStr);
+  const [multiClassFilter, setMultiClassFilter] = useState<string>('none');
+  const [multiSelectedMonths, setMultiSelectedMonths] = useState<string[]>([]);
+  const [multiTableTab, setMultiTableTab] = useState<'all-paid' | 'partial' | 'zero'>('all-paid');
+  const [multiSearchQuery, setMultiSearchQuery] = useState<string>('');
 
   // Copy Feedback state
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
@@ -196,98 +310,7 @@ export default function AnalysisManagement() {
   // 1. Students who PAID matching the selected filters
   const paidStudentsList = useMemo(() => {
     return payments.filter(p => {
-      if (!p.paid_date && !p.class_type) return false;
-
-      // Extract payment year and month from paid_date (if present)
-      let pYear = '';
-      let pMonth = '';
-      if (p.paid_date) {
-        const dateParts = p.paid_date.split('-');
-        if (dateParts.length >= 2) {
-          pYear = dateParts[0];
-          const pMonthIdx = parseInt(dateParts[1], 10) - 1;
-          if (pMonthIdx >= 0 && pMonthIdx < 12) {
-            pMonth = MONTH_NAMES[pMonthIdx];
-          }
-        }
-      }
-
-      // Year filter: check paid_date year or year mentioned in class_type
-      if (payYearFilter !== 'all') {
-        const yearInClass = (p.class_type || '').includes(payYearFilter);
-        const yearInDate = pYear === payYearFilter;
-        if (!yearInClass && !yearInDate) return false;
-      }
-
-      // Prepare individual class and package strings for this payment
-      const rawItems: string[] = [];
-      if (p.class_type) {
-        p.class_type.split(',').forEach(item => {
-          const trimmed = item.trim();
-          if (trimmed) rawItems.push(trimmed);
-        });
-      }
-      if (p.package_type) {
-        p.package_type.split(',').forEach(item => {
-          const trimmed = item.trim();
-          if (trimmed) rawItems.push(trimmed);
-        });
-      }
-      if (rawItems.length === 0) {
-        rawItems.push(p.class_type || p.package_type || 'General');
-      }
-
-      // COMBINED FILTERING LOGIC:
-      // When both month and class type are selected, the combined value is matched across items
-      const matchesFilter = rawItems.some(item => {
-        const itemLower = item.toLowerCase();
-
-        // 1. Month match:
-        // Matches if:
-        // - payMonthFilter is 'all'
-        // - OR item explicitly contains the month name (e.g. "2026 Theory October" or "2026 Theory - October")
-        // - OR September shorthand ("sep")
-        // - OR the payment's paid_date month matches payMonthFilter
-        const monthMatch = payMonthFilter === 'all' || (
-          itemLower.includes(payMonthFilter.toLowerCase()) ||
-          (payMonthFilter.toLowerCase().startsWith('sep') && itemLower.includes('sep')) ||
-          (pMonth && pMonth.toLowerCase() === payMonthFilter.toLowerCase())
-        );
-
-        if (!monthMatch) return false;
-
-        // 2. Class match:
-        if (payClassFilter === 'none') return false;
-        if (payClassFilter === 'all') return true;
-
-        const cLower = payClassFilter.toLowerCase().trim();
-
-        // Check if item contains the full combined string: e.g. "2026 Theory October" or "2026 Theory - October"
-        if (payMonthFilter !== 'all') {
-          const combinedSpaced = `${cLower} ${payMonthFilter.toLowerCase()}`;
-          const combinedHyphen = `${cLower} - ${payMonthFilter.toLowerCase()}`;
-          if (itemLower.includes(combinedSpaced) || itemLower.includes(combinedHyphen)) {
-            return true;
-          }
-        }
-
-        // Direct containment
-        if (itemLower.includes(cLower)) return true;
-
-        // Check base item (stripping any month suffix like " - October" or " October")
-        let baseItem = item;
-        const foundMonth = MONTH_NAMES.find(m => 
-          item.endsWith(` ${m}`) || 
-          item.endsWith(` - ${m}`) || 
-          item.toLowerCase().includes(`- ${m.toLowerCase()}`)
-        );
-        if (foundMonth) {
-          baseItem = item.replace(new RegExp(`[- ]*${foundMonth}\\b`, 'gi'), '').trim();
-        }
-        const baseLower = baseItem.toLowerCase();
-        return baseLower === cLower || baseLower.includes(cLower) || cLower.includes(baseLower);
-      });
-
+      const matchesFilter = checkPaymentMatchesClassMonthYear(p, payClassFilter, payMonthFilter, payYearFilter);
       if (!matchesFilter) return false;
 
       // Quick Search
@@ -634,28 +657,13 @@ export default function AnalysisManagement() {
     const targetPaidMap = new Map<string, Payment>();
 
     payments.forEach(p => {
-      if (!p.paid_date) return false;
-      const parts = p.paid_date.split('-');
-      if (parts.length < 2) return;
-      const y = parts[0];
-      const m = MONTH_NAMES[parseInt(parts[1], 10) - 1];
-
-      // Year match
-      if (continuityYear !== 'all' && y !== continuityYear) return;
-
-      // Class match
-      if (continuityClassFilter !== 'all') {
-        const pClass = (p.class_type || p.package_type || '').toLowerCase();
-        if (!pClass.includes(continuityClassFilter.toLowerCase())) return;
-      }
-
       const cleanPca = p.pcaid?.trim().toUpperCase();
       if (!cleanPca) return;
 
-      if (m === baselineMonth) {
+      if (checkPaymentMatchesClassMonthYear(p, continuityClassFilter, baselineMonth, continuityYear)) {
         baselinePaidMap.set(cleanPca, p);
       }
-      if (m === targetMonth) {
+      if (checkPaymentMatchesClassMonthYear(p, continuityClassFilter, targetMonth, continuityYear)) {
         targetPaidMap.set(cleanPca, p);
       }
     });
@@ -799,6 +807,183 @@ export default function AnalysisManagement() {
 
     return list;
   }, [continuityAnalysis, continuitySegment, continuitySearchQuery, targetMonth]);
+
+  // ---------------------------------------------------------------------------
+  // MULTI-MONTH CONTINUITY TIMELINE & DATA PROCESSING (USER SKETCH)
+  // ---------------------------------------------------------------------------
+  const toggleMultiMonth = (month: string) => {
+    setMultiSelectedMonths(prev =>
+      prev.includes(month) ? prev.filter(m => m !== month) : [...prev, month]
+    );
+  };
+
+  const handleSelectAllMultiMonths = () => {
+    setMultiSelectedMonths([...MONTH_NAMES]);
+  };
+
+  const handleClearMultiMonths = () => {
+    setMultiSelectedMonths([]);
+  };
+
+  const handleSelectYtdMultiMonths = () => {
+    const upToCurrent = MONTH_NAMES.slice(0, currentMonthIdx + 1);
+    setMultiSelectedMonths(upToCurrent);
+  };
+
+  // Multi-Month analysis: students who paid ALL selected months vs Partial vs Zero
+  const multiContinuityAnalysis = useMemo(() => {
+    if (multiClassFilter === 'none' || multiSelectedMonths.length === 0) {
+      return {
+        allPaidStudents: [],
+        partialStudents: [],
+        zeroStudents: [],
+        totalRevenue: 0,
+        candidateCount: 0
+      };
+    }
+
+    // 1. Identify all candidate students for this class and year
+    const candidatePcaids = new Set<string>();
+    const cLower = multiClassFilter.toLowerCase().trim();
+
+    students.forEach(s => {
+      const sClass = (s.asked_class_type || s.asked_package_type || s.proper_batch || '').toLowerCase();
+      if (sClass.includes(cLower)) {
+        if (s.pcaid) candidatePcaids.add(s.pcaid.trim().toUpperCase());
+      }
+    });
+
+    payments.forEach(p => {
+      if (p.pcaid && checkPaymentMatchesClassMonthYear(p, multiClassFilter, 'all', multiYear)) {
+        candidatePcaids.add(p.pcaid.trim().toUpperCase());
+      }
+    });
+
+    // 2. Map payments by student and selected month
+    const studentPaymentsByMonth = new Map<string, Map<string, Payment[]>>();
+    let totalRevenue = 0;
+
+    payments.forEach(p => {
+      const cleanPca = p.pcaid?.trim().toUpperCase();
+      if (!cleanPca || !candidatePcaids.has(cleanPca)) return;
+
+      multiSelectedMonths.forEach(m => {
+        if (checkPaymentMatchesClassMonthYear(p, multiClassFilter, m, multiYear)) {
+          if (!studentPaymentsByMonth.has(cleanPca)) {
+            studentPaymentsByMonth.set(cleanPca, new Map<string, Payment[]>());
+          }
+          const mMap = studentPaymentsByMonth.get(cleanPca)!;
+          if (!mMap.has(m)) {
+            mMap.set(m, []);
+          }
+          mMap.get(m)!.push(p);
+          totalRevenue += Number(p.payment) || 0;
+        }
+      });
+    });
+
+    // 3. Categorize candidates into All-Paid, Partial, Zero
+    interface MultiMonthStudentItem {
+      pcaid: string;
+      name: string;
+      phone: string;
+      email: string;
+      proper_batch: string;
+      paidMonths: string[];
+      missedMonths: string[];
+      paidCount: number;
+      totalSelected: number;
+      totalAmount: number;
+      monthPaymentMap: Record<string, { paid: boolean; amount: number; date: string }>;
+    }
+
+    const allPaidStudents: MultiMonthStudentItem[] = [];
+    const partialStudents: MultiMonthStudentItem[] = [];
+    const zeroStudents: MultiMonthStudentItem[] = [];
+
+    candidatePcaids.forEach(cleanPca => {
+      const studentObj = studentMap.get(cleanPca);
+      const mPayMap = studentPaymentsByMonth.get(cleanPca);
+
+      const paidMonths: string[] = [];
+      const missedMonths: string[] = [];
+      let totalAmount = 0;
+      const monthPaymentMap: Record<string, { paid: boolean; amount: number; date: string }> = {};
+
+      multiSelectedMonths.forEach(m => {
+        const pList = mPayMap?.get(m);
+        if (pList && pList.length > 0) {
+          paidMonths.push(m);
+          const sumM = pList.reduce((acc, curr) => acc + (Number(curr.payment) || 0), 0);
+          totalAmount += sumM;
+          monthPaymentMap[m] = {
+            paid: true,
+            amount: sumM,
+            date: pList[0].paid_date || ''
+          };
+        } else {
+          missedMonths.push(m);
+          monthPaymentMap[m] = {
+            paid: false,
+            amount: 0,
+            date: ''
+          };
+        }
+      });
+
+      const item: MultiMonthStudentItem = {
+        pcaid: cleanPca,
+        name: studentObj?.name || 'Student',
+        phone: studentObj?.phone || '-',
+        email: studentObj?.mail || '-',
+        proper_batch: studentObj?.proper_batch || '-',
+        paidMonths,
+        missedMonths,
+        paidCount: paidMonths.length,
+        totalSelected: multiSelectedMonths.length,
+        totalAmount,
+        monthPaymentMap
+      };
+
+      if (paidMonths.length === multiSelectedMonths.length) {
+        allPaidStudents.push(item);
+      } else if (paidMonths.length > 0) {
+        partialStudents.push(item);
+      } else {
+        zeroStudents.push(item);
+      }
+    });
+
+    allPaidStudents.sort((a, b) => a.pcaid.localeCompare(b.pcaid));
+    partialStudents.sort((a, b) => b.paidCount - a.paidCount || a.pcaid.localeCompare(b.pcaid));
+    zeroStudents.sort((a, b) => a.pcaid.localeCompare(b.pcaid));
+
+    return {
+      allPaidStudents,
+      partialStudents,
+      zeroStudents,
+      totalRevenue,
+      candidateCount: candidatePcaids.size
+    };
+  }, [students, payments, multiClassFilter, multiSelectedMonths, multiYear, studentMap]);
+
+  // Filtered list for Multi-Month Table based on selected sub-tab and search query
+  const filteredMultiTableList = useMemo(() => {
+    const baseList = multiTableTab === 'all-paid'
+      ? multiContinuityAnalysis.allPaidStudents
+      : multiTableTab === 'partial'
+      ? multiContinuityAnalysis.partialStudents
+      : multiContinuityAnalysis.zeroStudents;
+
+    if (!multiSearchQuery.trim()) return baseList;
+    const q = multiSearchQuery.toLowerCase().trim();
+    return baseList.filter(item =>
+      item.pcaid.toLowerCase().includes(q) ||
+      item.name.toLowerCase().includes(q) ||
+      item.phone.includes(q) ||
+      item.proper_batch.toLowerCase().includes(q)
+    );
+  }, [multiContinuityAnalysis, multiTableTab, multiSearchQuery]);
 
   // ---------------------------------------------------------------------------
   // EXPORT UTILITIES (CSV)
@@ -1639,280 +1824,781 @@ export default function AnalysisManagement() {
         /* TAB 2: MONTHLY CONTINUITY & RETENTION (REGULARS VS DROPOUTS)          */
         /* ===================================================================== */
         <div className="space-y-6">
-          {/* Filter Bar for Continuity */}
-          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-5 shadow-sm space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-gray-100 dark:border-gray-800 pb-3">
-              <div>
-                <h2 className="text-base font-black text-gray-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
-                  <TrendingUp size={18} className="text-teal-600" />
-                  <span>Monthly Continuity & Retention Matrix</span>
-                </h2>
-                <p className="text-xs text-gray-500">
-                  Compare two consecutive months to track who stays in class continuously, who stopped, and new joiners.
-                </p>
-              </div>
-
-              {/* Year & Class Filter */}
-              <div className="flex flex-wrap items-center gap-2">
-                <select
-                  value={continuityYear}
-                  onChange={(e) => setContinuityYear(e.target.value)}
-                  className="h-9 px-2.5 text-xs bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg font-semibold text-gray-800 dark:text-gray-200"
-                >
-                  <option value="all">All Years</option>
-                  {availableYears.map(y => (
-                    <option key={y} value={y}>{y}</option>
-                  ))}
-                </select>
-
-                <select
-                  value={continuityClassFilter}
-                  onChange={(e) => setContinuityClassFilter(e.target.value)}
-                  className="h-9 px-2.5 text-xs bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg font-semibold text-gray-800 dark:text-gray-200"
-                >
-                  <option value="all">All Classes</option>
-                  {baseClassTypes.map(c => (
-                    <option key={c} value={c}>{c}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            {/* Month Comparison Selectors */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 items-center">
-              <div className="lg:col-span-2">
-                <label className="block text-[10px] font-black uppercase text-gray-500 tracking-wider mb-1">
-                  Baseline Month (Previous)
-                </label>
-                <select
-                  value={baselineMonth}
-                  onChange={(e) => setBaselineMonth(e.target.value)}
-                  className="w-full h-10 px-3 text-sm bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl font-bold text-gray-800 dark:text-gray-200"
-                >
-                  {MONTH_NAMES.map(m => (
-                    <option key={m} value={m}>{m}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="hidden lg:flex justify-center text-gray-400 pt-4">
-                <ArrowRight size={20} />
-              </div>
-
-              <div className="lg:col-span-2">
-                <label className="block text-[10px] font-black uppercase text-gray-500 tracking-wider mb-1">
-                  Target Month (Current / Comparison)
-                </label>
-                <select
-                  value={targetMonth}
-                  onChange={(e) => setTargetMonth(e.target.value)}
-                  className="w-full h-10 px-3 text-sm bg-gray-50 dark:bg-gray-800 border border-teal-500/40 rounded-xl font-bold text-teal-700 dark:text-teal-300"
-                >
-                  {MONTH_NAMES.map(m => (
-                    <option key={m} value={m}>{m}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            {/* 4 Summary Cards */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2">
-              {/* Continuous */}
-              <div 
-                onClick={() => setContinuitySegment(continuitySegment === 'continuous' ? 'all' : 'continuous')}
-                className={`p-3.5 rounded-xl border transition-all cursor-pointer ${
-                  continuitySegment === 'continuous'
-                    ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-500 shadow-sm'
-                    : 'bg-white dark:bg-gray-800/60 border-gray-200 dark:border-gray-700 hover:border-emerald-400'
+          {/* Top Mode Switcher for Continuity */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-1">
+            <div className="inline-flex items-center gap-1.5 p-1 bg-gray-100 dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-2xs w-fit">
+              <button
+                type="button"
+                onClick={() => setContinuityMode('multi-month')}
+                className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  continuityMode === 'multi-month'
+                    ? 'bg-white dark:bg-gray-900 text-teal-700 dark:text-teal-300 shadow-xs border border-teal-100 dark:border-teal-900/40 font-extrabold'
+                    : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
                 }`}
               >
-                <div className="flex items-center justify-between text-xs text-gray-500 font-bold mb-1">
-                  <span>Continuous</span>
-                  <UserCheck size={16} className="text-emerald-500" />
-                </div>
-                <div className="text-xl sm:text-2xl font-black text-emerald-600 dark:text-emerald-400">
-                  {continuityAnalysis.continuous.length}
-                </div>
-                <p className="text-[10px] text-gray-400 font-medium">Paid both {baselineMonth} & {targetMonth}</p>
-              </div>
-
-              {/* Churned */}
-              <div 
-                onClick={() => setContinuitySegment(continuitySegment === 'churned' ? 'all' : 'churned')}
-                className={`p-3.5 rounded-xl border transition-all cursor-pointer ${
-                  continuitySegment === 'churned'
-                    ? 'bg-rose-50 dark:bg-rose-950/40 border-rose-500 shadow-sm'
-                    : 'bg-white dark:bg-gray-800/60 border-gray-200 dark:border-gray-700 hover:border-rose-400'
+                <CalendarRange size={14} className={continuityMode === 'multi-month' ? 'text-teal-600' : 'text-gray-400'} />
+                <span>Multi-Month Continuity Matrix (All Months)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setContinuityMode('two-month')}
+                className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  continuityMode === 'two-month'
+                    ? 'bg-white dark:bg-gray-900 text-teal-700 dark:text-teal-300 shadow-xs border border-teal-100 dark:border-teal-900/40 font-extrabold'
+                    : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
                 }`}
               >
-                <div className="flex items-center justify-between text-xs text-gray-500 font-bold mb-1">
-                  <span>Dropped Out</span>
-                  <UserX size={16} className="text-rose-500" />
-                </div>
-                <div className="text-xl sm:text-2xl font-black text-rose-600 dark:text-rose-400">
-                  {continuityAnalysis.churned.length}
-                </div>
-                <p className="text-[10px] text-gray-400 font-medium">Paid {baselineMonth}, stopped in {targetMonth}</p>
-              </div>
-
-              {/* New Joinees */}
-              <div 
-                onClick={() => setContinuitySegment(continuitySegment === 'new' ? 'all' : 'new')}
-                className={`p-3.5 rounded-xl border transition-all cursor-pointer ${
-                  continuitySegment === 'new'
-                    ? 'bg-blue-50 dark:bg-blue-950/40 border-blue-500 shadow-sm'
-                    : 'bg-white dark:bg-gray-800/60 border-gray-200 dark:border-gray-700 hover:border-blue-400'
-                }`}
-              >
-                <div className="flex items-center justify-between text-xs text-gray-500 font-bold mb-1">
-                  <span>New Joinees</span>
-                  <Sparkles size={16} className="text-blue-500" />
-                </div>
-                <div className="text-xl sm:text-2xl font-black text-blue-600 dark:text-blue-400">
-                  {continuityAnalysis.newJoinees.length}
-                </div>
-                <p className="text-[10px] text-gray-400 font-medium">First-time paid in {targetMonth}</p>
-              </div>
-
-              {/* Reactivated */}
-              <div 
-                onClick={() => setContinuitySegment(continuitySegment === 'reactivated' ? 'all' : 'reactivated')}
-                className={`p-3.5 rounded-xl border transition-all cursor-pointer ${
-                  continuitySegment === 'reactivated'
-                    ? 'bg-purple-50 dark:bg-purple-950/40 border-purple-500 shadow-sm'
-                    : 'bg-white dark:bg-gray-800/60 border-gray-200 dark:border-gray-700 hover:border-purple-400'
-                }`}
-              >
-                <div className="flex items-center justify-between text-xs text-gray-500 font-bold mb-1">
-                  <span>Reactivated</span>
-                  <RefreshCw size={16} className="text-purple-500" />
-                </div>
-                <div className="text-xl sm:text-2xl font-black text-purple-600 dark:text-purple-400">
-                  {continuityAnalysis.reactivated.length}
-                </div>
-                <p className="text-[10px] text-gray-400 font-medium">Returned after prior gap</p>
-              </div>
+                <TrendingUp size={14} className={continuityMode === 'two-month' ? 'text-teal-600' : 'text-gray-400'} />
+                <span>2-Month Comparison (Month A vs Month B)</span>
+              </button>
             </div>
           </div>
 
-          {/* Retention Data Table */}
-          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-5 shadow-sm space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-black text-gray-900 dark:text-white uppercase tracking-wider">
-                  Students ({continuityDisplayList.length})
-                </span>
-                {continuitySegment !== 'all' && (
-                  <span className="px-2 py-0.5 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 rounded text-xs font-bold capitalize">
-                    Filtered: {continuitySegment}
-                  </span>
+          {continuityMode === 'multi-month' ? (
+            /* ================================================================= */
+            /* FEATURE 1: MULTI-MONTH CONTINUITY WITH TIMELINE BAR (USER SKETCH) */
+            /* ================================================================= */
+            <div className="space-y-6">
+              {/* Filter Bar & Timeline Card */}
+              <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-5 shadow-sm space-y-5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-gray-100 dark:border-gray-800 pb-3">
+                  <div>
+                    <h2 className="text-base font-black text-gray-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
+                      <CalendarRange size={18} className="text-teal-600" />
+                      <span>Multi-Month Class Continuity & All-Months Matrix</span>
+                    </h2>
+                    <p className="text-xs text-gray-500">
+                      Select a class and choose multiple months along the timeline to find students who paid for all selected months.
+                    </p>
+                  </div>
+
+                  {/* Year & Class Type Filter */}
+                  <div className="flex flex-wrap items-center gap-2.5">
+                    <div>
+                      <select
+                        value={multiYear}
+                        onChange={(e) => setMultiYear(e.target.value)}
+                        className="h-9 px-2.5 text-xs bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg font-semibold text-gray-800 dark:text-gray-200 focus:ring-2 focus:ring-teal-500 outline-none"
+                      >
+                        <option value="all">All Years</option>
+                        {availableYears.map(y => (
+                          <option key={y} value={y}>{y}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <select
+                        value={multiClassFilter}
+                        onChange={(e) => setMultiClassFilter(e.target.value)}
+                        className="h-9 px-2.5 text-xs bg-gray-50 dark:bg-gray-800 border border-teal-500/50 dark:border-teal-700 rounded-lg font-semibold text-gray-800 dark:text-gray-200 focus:ring-2 focus:ring-teal-500 outline-none"
+                      >
+                        <option value="none">None (Select Class)</option>
+                        {baseClassTypes.map(c => (
+                          <option key={c} value={c}>{c}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                {/* THE MONTH TIMELINE BAR (FROM USER SKETCH) */}
+                <div className="bg-gradient-to-r from-teal-50/60 via-indigo-50/40 to-blue-50/60 dark:from-teal-950/20 dark:via-indigo-950/20 dark:to-blue-950/20 border border-teal-200/80 dark:border-teal-900/60 rounded-2xl p-4 sm:p-5 space-y-3 shadow-2xs">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 border-b border-teal-100 dark:border-teal-900/50 pb-2.5">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-black uppercase tracking-wider text-teal-900 dark:text-teal-200 flex items-center gap-1.5">
+                        <Calendar size={15} className="text-teal-600 dark:text-teal-400" />
+                        Select Months on Timeline
+                      </span>
+                      <span className="text-[11px] font-bold text-gray-500">
+                        ({multiSelectedMonths.length} of 12 selected)
+                      </span>
+                    </div>
+
+                    {/* Quick Helper Buttons */}
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <button
+                        type="button"
+                        onClick={handleSelectAllMultiMonths}
+                        className="px-2.5 py-1 bg-white hover:bg-teal-50 dark:bg-gray-800 dark:hover:bg-gray-700 text-teal-700 dark:text-teal-300 border border-teal-200 dark:border-teal-800 rounded-lg text-[11px] font-bold transition-all shadow-2xs cursor-pointer"
+                      >
+                        Select All (12 Mo)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleSelectYtdMultiMonths}
+                        className="px-2.5 py-1 bg-white hover:bg-teal-50 dark:bg-gray-800 dark:hover:bg-gray-700 text-teal-700 dark:text-teal-300 border border-teal-200 dark:border-teal-800 rounded-lg text-[11px] font-bold transition-all shadow-2xs cursor-pointer"
+                      >
+                        Jan – {currentMonthName.substring(0, 3)} (YTD)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleClearMultiMonths}
+                        disabled={multiSelectedMonths.length === 0}
+                        className="px-2.5 py-1 bg-white hover:bg-rose-50 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-600 hover:text-rose-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700 rounded-lg text-[11px] font-bold transition-all shadow-2xs cursor-pointer disabled:opacity-40"
+                      >
+                        Clear All
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* CONNECTING HORIZONTAL LINE + 12 ROUNDED CHECKBOXES (MATCHING USER SKETCH) */}
+                  <div className="relative py-4 px-2 sm:px-4 overflow-x-auto scrollbar-thin">
+                    <div className="relative min-w-[720px] max-w-[1100px] mx-auto">
+                      {/* Horizontal track connecting nodes */}
+                      <div className="absolute top-[18px] left-[26px] right-[26px] h-[3px] bg-teal-300/80 dark:bg-teal-800/80 rounded-full z-0" />
+
+                      {/* 12 Month Nodes */}
+                      <div className="relative flex items-center justify-between z-10">
+                        {MONTH_NAMES.map((month, idx) => {
+                          const isChecked = multiSelectedMonths.includes(month);
+                          const shortLabel = MONTH_SHORT_LABELS[idx];
+
+                          return (
+                            <button
+                              key={month}
+                              type="button"
+                              onClick={() => toggleMultiMonth(month)}
+                              className="flex flex-col items-center group cursor-pointer focus:outline-none transition-transform active:scale-90"
+                              title={`Click to ${isChecked ? 'deselect' : 'select'} ${month}`}
+                            >
+                              <div
+                                className={`w-9 h-9 rounded-xl flex items-center justify-center border-2 transition-all shadow-sm ${
+                                  isChecked
+                                    ? 'bg-teal-600 border-teal-600 text-white dark:bg-teal-500 dark:border-teal-500 ring-4 ring-teal-100 dark:ring-teal-950/80 scale-110'
+                                    : 'bg-white dark:bg-gray-800 border-teal-400 dark:border-teal-700 text-transparent hover:border-teal-600 hover:scale-105'
+                                }`}
+                              >
+                                <Check size={18} className={isChecked ? 'stroke-[3.5]' : 'opacity-0'} />
+                              </div>
+                              <span
+                                className={`mt-2 text-xs transition-colors whitespace-nowrap ${
+                                  isChecked
+                                    ? 'text-teal-900 dark:text-teal-200 font-black'
+                                    : 'text-gray-600 dark:text-gray-400 font-bold group-hover:text-teal-700 dark:group-hover:text-teal-300'
+                                }`}
+                              >
+                                {shortLabel}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 4 SUMMARY KPIS */}
+                {multiClassFilter !== 'none' && multiSelectedMonths.length > 0 && (
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-1 animate-in fade-in duration-200">
+                    {/* KPI 1: Paid ALL Selected Months */}
+                    <div
+                      onClick={() => setMultiTableTab('all-paid')}
+                      className={`p-3.5 rounded-xl border transition-all cursor-pointer ${
+                        multiTableTab === 'all-paid'
+                          ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-500 ring-2 ring-emerald-500/20 shadow-sm'
+                          : 'bg-white dark:bg-gray-800/60 border-gray-200 dark:border-gray-700 hover:border-emerald-400'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between text-xs text-gray-500 font-bold mb-1">
+                        <span className="text-emerald-800 dark:text-emerald-300 font-black uppercase text-[11px] tracking-wide">
+                          Paid ALL {multiSelectedMonths.length} Months
+                        </span>
+                        <Award size={16} className="text-emerald-500" />
+                      </div>
+                      <div className="text-2xl font-black text-emerald-600 dark:text-emerald-400">
+                        {multiContinuityAnalysis.allPaidStudents.length}
+                      </div>
+                      <p className="text-[10px] text-gray-400 font-medium">100% full streak in all selected months</p>
+                    </div>
+
+                    {/* KPI 2: Partial Attendees */}
+                    <div
+                      onClick={() => setMultiTableTab('partial')}
+                      className={`p-3.5 rounded-xl border transition-all cursor-pointer ${
+                        multiTableTab === 'partial'
+                          ? 'bg-amber-50 dark:bg-amber-950/40 border-amber-500 ring-2 ring-amber-500/20 shadow-sm'
+                          : 'bg-white dark:bg-gray-800/60 border-gray-200 dark:border-gray-700 hover:border-amber-400'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between text-xs text-gray-500 font-bold mb-1">
+                        <span className="text-amber-800 dark:text-amber-300 font-black uppercase text-[11px] tracking-wide">
+                          Partial Attendees
+                        </span>
+                        <UserCheck size={16} className="text-amber-500" />
+                      </div>
+                      <div className="text-2xl font-black text-amber-600 dark:text-amber-400">
+                        {multiContinuityAnalysis.partialStudents.length}
+                      </div>
+                      <p className="text-[10px] text-gray-400 font-medium">Paid 1 to {Math.max(1, multiSelectedMonths.length - 1)} selected months</p>
+                    </div>
+
+                    {/* KPI 3: Zero Payments */}
+                    <div
+                      onClick={() => setMultiTableTab('zero')}
+                      className={`p-3.5 rounded-xl border transition-all cursor-pointer ${
+                        multiTableTab === 'zero'
+                          ? 'bg-rose-50 dark:bg-rose-950/40 border-rose-500 ring-2 ring-rose-500/20 shadow-sm'
+                          : 'bg-white dark:bg-gray-800/60 border-gray-200 dark:border-gray-700 hover:border-rose-400'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between text-xs text-gray-500 font-bold mb-1">
+                        <span className="text-rose-800 dark:text-rose-300 font-black uppercase text-[11px] tracking-wide">
+                          Zero Payments
+                        </span>
+                        <UserX size={16} className="text-rose-500" />
+                      </div>
+                      <div className="text-2xl font-black text-rose-600 dark:text-rose-400">
+                        {multiContinuityAnalysis.zeroStudents.length}
+                      </div>
+                      <p className="text-[10px] text-gray-400 font-medium">Missed all {multiSelectedMonths.length} selected months</p>
+                    </div>
+
+                    {/* KPI 4: Total Revenue */}
+                    <div className="p-3.5 rounded-xl border bg-white dark:bg-gray-800/60 border-gray-200 dark:border-gray-700">
+                      <div className="flex items-center justify-between text-xs text-gray-500 font-bold mb-1">
+                        <span className="text-gray-700 dark:text-gray-300 font-black uppercase text-[11px] tracking-wide">
+                          Total Revenue
+                        </span>
+                        <CreditCard size={16} className="text-teal-600" />
+                      </div>
+                      <div className="text-2xl font-black text-teal-600 dark:text-teal-400">
+                        Rs. {multiContinuityAnalysis.totalRevenue.toLocaleString()}
+                      </div>
+                      <p className="text-[10px] text-gray-400 font-medium">Across all {multiSelectedMonths.length} selected months</p>
+                    </div>
+                  </div>
                 )}
               </div>
 
-              <div className="flex items-center gap-2">
-                <div className="relative w-52">
-                  <Search size={14} className="absolute left-2.5 top-2.5 text-gray-400" />
-                  <input
-                    type="text"
-                    placeholder="Search students..."
-                    value={continuitySearchQuery}
-                    onChange={(e) => setContinuitySearchQuery(e.target.value)}
-                    className="w-full h-8 pl-8 pr-2 text-xs bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg outline-none"
-                  />
+              {/* DATA TABLE SECTION */}
+              {multiClassFilter === 'none' ? (
+                <div className="py-20 text-center text-gray-500 font-medium bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-6">
+                  <Filter size={28} className="mx-auto mb-2 text-teal-500 opacity-60" />
+                  <p className="text-sm font-bold text-gray-700 dark:text-gray-200">
+                    Please select a <strong className="text-teal-600">Class Type</strong> from the dropdown above
+                  </p>
+                  <p className="text-xs text-gray-400 mt-1">
+                    Select the specific class you want to analyze across multiple months.
+                  </p>
+                </div>
+              ) : multiSelectedMonths.length === 0 ? (
+                <div className="py-20 text-center text-gray-500 font-medium bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-6">
+                  <CalendarRange size={28} className="mx-auto mb-2 text-teal-500 opacity-60" />
+                  <p className="text-sm font-bold text-gray-700 dark:text-gray-200">
+                    Please select one or more <strong className="text-teal-600">Months</strong> on the timeline bar above
+                  </p>
+                  <p className="text-xs text-gray-400 mt-1">
+                    Click any month checkbox along the line to inspect students who paid for all of those months.
+                  </p>
+                </div>
+              ) : (
+                <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-5 shadow-sm space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    {/* Table View Toggle Tabs */}
+                    <div className="flex items-center gap-1.5 p-1 bg-gray-100 dark:bg-gray-800 rounded-xl w-fit border border-gray-200 dark:border-gray-700 flex-wrap">
+                      <button
+                        type="button"
+                        onClick={() => setMultiTableTab('all-paid')}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                          multiTableTab === 'all-paid'
+                            ? 'bg-emerald-600 text-white shadow-xs font-black'
+                            : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+                        }`}
+                      >
+                        <Award size={13} />
+                        <span>Paid ALL Months ({multiContinuityAnalysis.allPaidStudents.length})</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setMultiTableTab('partial')}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                          multiTableTab === 'partial'
+                            ? 'bg-amber-600 text-white shadow-xs font-black'
+                            : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+                        }`}
+                      >
+                        <UserCheck size={13} />
+                        <span>Partial Attendees ({multiContinuityAnalysis.partialStudents.length})</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setMultiTableTab('zero')}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                          multiTableTab === 'zero'
+                            ? 'bg-rose-600 text-white shadow-xs font-black'
+                            : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+                        }`}
+                      >
+                        <UserX size={13} />
+                        <span>Zero Payments ({multiContinuityAnalysis.zeroStudents.length})</span>
+                      </button>
+                    </div>
+
+                    {/* Search & Actions */}
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <div className="relative w-48 sm:w-56">
+                        <Search size={14} className="absolute left-2.5 top-2.5 text-gray-400" />
+                        <input
+                          type="text"
+                          placeholder="Search students..."
+                          value={multiSearchQuery}
+                          onChange={(e) => setMultiSearchQuery(e.target.value)}
+                          className="w-full h-8 pl-8 pr-2 text-xs bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg outline-none focus:ring-1 focus:ring-teal-500"
+                        />
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => handleCopyPcaids(filteredMultiTableList.map(s => s.pcaid), 'multi-table-pcaids')}
+                        disabled={filteredMultiTableList.length === 0}
+                        className="h-8 px-2.5 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-40"
+                        title="Copy all PCA IDs in this view"
+                      >
+                        {copiedKey === 'multi-table-pcaids' ? <Check size={13} className="text-emerald-600" /> : <Copy size={13} />}
+                        <span>Copy IDs</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const headers = [
+                            'PCA ID', 'Name', 'Phone', 'Batch',
+                            ...multiSelectedMonths,
+                            'Paid Months Count', 'Total Selected', 'Total Amount'
+                          ];
+                          const rows = filteredMultiTableList.map(s => [
+                            s.pcaid,
+                            s.name,
+                            s.phone,
+                            s.proper_batch,
+                            ...multiSelectedMonths.map(m => s.monthPaymentMap[m]?.paid ? `Paid (Rs. ${s.monthPaymentMap[m].amount})` : 'Unpaid'),
+                            s.paidCount,
+                            s.totalSelected,
+                            s.totalAmount
+                          ]);
+                          exportToCSV(
+                            `multi_month_continuity_${multiClassFilter}_${multiSelectedMonths.length}_months`,
+                            headers,
+                            rows
+                          );
+                        }}
+                        disabled={filteredMultiTableList.length === 0}
+                        className="h-8 px-3 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-40"
+                      >
+                        <Download size={13} />
+                        <span>Export CSV</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Multi-Month Detailed Attendance Table */}
+                  <div className="border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden max-h-[520px] overflow-y-auto scrollbar-thin">
+                    <table className="w-full text-left text-xs">
+                      <thead className="sticky top-0 bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-300 font-bold border-b border-gray-200 dark:border-gray-700 text-[10px] uppercase tracking-wider z-10">
+                        <tr>
+                          <th className="py-2.5 px-3">PCA ID</th>
+                          <th className="py-2.5 px-3">Student Name</th>
+                          <th className="py-2.5 px-2">Phone</th>
+                          <th className="py-2.5 px-2">Batch</th>
+                          {/* Each Selected Month Column */}
+                          {multiSelectedMonths.map(m => {
+                            const shortM = MONTH_SHORT_LABELS[MONTH_NAMES.indexOf(m)] || m;
+                            return (
+                              <th key={m} className="py-2.5 px-2 text-center font-bold">
+                                {shortM}
+                              </th>
+                            );
+                          })}
+                          <th className="py-2.5 px-3 text-center">Paid Streak</th>
+                          <th className="py-2.5 px-3 text-right">Total Paid</th>
+                          <th className="py-2.5 px-3 text-right">Quick Contact</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                        {filteredMultiTableList.length === 0 ? (
+                          <tr>
+                            <td colSpan={7 + multiSelectedMonths.length} className="py-12 text-center text-gray-400 font-medium">
+                              No students found in this category for {multiClassFilter}.
+                            </td>
+                          </tr>
+                        ) : (
+                          filteredMultiTableList.slice(0, 150).map((s) => (
+                            <tr key={s.pcaid} className="hover:bg-gray-50 dark:hover:bg-gray-800/40 transition-colors">
+                              <td className="py-2.5 px-3 font-mono font-bold text-gray-900 dark:text-gray-100">
+                                <button
+                                  type="button"
+                                  onClick={(e) => handleCopySinglePcaid(s.pcaid, e)}
+                                  className="inline-flex items-center gap-1.5 px-1.5 py-0.5 rounded text-xs font-mono font-bold text-gray-800 dark:text-gray-200 hover:bg-teal-100 dark:hover:bg-teal-950/60 transition-colors group cursor-pointer border border-transparent hover:border-teal-300 dark:hover:border-teal-700"
+                                  title="Click to copy PCA ID"
+                                >
+                                  <span>{s.pcaid}</span>
+                                  {copiedKey === s.pcaid ? (
+                                    <Check size={12} className="text-emerald-600 dark:text-emerald-400 animate-in zoom-in duration-100" />
+                                  ) : (
+                                    <Copy size={11} className="text-gray-400 group-hover:text-teal-700 dark:group-hover:text-teal-300 transition-colors" />
+                                  )}
+                                </button>
+                              </td>
+                              <td className="py-2.5 px-3 font-semibold text-gray-800 dark:text-gray-200 truncate max-w-[140px]" title={s.name}>
+                                {s.name}
+                              </td>
+                              <td className="py-2.5 px-2 font-mono text-gray-600 dark:text-gray-400">
+                                {s.phone}
+                              </td>
+                              <td className="py-2.5 px-2 text-[11px] text-gray-600 dark:text-gray-400">
+                                {s.proper_batch}
+                              </td>
+
+                              {/* Month by Month Attendance Checkmarks */}
+                              {multiSelectedMonths.map(m => {
+                                const payInfo = s.monthPaymentMap[m];
+                                return (
+                                  <td key={m} className="py-2.5 px-2 text-center">
+                                    {payInfo?.paid ? (
+                                      <span
+                                        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-400 text-[11px] font-bold border border-emerald-200 dark:border-emerald-800"
+                                        title={`Paid on ${payInfo.date || 'verified'} (Rs. ${payInfo.amount})`}
+                                      >
+                                        <Check size={12} className="stroke-[3]" />
+                                      </span>
+                                    ) : (
+                                      <span className="text-gray-300 dark:text-gray-600 font-bold text-xs">-</span>
+                                    )}
+                                  </td>
+                                );
+                              })}
+
+                              {/* Streak / Ratio Badge */}
+                              <td className="py-2.5 px-3 text-center">
+                                <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
+                                  s.paidCount === s.totalSelected
+                                    ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
+                                    : s.paidCount > 0
+                                    ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300'
+                                    : 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300'
+                                }`}>
+                                  {s.paidCount}/{s.totalSelected} ({Math.round((s.paidCount / s.totalSelected) * 100)}%)
+                                </span>
+                              </td>
+
+                              {/* Total Amount */}
+                              <td className="py-2.5 px-3 text-right font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                                Rs. {s.totalAmount.toLocaleString()}
+                              </td>
+
+                              {/* WhatsApp Contact */}
+                              <td className="py-2.5 px-3 text-right">
+                                {s.phone && s.phone !== '-' ? (
+                                  <a
+                                    href={`https://wa.me/94${s.phone.replace(/\D/g, '').replace(/^0+/, '')}`}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="inline-flex items-center gap-1 px-2 py-1 rounded bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 text-[10px] font-bold transition-colors"
+                                    title="Message on WhatsApp"
+                                  >
+                                    <MessageSquare size={11} />
+                                    <span>WhatsApp</span>
+                                  </a>
+                                ) : (
+                                  <span className="text-gray-400 text-[10px]">-</span>
+                                )}
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                  {filteredMultiTableList.length > 150 && (
+                    <p className="text-[10px] text-gray-400 text-right">Showing top 150 of {filteredMultiTableList.length}. Export CSV for complete records.</p>
+                  )}
+                </div>
+              )}
+            </div>
+          ) : (
+            /* ================================================================= */
+            /* FEATURE 2: 2-MONTH COMPARISON (BASELINE VS TARGET MONTH)          */
+            /* ================================================================= */
+            <div className="space-y-6">
+              {/* Filter Bar for Continuity */}
+              <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-5 shadow-sm space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-gray-100 dark:border-gray-800 pb-3">
+                  <div>
+                    <h2 className="text-base font-black text-gray-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
+                      <TrendingUp size={18} className="text-teal-600" />
+                      <span>Monthly Continuity & Retention Matrix</span>
+                    </h2>
+                    <p className="text-xs text-gray-500">
+                      Compare two consecutive months to track who stays in class continuously, who stopped, and new joiners.
+                    </p>
+                  </div>
+
+                  {/* Year & Class Filter */}
+                  <div className="flex flex-wrap items-center gap-2">
+                    <select
+                      value={continuityYear}
+                      onChange={(e) => setContinuityYear(e.target.value)}
+                      className="h-9 px-2.5 text-xs bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg font-semibold text-gray-800 dark:text-gray-200"
+                    >
+                      <option value="all">All Years</option>
+                      {availableYears.map(y => (
+                        <option key={y} value={y}>{y}</option>
+                      ))}
+                    </select>
+
+                    <select
+                      value={continuityClassFilter}
+                      onChange={(e) => setContinuityClassFilter(e.target.value)}
+                      className="h-9 px-2.5 text-xs bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg font-semibold text-gray-800 dark:text-gray-200"
+                    >
+                      <option value="all">All Classes</option>
+                      {baseClassTypes.map(c => (
+                        <option key={c} value={c}>{c}</option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
 
-                <button
-                  onClick={() => {
-                    exportToCSV(
-                      `continuity_${baselineMonth}_vs_${targetMonth}`,
-                      ['PCA ID', 'Name', 'Phone', 'Batch', 'Status', 'Details'],
-                      continuityDisplayList.map(item => [item.pcaid, item.name, item.phone, item.proper_batch, item.status, item.details])
-                    );
-                  }}
-                  disabled={continuityDisplayList.length === 0}
-                  className="h-8 px-3 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-40"
-                >
-                  <Download size={13} />
-                  <span>Export CSV</span>
-                </button>
+                {/* Month Comparison Selectors */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 items-center">
+                  <div className="lg:col-span-2">
+                    <label className="block text-[10px] font-black uppercase text-gray-500 tracking-wider mb-1">
+                      Baseline Month (Previous)
+                    </label>
+                    <select
+                      value={baselineMonth}
+                      onChange={(e) => setBaselineMonth(e.target.value)}
+                      className="w-full h-10 px-3 text-sm bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl font-bold text-gray-800 dark:text-gray-200"
+                    >
+                      {MONTH_NAMES.map(m => (
+                        <option key={m} value={m}>{m}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="hidden lg:flex justify-center text-gray-400 pt-4">
+                    <ArrowRight size={20} />
+                  </div>
+
+                  <div className="lg:col-span-2">
+                    <label className="block text-[10px] font-black uppercase text-gray-500 tracking-wider mb-1">
+                      Target Month (Current / Comparison)
+                    </label>
+                    <select
+                      value={targetMonth}
+                      onChange={(e) => setTargetMonth(e.target.value)}
+                      className="w-full h-10 px-3 text-sm bg-gray-50 dark:bg-gray-800 border border-teal-500/40 rounded-xl font-bold text-teal-700 dark:text-teal-300"
+                    >
+                      {MONTH_NAMES.map(m => (
+                        <option key={m} value={m}>{m}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {/* 4 Summary Cards */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2">
+                  {/* Continuous */}
+                  <div 
+                    onClick={() => setContinuitySegment(continuitySegment === 'continuous' ? 'all' : 'continuous')}
+                    className={`p-3.5 rounded-xl border transition-all cursor-pointer ${
+                      continuitySegment === 'continuous'
+                        ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-500 shadow-sm'
+                        : 'bg-white dark:bg-gray-800/60 border-gray-200 dark:border-gray-700 hover:border-emerald-400'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between text-xs text-gray-500 font-bold mb-1">
+                      <span>Continuous</span>
+                      <UserCheck size={16} className="text-emerald-500" />
+                    </div>
+                    <div className="text-xl sm:text-2xl font-black text-emerald-600 dark:text-emerald-400">
+                      {continuityAnalysis.continuous.length}
+                    </div>
+                    <p className="text-[10px] text-gray-400 font-medium">Paid both {baselineMonth} & {targetMonth}</p>
+                  </div>
+
+                  {/* Churned */}
+                  <div 
+                    onClick={() => setContinuitySegment(continuitySegment === 'churned' ? 'all' : 'churned')}
+                    className={`p-3.5 rounded-xl border transition-all cursor-pointer ${
+                      continuitySegment === 'churned'
+                        ? 'bg-rose-50 dark:bg-rose-950/40 border-rose-500 shadow-sm'
+                        : 'bg-white dark:bg-gray-800/60 border-gray-200 dark:border-gray-700 hover:border-rose-400'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between text-xs text-gray-500 font-bold mb-1">
+                      <span>Dropped Out</span>
+                      <UserX size={16} className="text-rose-500" />
+                    </div>
+                    <div className="text-xl sm:text-2xl font-black text-rose-600 dark:text-rose-400">
+                      {continuityAnalysis.churned.length}
+                    </div>
+                    <p className="text-[10px] text-gray-400 font-medium">Paid {baselineMonth}, stopped in {targetMonth}</p>
+                  </div>
+
+                  {/* New Joinees */}
+                  <div 
+                    onClick={() => setContinuitySegment(continuitySegment === 'new' ? 'all' : 'new')}
+                    className={`p-3.5 rounded-xl border transition-all cursor-pointer ${
+                      continuitySegment === 'new'
+                        ? 'bg-blue-50 dark:bg-blue-950/40 border-blue-500 shadow-sm'
+                        : 'bg-white dark:bg-gray-800/60 border-gray-200 dark:border-gray-700 hover:border-blue-400'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between text-xs text-gray-500 font-bold mb-1">
+                      <span>New Joinees</span>
+                      <Sparkles size={16} className="text-blue-500" />
+                    </div>
+                    <div className="text-xl sm:text-2xl font-black text-blue-600 dark:text-blue-400">
+                      {continuityAnalysis.newJoinees.length}
+                    </div>
+                    <p className="text-[10px] text-gray-400 font-medium">First-time paid in {targetMonth}</p>
+                  </div>
+
+                  {/* Reactivated */}
+                  <div 
+                    onClick={() => setContinuitySegment(continuitySegment === 'reactivated' ? 'all' : 'reactivated')}
+                    className={`p-3.5 rounded-xl border transition-all cursor-pointer ${
+                      continuitySegment === 'reactivated'
+                        ? 'bg-purple-50 dark:bg-purple-950/40 border-purple-500 shadow-sm'
+                        : 'bg-white dark:bg-gray-800/60 border-gray-200 dark:border-gray-700 hover:border-purple-400'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between text-xs text-gray-500 font-bold mb-1">
+                      <span>Reactivated</span>
+                      <RefreshCw size={16} className="text-purple-500" />
+                    </div>
+                    <div className="text-xl sm:text-2xl font-black text-purple-600 dark:text-purple-400">
+                      {continuityAnalysis.reactivated.length}
+                    </div>
+                    <p className="text-[10px] text-gray-400 font-medium">Returned after prior gap</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Retention Data Table */}
+              <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-5 shadow-sm space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-black text-gray-900 dark:text-white uppercase tracking-wider">
+                      Students ({continuityDisplayList.length})
+                    </span>
+                    {continuitySegment !== 'all' && (
+                      <span className="px-2 py-0.5 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 rounded text-xs font-bold capitalize">
+                        Filtered: {continuitySegment}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <div className="relative w-52">
+                      <Search size={14} className="absolute left-2.5 top-2.5 text-gray-400" />
+                      <input
+                        type="text"
+                        placeholder="Search students..."
+                        value={continuitySearchQuery}
+                        onChange={(e) => setContinuitySearchQuery(e.target.value)}
+                        className="w-full h-8 pl-8 pr-2 text-xs bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg outline-none"
+                      />
+                    </div>
+
+                    <button
+                      onClick={() => {
+                        exportToCSV(
+                          `continuity_${baselineMonth}_vs_${targetMonth}`,
+                          ['PCA ID', 'Name', 'Phone', 'Batch', 'Status', 'Details'],
+                          continuityDisplayList.map(item => [item.pcaid, item.name, item.phone, item.proper_batch, item.status, item.details])
+                        );
+                      }}
+                      disabled={continuityDisplayList.length === 0}
+                      className="h-8 px-3 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-40"
+                    >
+                      <Download size={13} />
+                      <span>Export CSV</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Continuity Table */}
+                <div className="border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden max-h-[500px] overflow-y-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead className="sticky top-0 bg-gray-50 dark:bg-gray-800 text-gray-500 font-bold border-b border-gray-200 dark:border-gray-700 text-[10px] uppercase tracking-wider">
+                      <tr>
+                        <th className="py-2.5 px-3">PCA ID</th>
+                        <th className="py-2.5 px-3">Student Name</th>
+                        <th className="py-2.5 px-2">Phone</th>
+                        <th className="py-2.5 px-2">Batch</th>
+                        <th className="py-2.5 px-2">Status</th>
+                        <th className="py-2.5 px-3">Monthly Transition</th>
+                        <th className="py-2.5 px-3 text-right">Quick Contact</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                      {continuityDisplayList.length === 0 ? (
+                        <tr>
+                          <td colSpan={7} className="py-12 text-center text-gray-400 font-medium">
+                            No students found for this filter selection.
+                          </td>
+                        </tr>
+                      ) : (
+                        continuityDisplayList.map((item) => (
+                          <tr key={item.pcaid} className="hover:bg-gray-50 dark:hover:bg-gray-800/40 transition-colors">
+                            <td className="py-2.5 px-3 font-mono font-bold text-gray-900 dark:text-gray-100">
+                              {item.pcaid}
+                            </td>
+                            <td className="py-2.5 px-3 font-semibold text-gray-800 dark:text-gray-200">
+                              {item.name}
+                            </td>
+                            <td className="py-2.5 px-2 font-mono text-gray-600 dark:text-gray-400">
+                              {item.phone}
+                            </td>
+                            <td className="py-2.5 px-2 text-[11px] text-gray-600 dark:text-gray-400">
+                              {item.proper_batch}
+                            </td>
+                            <td className="py-2.5 px-2">
+                              <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
+                                item.status === 'Continuous'
+                                  ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
+                                  : item.status === 'Dropped Out'
+                                  ? 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300'
+                                  : item.status === 'New Joinee'
+                                  ? 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300'
+                                  : 'bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300'
+                              }`}>
+                                {item.status}
+                              </span>
+                            </td>
+                            <td className="py-2.5 px-3 text-[11px] text-gray-500 font-mono">
+                              {item.details}
+                            </td>
+                            <td className="py-2.5 px-3 text-right">
+                              {item.phone && item.phone !== '-' ? (
+                                <a
+                                  href={`https://wa.me/94${item.phone.replace(/\D/g, '').replace(/^0+/, '')}`}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="inline-flex items-center gap-1 px-2 py-1 rounded bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 text-[10px] font-bold transition-colors"
+                                  title="Message on WhatsApp"
+                                >
+                                  <MessageSquare size={11} />
+                                  <span>WhatsApp</span>
+                                </a>
+                              ) : (
+                                <span className="text-gray-400 text-[10px]">-</span>
+                              )}
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
-
-            {/* Continuity Table */}
-            <div className="border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden max-h-[500px] overflow-y-auto">
-              <table className="w-full text-left text-xs">
-                <thead className="sticky top-0 bg-gray-50 dark:bg-gray-800 text-gray-500 font-bold border-b border-gray-200 dark:border-gray-700 text-[10px] uppercase tracking-wider">
-                  <tr>
-                    <th className="py-2.5 px-3">PCA ID</th>
-                    <th className="py-2.5 px-3">Student Name</th>
-                    <th className="py-2.5 px-2">Phone</th>
-                    <th className="py-2.5 px-2">Batch</th>
-                    <th className="py-2.5 px-2">Status</th>
-                    <th className="py-2.5 px-3">Monthly Transition</th>
-                    <th className="py-2.5 px-3 text-right">Quick Contact</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-                  {continuityDisplayList.length === 0 ? (
-                    <tr>
-                      <td colSpan={7} className="py-12 text-center text-gray-400 font-medium">
-                        No students found for this filter selection.
-                      </td>
-                    </tr>
-                  ) : (
-                    continuityDisplayList.map((item) => (
-                      <tr key={item.pcaid} className="hover:bg-gray-50 dark:hover:bg-gray-800/40 transition-colors">
-                        <td className="py-2.5 px-3 font-mono font-bold text-gray-900 dark:text-gray-100">
-                          {item.pcaid}
-                        </td>
-                        <td className="py-2.5 px-3 font-semibold text-gray-800 dark:text-gray-200">
-                          {item.name}
-                        </td>
-                        <td className="py-2.5 px-2 font-mono text-gray-600 dark:text-gray-400">
-                          {item.phone}
-                        </td>
-                        <td className="py-2.5 px-2 text-[11px] text-gray-600 dark:text-gray-400">
-                          {item.proper_batch}
-                        </td>
-                        <td className="py-2.5 px-2">
-                          <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
-                            item.status === 'Continuous'
-                              ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
-                              : item.status === 'Dropped Out'
-                              ? 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300'
-                              : item.status === 'New Joinee'
-                              ? 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300'
-                              : 'bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300'
-                          }`}>
-                            {item.status}
-                          </span>
-                        </td>
-                        <td className="py-2.5 px-3 text-[11px] text-gray-500 font-mono">
-                          {item.details}
-                        </td>
-                        <td className="py-2.5 px-3 text-right">
-                          {item.phone && item.phone !== '-' ? (
-                            <a
-                              href={`https://wa.me/94${item.phone.replace(/\D/g, '').replace(/^0+/, '')}`}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="inline-flex items-center gap-1 px-2 py-1 rounded bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 text-[10px] font-bold transition-colors"
-                              title="Message on WhatsApp"
-                            >
-                              <MessageSquare size={11} />
-                              <span>WhatsApp</span>
-                            </a>
-                          ) : (
-                            <span className="text-gray-400 text-[10px]">-</span>
-                          )}
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
+          )}
         </div>
       )}
     </div>
