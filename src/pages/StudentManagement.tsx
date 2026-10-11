@@ -41,7 +41,9 @@ import {
   KeyRound,
   Clock,
   Share2,
-  Layers
+  Layers,
+  ArrowUpDown,
+  ChevronUp
 } from 'lucide-react';
 import { 
   Student, 
@@ -4234,6 +4236,17 @@ export function StudentExplorer() {
     paymentStatus: ''
   });
 
+  const [sortBy, setSortBy] = useState<
+    'registered_desc' | 
+    'registered_asc' | 
+    'paid_date_desc' | 
+    'paid_date_asc' | 
+    'pcaid_asc' | 
+    'pcaid_desc' | 
+    'name_asc' | 
+    'name_desc'
+  >('registered_desc');
+
   // Reset filters when navigating back to StudentExplorer from other menus
   useEffect(() => {
     if (!location.state?.search && !location.state?.student) {
@@ -4805,201 +4818,442 @@ export function StudentExplorer() {
     }
   };
 
+  // Helper to test if a payment matches the active correlated filters (Class, Month, Year, Package, Date Range, Status)
+  const checkPaymentMatchesFilters = React.useCallback((p: any) => {
+    if (!p) return { isMatch: false, matchingDates: [] as { dateStr: string; timestamp: number }[] };
+
+    // 1. Payment Status check
+    if (filters.paymentStatus) {
+      const totalFee = Number(p.payment || 0);
+      const activeInsts = (p.installment || p.installments || []).filter((inst: any) => !inst.deleted_at);
+      const totalPaidAmount = activeInsts.reduce((sum: number, inst: any) => sum + Number(inst.paid_amount || 0), 0);
+      
+      let status = 'paid';
+      if (totalPaidAmount < totalFee) {
+        status = 'pending';
+      } else if (totalPaidAmount > totalFee) {
+        status = 'over paid';
+      }
+      
+      if (status !== filters.paymentStatus) {
+        return { isMatch: false, matchingDates: [] };
+      }
+    }
+
+    // 2. Candidate dates collection
+    const candidateDates: { dateStr: string; timestamp: number }[] = [];
+    if (p.paid_date) {
+      const t = new Date(p.paid_date).getTime();
+      if (!isNaN(t)) {
+        candidateDates.push({ dateStr: p.paid_date, timestamp: t });
+      }
+    }
+    const activeInsts = (p.installment || p.installments || []).filter((inst: any) => !inst.deleted_at);
+    for (const inst of activeInsts) {
+      if (inst.paid_date) {
+        const t = new Date(inst.paid_date).getTime();
+        if (!isNaN(t)) {
+          candidateDates.push({ dateStr: inst.paid_date, timestamp: t });
+        }
+      }
+    }
+
+    // 3. Payment Date Range filter check
+    const pStart = filters.paymentStartDate ? new Date(filters.paymentStartDate).setHours(0, 0, 0, 0) : null;
+    const pEnd = filters.paymentEndDate ? new Date(filters.paymentEndDate).setHours(23, 59, 59, 999) : null;
+    let rangeFilteredDates = candidateDates;
+    if (pStart || pEnd) {
+      rangeFilteredDates = candidateDates.filter(d => {
+        const time = new Date(d.dateStr).setHours(0, 0, 0, 0);
+        if (pStart && time < pStart) return false;
+        if (pEnd && time > pEnd) return false;
+        return true;
+      });
+      if (rangeFilteredDates.length === 0) {
+        return { isMatch: false, matchingDates: [] };
+      }
+    }
+
+    // 4. Year check
+    if (filters.year) {
+      const yearMatchesDate = rangeFilteredDates.some(d => {
+        const y = new Date(d.dateStr).getFullYear().toString();
+        return y === filters.year;
+      });
+      const yearInClass = (p.class_type || '').includes(filters.year);
+      if (!yearMatchesDate && !yearInClass) {
+        return { isMatch: false, matchingDates: [] };
+      }
+      if (yearMatchesDate) {
+        rangeFilteredDates = rangeFilteredDates.filter(d => {
+          return new Date(d.dateStr).getFullYear().toString() === filters.year;
+        });
+      }
+    }
+
+    // 5. Package filter check
+    if (filters.packages.length > 0) {
+      const pPkg = (p.package_type || '').toLowerCase();
+      const pkgMatches = filters.packages.some(pkg => {
+        const pkgLower = pkg.toLowerCase();
+        return pPkg.includes(pkgLower) || pkgLower.includes(pPkg);
+      });
+      if (!pkgMatches) {
+        return { isMatch: false, matchingDates: [] };
+      }
+    }
+
+    // 6. Class & Month co-relation check
+    const rawItems: string[] = [];
+    if (p.class_type) {
+      p.class_type.split(',').forEach((item: string) => {
+        const trimmed = item.trim();
+        if (trimmed) rawItems.push(trimmed);
+      });
+    }
+    if (p.package_type && rawItems.length === 0) {
+      p.package_type.split(',').forEach((item: string) => {
+        const trimmed = item.trim();
+        if (trimmed) rawItems.push(trimmed);
+      });
+    }
+    if (rawItems.length === 0) {
+      rawItems.push(p.class_type || p.package_type || 'General');
+    }
+
+    let itemMatches = false;
+    for (const item of rawItems) {
+      const itemLower = item.toLowerCase();
+
+      // 6a. Check Class match for this item
+      let matchesClassForItem = true;
+      if (filters.classes.length > 0) {
+        let baseItem = item;
+        const foundMonth = MONTHS.find(m => 
+          item.endsWith(` ${m}`) || 
+          item.endsWith(` - ${m}`) || 
+          item.toLowerCase().includes(`- ${m.toLowerCase()}`)
+        );
+        if (foundMonth) {
+          baseItem = item.replace(new RegExp(`[- ]*${foundMonth}\\b`, 'gi'), '').trim();
+        }
+        const baseLower = baseItem.toLowerCase().trim();
+
+        matchesClassForItem = filters.classes.some(c => {
+          const cLower = c.toLowerCase().trim();
+          return baseLower === cLower || baseLower.includes(cLower) || cLower.includes(baseLower);
+        });
+      }
+
+      if (!matchesClassForItem) continue;
+
+      // 6b. Check Month match for this item
+      let matchesMonthForItem = true;
+      if (filters.month) {
+        const mTarget = filters.month.toLowerCase().trim();
+        let explicitMonth: string | null = null;
+        for (const m of MONTHS) {
+          if (itemLower.includes(m.toLowerCase())) {
+            explicitMonth = m.toLowerCase();
+            break;
+          }
+          if (m.toLowerCase() === 'september' && /\bsep\b/i.test(itemLower)) {
+            explicitMonth = 'september';
+            break;
+          }
+        }
+
+        if (explicitMonth) {
+          matchesMonthForItem = explicitMonth === mTarget || (mTarget.startsWith('sep') && explicitMonth.startsWith('sep'));
+        } else {
+          matchesMonthForItem = rangeFilteredDates.some(d => {
+            const dMonthIdx = new Date(d.dateStr).getMonth();
+            const dMonthName = MONTHS[dMonthIdx]?.toLowerCase();
+            return dMonthName === mTarget || (mTarget.startsWith('sep') && dMonthName?.startsWith('sep'));
+          });
+          if (matchesMonthForItem) {
+            rangeFilteredDates = rangeFilteredDates.filter(d => {
+              const dMonthIdx = new Date(d.dateStr).getMonth();
+              const dMonthName = MONTHS[dMonthIdx]?.toLowerCase();
+              return dMonthName === mTarget || (mTarget.startsWith('sep') && dMonthName?.startsWith('sep'));
+            });
+          }
+        }
+      }
+
+      if (matchesClassForItem && matchesMonthForItem) {
+        itemMatches = true;
+        break;
+      }
+    }
+
+    if ((filters.classes.length > 0 || Boolean(filters.month)) && !itemMatches) {
+      return { isMatch: false, matchingDates: [] };
+    }
+
+    return {
+      isMatch: true,
+      matchingDates: rangeFilteredDates
+    };
+  }, [filters]);
+
+  // Memoized payment date and stats lookup correlated directly with all active filters
+  const studentPaymentDatesMap = React.useMemo(() => {
+    const map = new Map<string, { 
+      latest: string | null; 
+      earliest: string | null; 
+      latestTimestamp: number | null; 
+      earliestTimestamp: number | null; 
+      count: number;
+      hasMatch: boolean;
+    }>();
+    
+    // Group explorerPayments by cleaned uppercase pcaid
+    const paymentsByPcaid = new Map<string, any[]>();
+    for (const p of explorerPayments) {
+      if (!p.pcaid) continue;
+      const cleanPca = p.pcaid.trim().toUpperCase();
+      const list = paymentsByPcaid.get(cleanPca) || [];
+      list.push(p);
+      paymentsByPcaid.set(cleanPca, list);
+    }
+
+    paymentsByPcaid.forEach((payments, cleanPca) => {
+      const allMatchingDates: { dateStr: string; timestamp: number }[] = [];
+      let hadAnyMatchingPayment = false;
+
+      for (const p of payments) {
+        const { isMatch, matchingDates } = checkPaymentMatchesFilters(p);
+        if (isMatch) {
+          hadAnyMatchingPayment = true;
+          allMatchingDates.push(...matchingDates);
+        }
+      }
+
+      if (hadAnyMatchingPayment && allMatchingDates.length > 0) {
+        allMatchingDates.sort((a, b) => a.timestamp - b.timestamp);
+        const earliest = allMatchingDates[0];
+        const latest = allMatchingDates[allMatchingDates.length - 1];
+        map.set(cleanPca, {
+          latest: latest.dateStr,
+          earliest: earliest.dateStr,
+          latestTimestamp: latest.timestamp,
+          earliestTimestamp: earliest.timestamp,
+          count: allMatchingDates.length,
+          hasMatch: true
+        });
+      } else {
+        map.set(cleanPca, {
+          latest: null,
+          earliest: null,
+          latestTimestamp: null,
+          earliestTimestamp: null,
+          count: 0,
+          hasMatch: false
+        });
+      }
+    });
+
+    return map;
+  }, [explorerPayments, filters, checkPaymentMatchesFilters]);
+
   const handleExport = () => {
-    const data = filteredStudents.map((s, idx) => ({
-      'No': idx + 1,
-      'PCA ID': s.pcaid,
-      'First Name': s.name,
-      'Last Name': s.last_name || '-',
-      'Name': [s.name, s.last_name].filter(Boolean).join(' '),
-      'Phone': s.phone,
-      'District': s.district,
-      'Proper Batch': s.proper_batch,
-      'Joined Batch': s.joined_batch,
-      'NIC': s.nic || '-',
-      'DOB': s.dob || '-',
-      'Father\'s Job': s.father_job || '-',
-      'Mother\'s Job': s.mother_job || '-',
-      'School': s.school,
-      'Mail': s.mail,
-      'Address': s.address,
-      'Classes': s.asked_class_type,
-      'Packages': s.asked_package_type,
-      'Enrollment Date': formatDate(s.created_at)
-    }));
+    const data = filteredStudents.map((s, idx) => {
+      const cleanPca = (s.pcaid || '').trim().toUpperCase();
+      const payInfo = studentPaymentDatesMap.get(cleanPca);
+      const exportPaidDate = sortBy === 'paid_date_asc' ? payInfo?.earliest : payInfo?.latest;
+      return {
+        'No': idx + 1,
+        'PCA ID': s.pcaid,
+        'First Name': s.name,
+        'Last Name': s.last_name || '-',
+        'Name': [s.name, s.last_name].filter(Boolean).join(' '),
+        'Phone': s.phone,
+        'District': s.district,
+        'Proper Batch': s.proper_batch,
+        'Joined Batch': s.joined_batch,
+        'Paid Date': exportPaidDate ? formatDate(exportPaidDate) : 'No Payment',
+        'Total Payments Recorded': payInfo?.count || 0,
+        'NIC': s.nic || '-',
+        'DOB': s.dob || '-',
+        'Father\'s Job': s.father_job || '-',
+        'Mother\'s Job': s.mother_job || '-',
+        'School': s.school,
+        'Mail': s.mail,
+        'Address': s.address,
+        'Classes': s.asked_class_type,
+        'Packages': s.asked_package_type,
+        'Enrollment Date': formatDate(s.created_at)
+      };
+    });
     exportToExcel(data, 'Student_Directory');
   };
 
-  const filteredStudents = students.filter(s => {
-    const searchLower = filters.search.toLowerCase();
-    const fullName = [s.name, s.last_name].filter(Boolean).join(' ').toLowerCase();
-    const matchesSearch = !filters.search || 
-      s.name.toLowerCase().includes(searchLower) || 
-      (s.last_name && s.last_name.toLowerCase().includes(searchLower)) ||
-      fullName.includes(searchLower) ||
-      s.pcaid.toLowerCase().includes(searchLower) || 
-      s.phone.includes(filters.search) ||
-      (s.nic && s.nic.toLowerCase().includes(searchLower));
-    
-    const matchesPcaidSearch = !filters.pcaid || (s.pcaid && s.pcaid.toLowerCase().includes(filters.pcaid.toLowerCase()));
-    
-    const matchesDistrict = !filters.district || s.district === filters.district;
-    const matchesProperBatch = !filters.properBatch || (s.proper_batch && s.proper_batch.toLowerCase().includes(filters.properBatch.toLowerCase()));
-    const matchesJoinedBatch = !filters.joinedBatch || (s.joined_batch && s.joined_batch.toLowerCase().includes(filters.joinedBatch.toLowerCase()));
-    
-    // Gather all class entries for this student from both payment records and student.asked_class_type
-    const rawClassStrings: string[] = [];
-    if (s.asked_class_type) {
-      rawClassStrings.push(s.asked_class_type);
-    }
-    explorerPayments.filter(p => p.pcaid === s.pcaid).forEach(p => {
-      if (p.class_type) rawClassStrings.push(p.class_type);
-    });
-
-    const individualClassItems: string[] = [];
-    rawClassStrings.forEach(str => {
-      str.split(',').forEach(item => {
-        const trimmed = item.trim();
-        if (trimmed) individualClassItems.push(trimmed);
-      });
-    });
-
-    const matchesClasses = filters.classes.length === 0 && !filters.month ? true : (
-      individualClassItems.some(item => {
-        const itemLower = item.toLowerCase();
-        
-        // Check month match
-        const monthMatch = !filters.month || (
-          itemLower.includes(filters.month.toLowerCase()) ||
-          (filters.month.toLowerCase().startsWith('sep') && itemLower.includes('sep'))
-        );
-
-        if (!monthMatch) return false;
-
-        // Check class match
-        if (filters.classes.length === 0) return true;
-
-        return filters.classes.some(c => {
-          const cLower = c.toLowerCase().trim();
-          if (itemLower.includes(cLower)) return true;
-          
-          let baseItem = item;
-          const foundMonth = MONTHS.find(m => item.endsWith(` ${m}`) || item.endsWith(` - ${m}`) || item.toLowerCase().includes(`- ${m.toLowerCase()}`));
-          if (foundMonth) {
-            baseItem = item.replace(new RegExp(`[- ]*${foundMonth}\\b`, 'gi'), '').trim();
-          }
-          const baseLower = baseItem.toLowerCase();
-          return baseLower === cLower || baseLower.includes(cLower) || cLower.includes(baseLower);
-        });
-      })
+  const filteredStudents = React.useMemo(() => {
+    const hasPaymentFilterActive = Boolean(
+      filters.month || 
+      filters.year || 
+      filters.paymentStatus || 
+      filters.paymentStartDate || 
+      filters.paymentEndDate
     );
-    
-    // Gather all package entries for this student from both payment records and student.asked_package_type
-    const rawPackageStrings: string[] = [];
-    if (s.asked_package_type) {
-      rawPackageStrings.push(s.asked_package_type);
-    }
-    explorerPayments.filter(p => p.pcaid === s.pcaid && (p.type === 'package' || Boolean(p.package_type))).forEach(p => {
-      if (p.package_type) rawPackageStrings.push(p.package_type);
-    });
 
-    const individualPackageItems: string[] = [];
-    rawPackageStrings.forEach(str => {
-      str.split(',').forEach(item => {
-        const trimmed = item.trim();
-        if (trimmed) individualPackageItems.push(trimmed);
-      });
-    });
-
-    const matchesPackages = filters.packages.length === 0 ? true : (
-      individualPackageItems.some(item => {
-        const ptLower = item.toLowerCase();
-        return filters.packages.some(pkg => ptLower === pkg.toLowerCase() || ptLower.includes(pkg.toLowerCase()));
-      })
-    );
-    
-    const matchesYear = !filters.year || explorerPayments.some(p => {
-      if (p.pcaid === s.pcaid && p.paid_date) {
-        const pYear = new Date(p.paid_date).getFullYear();
-        return pYear.toString() === filters.year;
-      }
-      return false;
-    });
-    
-    // Check if scholarship
-    let isScholarship = false;
-    if (s.pcaid && s.pcaid.length === 10) {
-      const last3 = s.pcaid.slice(-3);
-      const num = parseInt(last3, 10);
-      if (!isNaN(num) && num >= 900 && num <= 999) {
-        isScholarship = true;
-      }
-    }
-    const matchesStudentType = !filters.studentType || 
-      (filters.studentType === 'Scholarship' && isScholarship) ||
-      (filters.studentType === 'Paid' && !isScholarship);
-
-    // Date Range Logic (Registration Date)
-    const studentDate = s.created_at ? new Date(s.created_at).setHours(0,0,0,0) : null;
-    const start = filters.startDate ? new Date(filters.startDate).setHours(0,0,0,0) : null;
-    const end = filters.endDate ? new Date(filters.endDate).setHours(0,0,0,0) : null;
-    
-    let matchesDateRange = true;
-    if (studentDate) {
-      if (start && studentDate < start) matchesDateRange = false;
-      if (end && studentDate > end) matchesDateRange = false;
-    } else if (start || end) {
-      matchesDateRange = false;
-    }
-
-    // Payment Date Range Logic (Payment / Installment Paid Date)
-    const pStart = filters.paymentStartDate ? new Date(filters.paymentStartDate).setHours(0,0,0,0) : null;
-    const pEnd = filters.paymentEndDate ? new Date(filters.paymentEndDate).setHours(23,59,59,999) : null;
-    
-    let matchesPaymentDateRange = true;
-    if (pStart || pEnd) {
-      const studentPayments = explorerPayments.filter(p => p.pcaid === s.pcaid);
-      if (studentPayments.length === 0) {
-        matchesPaymentDateRange = false;
-      } else {
-        matchesPaymentDateRange = studentPayments.some(p => {
-          if (p.paid_date) {
-            const pTime = new Date(p.paid_date).setHours(0,0,0,0);
-            if ((!pStart || pTime >= pStart) && (!pEnd || pTime <= pEnd)) return true;
-          }
-          const insts = (p.installment || p.installments || []).filter((inst: any) => !inst.deleted_at);
-          return insts.some((inst: any) => {
-            if (inst.paid_date) {
-              const instTime = new Date(inst.paid_date).setHours(0,0,0,0);
-              return (!pStart || instTime >= pStart) && (!pEnd || instTime <= pEnd);
-            }
-            return false;
-          });
-        });
-      }
-    }
-
-    // Payment Status Logic
-    const allStudentPayments = explorerPayments.filter(p => p.pcaid === s.pcaid);
-    const matchesPaymentStatus = !filters.paymentStatus || (
-      allStudentPayments.length > 0 && allStudentPayments.some(p => {
-        const totalFee = Number(p.payment || 0);
-        const activeInstallments = (p.installment || p.installments || []).filter((inst: any) => !inst.deleted_at);
-        const totalPaidAmount = activeInstallments.reduce((sum: number, inst: any) => sum + Number(inst.paid_amount || 0), 0);
-        
-        let status = 'paid';
-        if (totalPaidAmount < totalFee) {
-          status = 'pending';
-        } else if (totalPaidAmount > totalFee) {
-          status = 'over paid';
+    const list = students.filter(s => {
+      const searchLower = filters.search.toLowerCase();
+      const fullName = [s.name, s.last_name].filter(Boolean).join(' ').toLowerCase();
+      const matchesSearch = !filters.search || 
+        s.name.toLowerCase().includes(searchLower) || 
+        (s.last_name && s.last_name.toLowerCase().includes(searchLower)) ||
+        fullName.includes(searchLower) ||
+        s.pcaid.toLowerCase().includes(searchLower) || 
+        s.phone.includes(filters.search) ||
+        (s.nic && s.nic.toLowerCase().includes(searchLower));
+      
+      const matchesPcaidSearch = !filters.pcaid || (s.pcaid && s.pcaid.toLowerCase().includes(filters.pcaid.toLowerCase()));
+      const matchesDistrict = !filters.district || s.district === filters.district;
+      const matchesProperBatch = !filters.properBatch || (s.proper_batch && s.proper_batch.toLowerCase().includes(filters.properBatch.toLowerCase()));
+      const matchesJoinedBatch = !filters.joinedBatch || (s.joined_batch && s.joined_batch.toLowerCase().includes(filters.joinedBatch.toLowerCase()));
+      
+      // Check if scholarship
+      let isScholarship = false;
+      if (s.pcaid && s.pcaid.length === 10) {
+        const last3 = s.pcaid.slice(-3);
+        const num = parseInt(last3, 10);
+        if (!isNaN(num) && num >= 900 && num <= 999) {
+          isScholarship = true;
         }
-        
-        return status === filters.paymentStatus;
-      })
-    );
+      }
+      const matchesStudentType = !filters.studentType || 
+        (filters.studentType === 'Scholarship' && isScholarship) ||
+        (filters.studentType === 'Paid' && !isScholarship);
 
-    return matchesSearch && matchesPcaidSearch && matchesDistrict && matchesProperBatch && matchesJoinedBatch && matchesClasses && matchesPackages && matchesDateRange && matchesPaymentDateRange && matchesStudentType && matchesYear && matchesPaymentStatus;
-  });
+      // Date Range Logic (Registration Date)
+      const studentDate = s.created_at ? new Date(s.created_at).setHours(0,0,0,0) : null;
+      const start = filters.startDate ? new Date(filters.startDate).setHours(0,0,0,0) : null;
+      const end = filters.endDate ? new Date(filters.endDate).setHours(0,0,0,0) : null;
+      
+      let matchesDateRange = true;
+      if (studentDate) {
+        if (start && studentDate < start) matchesDateRange = false;
+        if (end && studentDate > end) matchesDateRange = false;
+      } else if (start || end) {
+        matchesDateRange = false;
+      }
+
+      // Correlated Class / Payment / Month / Year matching
+      const cleanPca = (s.pcaid || '').trim().toUpperCase();
+      const payInfo = studentPaymentDatesMap.get(cleanPca);
+
+      let matchesClasses = true;
+      if (filters.classes.length > 0) {
+        if (payInfo?.hasMatch) {
+          matchesClasses = true;
+        } else {
+          // If no matching payment record, check if student profile registration specifies the class
+          const sAsked = (s.asked_class_type || '').toLowerCase();
+          const askedMatches = filters.classes.some(c => {
+            const cLower = c.toLowerCase().trim();
+            return sAsked.includes(cLower) || cLower.includes(sAsked);
+          });
+          matchesClasses = hasPaymentFilterActive ? false : askedMatches;
+        }
+      } else if (hasPaymentFilterActive) {
+        matchesClasses = Boolean(payInfo?.hasMatch);
+      }
+
+      let matchesPackages = true;
+      if (filters.packages.length > 0) {
+        if (payInfo?.hasMatch) {
+          matchesPackages = true;
+        } else {
+          const sPkg = (s.asked_package_type || '').toLowerCase();
+          const askedMatches = filters.packages.some(pkg => sPkg.includes(pkg.toLowerCase()));
+          matchesPackages = hasPaymentFilterActive ? false : askedMatches;
+        }
+      }
+
+      return matchesSearch && matchesPcaidSearch && matchesDistrict && matchesProperBatch && matchesJoinedBatch && matchesStudentType && matchesDateRange && matchesClasses && matchesPackages;
+    });
+
+    list.sort((a, b) => {
+      const cleanPcaA = (a.pcaid || '').trim().toUpperCase();
+      const cleanPcaB = (b.pcaid || '').trim().toUpperCase();
+      const payA = studentPaymentDatesMap.get(cleanPcaA);
+      const payB = studentPaymentDatesMap.get(cleanPcaB);
+
+      if (sortBy === 'paid_date_desc') {
+        const hasA = Boolean(payA && payA.latestTimestamp != null);
+        const hasB = Boolean(payB && payB.latestTimestamp != null);
+
+        if (hasA && !hasB) return -1;
+        if (!hasA && hasB) return 1;
+        if (!hasA && !hasB) {
+          return (a.pcaid || '').localeCompare(b.pcaid || '', undefined, { numeric: true });
+        }
+
+        const diff = (payB!.latestTimestamp!) - (payA!.latestTimestamp!);
+        if (diff !== 0) return diff;
+        return (a.pcaid || '').localeCompare(b.pcaid || '', undefined, { numeric: true });
+      }
+
+      if (sortBy === 'paid_date_asc') {
+        const hasA = Boolean(payA && payA.earliestTimestamp != null);
+        const hasB = Boolean(payB && payB.earliestTimestamp != null);
+
+        if (hasA && !hasB) return -1;
+        if (!hasA && hasB) return 1;
+        if (!hasA && !hasB) {
+          return (a.pcaid || '').localeCompare(b.pcaid || '', undefined, { numeric: true });
+        }
+
+        const diff = (payA!.earliestTimestamp!) - (payB!.earliestTimestamp!);
+        if (diff !== 0) return diff;
+        return (a.pcaid || '').localeCompare(b.pcaid || '', undefined, { numeric: true });
+      }
+
+      if (sortBy === 'registered_desc') {
+        const timeA = a.created_at ? new Date(a.created_at).getTime() : 0;
+        const timeB = b.created_at ? new Date(b.created_at).getTime() : 0;
+        if (timeA !== timeB) {
+          return timeB - timeA;
+        }
+        return (b.pcaid || '').localeCompare(a.pcaid || '', undefined, { numeric: true });
+      }
+
+      if (sortBy === 'registered_asc') {
+        const timeA = a.created_at ? new Date(a.created_at).getTime() : 0;
+        const timeB = b.created_at ? new Date(b.created_at).getTime() : 0;
+        if (timeA !== timeB) {
+          return timeA - timeB;
+        }
+        return (a.pcaid || '').localeCompare(b.pcaid || '', undefined, { numeric: true });
+      }
+
+      if (sortBy === 'pcaid_asc') {
+        return (a.pcaid || '').localeCompare(b.pcaid || '', undefined, { numeric: true, sensitivity: 'base' });
+      }
+
+      if (sortBy === 'pcaid_desc') {
+        return (b.pcaid || '').localeCompare(a.pcaid || '', undefined, { numeric: true, sensitivity: 'base' });
+      }
+
+      if (sortBy === 'name_asc') {
+        const nameA = [a.name, a.last_name].filter(Boolean).join(' ').trim().toLowerCase();
+        const nameB = [b.name, b.last_name].filter(Boolean).join(' ').trim().toLowerCase();
+        return nameA.localeCompare(nameB, undefined, { sensitivity: 'base' });
+      }
+
+      if (sortBy === 'name_desc') {
+        const nameA = [a.name, a.last_name].filter(Boolean).join(' ').trim().toLowerCase();
+        const nameB = [b.name, b.last_name].filter(Boolean).join(' ').trim().toLowerCase();
+        return nameB.localeCompare(nameA, undefined, { sensitivity: 'base' });
+      }
+
+      return 0;
+    });
+
+    return list;
+  }, [students, filters, sortBy, studentPaymentDatesMap]);
 
   return (
     <div className="space-y-4">
@@ -5141,6 +5395,26 @@ export function StudentExplorer() {
               {/* Count */}
               <div className="px-3 py-1 bg-teal-50/50 rounded-lg w-full sm:w-auto text-center order-last sm:order-first">
                  <span className="text-[10px] font-black text-teal-600 uppercase whitespace-nowrap">Count: {filteredStudents.length}</span>
+              </div>
+
+              {/* Sort Control */}
+              <div className="flex items-center px-2.5 py-1 bg-teal-50/40 hover:bg-teal-50/70 rounded-lg border border-teal-100/60 transition-colors" title="Sort Students List">
+                <ArrowUpDown size={12} className="text-teal-600 dark:text-teal-400 mr-1.5 flex-shrink-0" />
+                <span className="text-[10px] font-black text-teal-600/70 dark:text-teal-400/70 uppercase mr-1 whitespace-nowrap">Sort:</span>
+                <select 
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value as any)}
+                  className="text-xs font-bold text-teal-800 dark:text-teal-300 border-none outline-none bg-transparent cursor-pointer pr-1"
+                >
+                  <option value="registered_desc">Reg Date (Newest First)</option>
+                  <option value="registered_asc">Reg Date (Oldest First)</option>
+                  <option value="paid_date_desc">Latest Paid Date (Newest)</option>
+                  <option value="paid_date_asc">Earliest Paid Date (Oldest)</option>
+                  <option value="pcaid_asc">PCA ID (0-9 / A-Z)</option>
+                  <option value="pcaid_desc">PCA ID (9-0 / Z-A)</option>
+                  <option value="name_asc">Name (A → Z)</option>
+                  <option value="name_desc">Name (Z → A)</option>
+                </select>
               </div>
 
               {/* Search */}
@@ -5552,24 +5826,60 @@ export function StudentExplorer() {
 
       <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 overflow-hidden">
         <div className="max-h-[600px] overflow-y-auto overflow-x-auto scrollbar-visible">
-          <table className="w-full text-left border-collapse min-w-[850px] table-fixed">
+          <table className="w-full text-left border-collapse min-w-[950px] table-fixed">
             <thead className="sticky top-0 z-20">
               <tr className="bg-teal-600">
                 <th className="p-4 font-bold text-white text-center w-[50px]">No</th>
-                <th className="p-4 font-bold text-white w-[140px]">PCA ID</th>
-                <th className="p-4 font-bold text-white">Student Name</th>
+                <th 
+                  onClick={() => setSortBy(prev => prev === 'pcaid_asc' ? 'pcaid_desc' : 'pcaid_asc')}
+                  className="p-4 font-bold text-white w-[140px] cursor-pointer hover:bg-teal-700 transition-colors select-none"
+                  title="Click to sort by PCA ID"
+                >
+                  <div className="flex items-center gap-1.5">
+                    <span>PCA ID</span>
+                    {sortBy === 'pcaid_asc' && <ChevronUp size={14} className="text-teal-200" />}
+                    {sortBy === 'pcaid_desc' && <ChevronDown size={14} className="text-teal-200" />}
+                  </div>
+                </th>
+                <th 
+                  onClick={() => setSortBy(prev => prev === 'name_asc' ? 'name_desc' : 'name_asc')}
+                  className="p-4 font-bold text-white cursor-pointer hover:bg-teal-700 transition-colors select-none"
+                  title="Click to sort by Student Name"
+                >
+                  <div className="flex items-center gap-1.5">
+                    <span>Student Name</span>
+                    {sortBy === 'name_asc' && <ChevronUp size={14} className="text-teal-200" />}
+                    {sortBy === 'name_desc' && <ChevronDown size={14} className="text-teal-200" />}
+                  </div>
+                </th>
                 <th className="p-4 font-bold text-white w-[190px]">Phone</th>
                 <th className="p-4 font-bold text-white w-[140px]">District</th>
+                <th 
+                  onClick={() => setSortBy(prev => prev === 'paid_date_desc' ? 'paid_date_asc' : 'paid_date_desc')}
+                  className="p-4 font-bold text-white w-[160px] cursor-pointer hover:bg-teal-700 transition-colors select-none"
+                  title="Click to sort by Paid Date"
+                >
+                  <div className="flex items-center gap-1.5">
+                    <CreditCard size={14} className="text-teal-200" />
+                    <span>Paid Date</span>
+                    {sortBy === 'paid_date_desc' && <ChevronDown size={14} className="text-teal-200" />}
+                    {sortBy === 'paid_date_asc' && <ChevronUp size={14} className="text-teal-200" />}
+                  </div>
+                </th>
                 <th className="p-4 font-bold text-white text-center w-[140px]">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50 dark:divide-gray-800/60">
               {loading ? (
-                <tr><td colSpan={6} className="p-10 text-center text-gray-400 dark:text-gray-500 bg-white dark:bg-gray-900">Loading students...</td></tr>
+                <tr><td colSpan={7} className="p-10 text-center text-gray-400 dark:text-gray-500 bg-white dark:bg-gray-900">Loading students...</td></tr>
               ) : filteredStudents.length === 0 ? (
-                <tr><td colSpan={6} className="p-10 text-center text-gray-400 dark:text-gray-500 bg-white dark:bg-gray-900">No students found</td></tr>
+                <tr><td colSpan={7} className="p-10 text-center text-gray-400 dark:text-gray-500 bg-white dark:bg-gray-900">No students found</td></tr>
               ) : (
-                filteredStudents.map((s, idx) => (
+                filteredStudents.map((s, idx) => {
+                  const cleanPca = (s.pcaid || '').trim().toUpperCase();
+                  const payInfo = studentPaymentDatesMap.get(cleanPca);
+                  const displayDate = sortBy === 'paid_date_asc' ? payInfo?.earliest : payInfo?.latest;
+                  return (
                   <tr key={s.id} className="hover:bg-gray-50/50 dark:hover:bg-gray-800/20 transition-colors group">
                     <td className="p-4 text-center text-gray-400 dark:text-gray-550 text-sm bg-white dark:bg-gray-900 group-hover:bg-gray-50/50 dark:group-hover:bg-gray-800/20">{idx + 1}</td>
                     <td className="p-4 font-mono font-bold bg-white dark:bg-gray-900 group-hover:bg-gray-50/50 dark:group-hover:bg-gray-800/20">
@@ -5654,6 +5964,25 @@ export function StudentExplorer() {
                         </button>
                       </div>
                     </td>
+                    <td className="p-4 text-sm bg-white dark:bg-gray-900 group-hover:bg-gray-50/50 dark:group-hover:bg-gray-800/20">
+                      {displayDate ? (
+                        <div className="flex flex-col gap-0.5">
+                          <span className="inline-flex items-center gap-1.5 text-xs font-mono font-bold text-teal-700 dark:text-teal-300">
+                            <CreditCard size={12} className="text-teal-500 flex-shrink-0" />
+                            {formatDate(displayDate)}
+                          </span>
+                          {payInfo && payInfo.count > 1 && (
+                            <span className="text-[10px] text-gray-400 font-medium">
+                              {sortBy === 'paid_date_asc' ? `Earliest of ${payInfo.count} payments` : `${payInfo.count} payments`}
+                            </span>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500 italic">
+                          No payment
+                        </span>
+                      )}
+                    </td>
                     <td className="p-4 bg-white dark:bg-gray-900 group-hover:bg-gray-50/50 dark:group-hover:bg-gray-800/20 text-center">
                       <div className="flex items-center justify-center gap-2">
                         <button 
@@ -5690,8 +6019,9 @@ export function StudentExplorer() {
                       </div>
                     </td>
                   </tr>
-                ))
-              )}
+                );
+              })
+            )}
             </tbody>
           </table>
         </div>
