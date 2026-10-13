@@ -22,7 +22,10 @@ import {
   Sparkles,
   Phone,
   MessageSquare,
-  ArrowRight
+  ArrowRight,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { Student, Payment, ZoomRegistrationRecord } from '../types';
@@ -40,6 +43,59 @@ const MONTH_SHORT_LABELS = [
   'July', 'August', 'Sep', 'Oct', 'Nov', 'Dec'
 ];
 
+/**
+ * Checks whether a payment is a non-tuition fee (such as Admission fee).
+ * Admission and one-time registration fees are never recurring monthly class fees.
+ */
+export function isExcludedPaymentType(p: Partial<Payment>): boolean {
+  const c = (p.class_type || '').toLowerCase().trim();
+  const pkg = (p.package_type || '').toLowerCase().trim();
+  if (c.includes('admission') || pkg.includes('admission')) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Extracts the effective billing cycle (year and monthIndex) for a payment.
+ * If the class item explicitly specifies a month (e.g. "MaxouT October" paid on 30/09),
+ * that explicit month is the definitive billing cycle, not the paid date.
+ */
+export function getPaymentBillingCycle(p: Payment): { year: number; monthIndex: number } | null {
+  let year = 0;
+  let monthIndex = -1;
+
+  if (p.paid_date) {
+    const parts = p.paid_date.split('-');
+    if (parts.length >= 2) {
+      year = parseInt(parts[0], 10) || 0;
+      monthIndex = parseInt(parts[1], 10) - 1;
+    }
+  }
+
+  const text = `${p.class_type || ''} ${p.package_type || ''}`;
+  const textLower = text.toLowerCase();
+  for (let idx = 0; idx < MONTH_NAMES.length; idx++) {
+    const m = MONTH_NAMES[idx].toLowerCase();
+    if (textLower.includes(m)) {
+      monthIndex = idx;
+      break;
+    }
+    if (m === 'september' && /\bsep\b/i.test(textLower)) {
+      monthIndex = 8;
+      break;
+    }
+  }
+
+  const yearMatch = text.match(/\b(202\d)\b/);
+  if (yearMatch) {
+    year = parseInt(yearMatch[1], 10);
+  }
+
+  if (year === 0 || monthIndex < 0) return null;
+  return { year, monthIndex };
+}
+
 function checkPaymentMatchesClassMonthYear(
   p: Payment,
   targetClass: string,
@@ -47,6 +103,14 @@ function checkPaymentMatchesClassMonthYear(
   targetYear: string
 ): boolean {
   if (!p.paid_date && !p.class_type) return false;
+
+  const isAdmission = isExcludedPaymentType(p);
+  const targetClassLower = targetClass.toLowerCase().trim();
+
+  // If targetClass is NOT explicitly asking for admission, never match admission fees!
+  if (isAdmission && !targetClassLower.includes('admission')) {
+    return false;
+  }
 
   // 1. Year check
   let pYear = '';
@@ -60,12 +124,6 @@ function checkPaymentMatchesClassMonthYear(
         pMonth = MONTH_NAMES[pMonthIdx];
       }
     }
-  }
-
-  if (targetYear !== 'all') {
-    const yearInClass = (p.class_type || '').includes(targetYear);
-    const yearInDate = pYear === targetYear;
-    if (!yearInClass && !yearInDate) return false;
   }
 
   // 2. Class & Month match on raw items
@@ -86,13 +144,17 @@ function checkPaymentMatchesClassMonthYear(
     rawItems.push(p.class_type || p.package_type || 'General');
   }
 
-  const cLower = targetClass.toLowerCase().trim();
+  const cLower = targetClassLower;
   const mLower = targetMonth.toLowerCase().trim();
 
   return rawItems.some(item => {
-    // 2a. Class check: First, verify this specific item belongs to the selected class
+    // 2a. Class check:
     if (targetClass === 'none') return false;
-    if (targetClass !== 'all') {
+
+    if (targetClass === 'all') {
+      // For "All Classes", exclude admission or non-tuition fees
+      if (item.toLowerCase().includes('admission')) return false;
+    } else {
       let baseItem = item;
       const foundMonth = MONTH_NAMES.find(m => 
         item.endsWith(` ${m}`) || 
@@ -107,10 +169,17 @@ function checkPaymentMatchesClassMonthYear(
       if (!isClassMatch) return false;
     }
 
-    // 2b. Month check:
-    // If the class item explicitly specifies a month (e.g. "MaxouT September", "MaxouT - August"):
+    // 2b. Year check:
+    if (targetYear !== 'all') {
+      const yearInClass = item.includes(targetYear);
+      const yearInDate = pYear === targetYear;
+      if (!yearInClass && !yearInDate) return false;
+    }
+
+    // 2c. Month check:
+    // If the class item explicitly specifies a month (e.g. "MaxouT September", "MaxouT October"):
     // That specified month takes 100% strict priority over paid_date!
-    // For example, paying on Aug 30 for "MaxouT September" is a September fee payment.
+    // For example, paying on 30/09 for "MaxouT October" is strictly an October fee payment.
     if (targetMonth === 'all') return true;
 
     const itemLower = item.toLowerCase();
@@ -166,6 +235,17 @@ export default function AnalysisManagement() {
   const [payClassFilter, setPayClassFilter] = useState<string>('none');
   const [paySearchQuery, setPaySearchQuery] = useState<string>('');
   const [payMissingSearchQuery, setPayMissingSearchQuery] = useState<string>('');
+  const [paySortField, setPaySortField] = useState<'paid_date' | 'pcaid' | 'name' | 'payment'>('paid_date');
+  const [paySortOrder, setPaySortOrder] = useState<'asc' | 'desc'>('desc');
+
+  const handlePaySort = (field: 'paid_date' | 'pcaid' | 'name' | 'payment') => {
+    if (paySortField === field) {
+      setPaySortOrder(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      setPaySortField(field);
+      setPaySortOrder('desc');
+    }
+  };
 
   // ---------------------------------------------------------------------------
   // RIGHT PANEL FILTERS (Zoom Registration Analysis)
@@ -193,6 +273,17 @@ export default function AnalysisManagement() {
   const [continuityClassFilter, setContinuityClassFilter] = useState<string>('all');
   const [continuitySearchQuery, setContinuitySearchQuery] = useState<string>('');
   const [continuitySegment, setContinuitySegment] = useState<'all' | 'continuous' | 'churned' | 'new' | 'reactivated'>('all');
+  const [continuitySortField, setContinuitySortField] = useState<'pcaid' | 'name' | 'status' | 'date'>('pcaid');
+  const [continuitySortOrder, setContinuitySortOrder] = useState<'asc' | 'desc'>('asc');
+
+  const handleContinuitySort = (field: 'pcaid' | 'name' | 'status' | 'date') => {
+    if (continuitySortField === field) {
+      setContinuitySortOrder(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      setContinuitySortField(field);
+      setContinuitySortOrder('asc');
+    }
+  };
 
   // Mode 2: Multi-Month Timeline & All-Months Matrix (User Sketch)
   const [multiYear, setMultiYear] = useState<string>(currentYearStr);
@@ -220,10 +311,12 @@ export default function AnalysisManagement() {
     return Array.from(yearsSet).sort().reverse();
   }, [payments, currentYearStr]);
 
-  // Compute clean, unique base class types (without monthly suffix) exactly like StudentManagement
+  // Compute clean, unique base class types (without monthly suffix) excluding Admission
   const baseClassTypes = useMemo(() => {
     const cleaned = classes.map(c => {
       if (!c.class_type) return '';
+      // Exclude Admission from class types
+      if (c.class_type.toLowerCase().includes('admission')) return '';
       const match = MONTH_NAMES.find(m => 
         c.class_type.endsWith(` ${m}`) || 
         c.class_type.endsWith(` - ${m}`) ||
@@ -243,7 +336,6 @@ export default function AnalysisManagement() {
 
     return (Array.from(new Set(cleaned)) as string[]).sort((a: string, b: string) => {
       const topPriorityClasses = [
-        'Admission',
         'MaxouT',
         'Paper Class with Theory Revision',
         'Paper Class with Theory'
@@ -257,27 +349,52 @@ export default function AnalysisManagement() {
     });
   }, [classes]);
 
-  // Fetch all initial data
+  // Fetch all initial data with pagination to handle 1,000+ records
   const fetchData = async () => {
     try {
       setIsRefreshing(true);
 
-      const [
-        studentsRes, 
-        paymentsRes, 
-        zoomRegRes, 
-        classesRes, 
-        webinarsRes
-      ] = await Promise.all([
-        supabase.from('student').select('*').is('deleted_at', null).order('pcaid'),
-        supabase.from('payment').select('*').is('deleted_at', null).order('paid_date', { ascending: false }),
-        supabase.from('zoom_registration').select('*').is('deleted_at', null).order('registered_at', { ascending: false }),
+      // 1. Fetch Students (paginated)
+      let allStudents: Student[] = [];
+      let sFrom = 0;
+      while (true) {
+        const { data, error } = await supabase
+          .from('student')
+          .select('*')
+          .is('deleted_at', null)
+          .order('pcaid')
+          .range(sFrom, sFrom + 999);
+        if (error || !data || data.length === 0) break;
+        allStudents = allStudents.concat(data as Student[]);
+        if (data.length < 1000) break;
+        sFrom += 1000;
+      }
+
+      // 2. Fetch Payments (paginated - loads all 1,700+ rows)
+      let allPayments: Payment[] = [];
+      let pFrom = 0;
+      while (true) {
+        const { data, error } = await supabase
+          .from('payment')
+          .select('*')
+          .is('deleted_at', null)
+          .order('paid_date', { ascending: false })
+          .range(pFrom, pFrom + 999);
+        if (error || !data || data.length === 0) break;
+        allPayments = allPayments.concat(data as Payment[]);
+        if (data.length < 1000) break;
+        pFrom += 1000;
+      }
+
+      // 3. Fetch Zoom Registrations, Classes, Webinars
+      const [zoomRegRes, classesRes, webinarsRes] = await Promise.all([
+        supabase.from('zoom_registration').select('*').is('deleted_at', null).order('registered_at', { ascending: false }).range(0, 4999),
         supabase.from('class_item').select('*').order('class_type'),
         supabase.from('webinar_id').select('*').order('created_at', { ascending: false })
       ]);
 
-      if (studentsRes.data) setStudents(studentsRes.data as Student[]);
-      if (paymentsRes.data) setPayments(paymentsRes.data as Payment[]);
+      setStudents(allStudents);
+      setPayments(allPayments);
       if (zoomRegRes.data) setZoomRegistrations(zoomRegRes.data as ZoomRegistrationRecord[]);
       if (classesRes.data) setClasses(classesRes.data);
       if (webinarsRes.data) setWebinars(webinarsRes.data);
@@ -309,7 +426,7 @@ export default function AnalysisManagement() {
   
   // 1. Students who PAID matching the selected filters
   const paidStudentsList = useMemo(() => {
-    return payments.filter(p => {
+    const list = payments.filter(p => {
       const matchesFilter = checkPaymentMatchesClassMonthYear(p, payClassFilter, payMonthFilter, payYearFilter);
       if (!matchesFilter) return false;
 
@@ -334,12 +451,31 @@ export default function AnalysisManagement() {
         proper_batch: student?.proper_batch || '-',
         class_type: p.class_type || p.package_type || 'General',
         payment: p.payment,
-        paid_date: p.paid_date,
+        paid_date: p.paid_date || '',
         activation_date: p.activation_date,
         expired_date: p.expired_date
       };
     });
-  }, [payments, payYearFilter, payMonthFilter, payClassFilter, paySearchQuery, studentMap]);
+
+    list.sort((a, b) => {
+      let cmp = 0;
+      if (paySortField === 'paid_date') {
+        cmp = (a.paid_date || '').localeCompare(b.paid_date || '');
+      } else if (paySortField === 'pcaid') {
+        cmp = a.pcaid.localeCompare(b.pcaid);
+      } else if (paySortField === 'name') {
+        cmp = a.name.localeCompare(b.name);
+      } else if (paySortField === 'payment') {
+        cmp = (Number(a.payment) || 0) - (Number(b.payment) || 0);
+      }
+      if (cmp === 0) {
+        cmp = (b.paid_date || '').localeCompare(a.paid_date || '') || a.pcaid.localeCompare(b.pcaid);
+      }
+      return paySortOrder === 'asc' ? cmp : -cmp;
+    });
+
+    return list;
+  }, [payments, payYearFilter, payMonthFilter, payClassFilter, paySearchQuery, studentMap, paySortField, paySortOrder]);
 
   // Set of PCA IDs who have paid in this selected year, month, and class
   const paidPcaidsSet = useMemo(() => {
@@ -651,73 +787,132 @@ export default function AnalysisManagement() {
   // CONTINUITY & RETENTION LOGIC (Tab 2)
   // ---------------------------------------------------------------------------
   const continuityAnalysis = useMemo(() => {
-    // 1. Get payments for Baseline Month
+    // 1. Get payments for Baseline Month (Month 1)
     const baselinePaidMap = new Map<string, Payment>();
-    // 2. Get payments for Target Month
+    // 2. Get payments for Target Month (Month 2)
     const targetPaidMap = new Map<string, Payment>();
 
     payments.forEach(p => {
       const cleanPca = p.pcaid?.trim().toUpperCase();
       if (!cleanPca) return;
+      if (isExcludedPaymentType(p)) return;
 
       if (checkPaymentMatchesClassMonthYear(p, continuityClassFilter, baselineMonth, continuityYear)) {
-        baselinePaidMap.set(cleanPca, p);
+        const existing = baselinePaidMap.get(cleanPca);
+        if (!existing || (p.paid_date && (!existing.paid_date || p.paid_date >= existing.paid_date))) {
+          baselinePaidMap.set(cleanPca, p);
+        }
       }
       if (checkPaymentMatchesClassMonthYear(p, continuityClassFilter, targetMonth, continuityYear)) {
-        targetPaidMap.set(cleanPca, p);
+        const existing = targetPaidMap.get(cleanPca);
+        if (!existing || (p.paid_date && (!existing.paid_date || p.paid_date >= existing.paid_date))) {
+          targetPaidMap.set(cleanPca, p);
+        }
       }
     });
 
-    // All active students matching class filter
-    const targetStudents = students.filter(s => {
-      if (continuityClassFilter !== 'all') {
+    // 3. Identify all candidate students for this class and year:
+    const candidatePcaids = new Set<string>();
+
+    // Anyone who paid in Baseline Month or Target Month is a guaranteed candidate
+    baselinePaidMap.forEach((_, pca) => candidatePcaids.add(pca));
+    targetPaidMap.forEach((_, pca) => candidatePcaids.add(pca));
+
+    // Also include enrolled students matching the class filter
+    if (continuityClassFilter === 'all') {
+      students.forEach(s => {
+        if (s.pcaid) candidatePcaids.add(s.pcaid.trim().toUpperCase());
+      });
+    } else {
+      const cLower = continuityClassFilter.toLowerCase().trim();
+      students.forEach(s => {
         const sClass = (s.asked_class_type || s.asked_package_type || s.proper_batch || '').toLowerCase();
-        if (!sClass.includes(continuityClassFilter.toLowerCase())) return false;
-      }
-      return true;
-    });
+        if (sClass.includes(cLower)) {
+          if (s.pcaid) candidatePcaids.add(s.pcaid.trim().toUpperCase());
+        }
+      });
+      payments.forEach(p => {
+        if (p.pcaid && !isExcludedPaymentType(p) && checkPaymentMatchesClassMonthYear(p, continuityClassFilter, 'all', continuityYear)) {
+          candidatePcaids.add(p.pcaid.trim().toUpperCase());
+        }
+      });
+    }
 
     const continuous: { student: Student; baselinePay: Payment; targetPay: Payment }[] = [];
     const churned: { student: Student; baselinePay: Payment }[] = [];
     const newJoinees: { student: Student; targetPay: Payment }[] = [];
     const reactivated: { student: Student; targetPay: Payment }[] = [];
 
+    // Numerical score for Target Month cycle (e.g. 2026 * 12 + 9 for Oct 2026)
+    const targetYearNum = parseInt(continuityYear, 10) || new Date().getFullYear();
+    const targetMonthIdx = MONTH_NAMES.indexOf(targetMonth);
+    const targetCycleScore = targetYearNum * 12 + (targetMonthIdx >= 0 ? targetMonthIdx : 0);
+
     // Analyze transitions
-    targetStudents.forEach(s => {
-      const cleanPca = s.pcaid?.trim().toUpperCase();
-      if (!cleanPca) return;
+    candidatePcaids.forEach(cleanPca => {
+      const studentObj = studentMap.get(cleanPca) || {
+        id: cleanPca,
+        pcaid: cleanPca,
+        name: cleanPca,
+        phone: '-',
+        proper_batch: '-',
+        asked_class_type: '',
+        asked_package_type: ''
+      } as Student;
 
       const hasBaseline = baselinePaidMap.has(cleanPca);
       const hasTarget = targetPaidMap.has(cleanPca);
 
       if (hasBaseline && hasTarget) {
         continuous.push({
-          student: s,
+          student: studentObj,
           baselinePay: baselinePaidMap.get(cleanPca)!,
           targetPay: targetPaidMap.get(cleanPca)!
         });
       } else if (hasBaseline && !hasTarget) {
         churned.push({
-          student: s,
+          student: studentObj,
           baselinePay: baselinePaidMap.get(cleanPca)!
         });
       } else if (!hasBaseline && hasTarget) {
-        // Check if student had ANY payment before baseline month
+        const targetPay = targetPaidMap.get(cleanPca)!;
+
+        // Check if student had ANY valid payment for this class in a cycle PRIOR to the target month.
+        // We only consider the selected class type (or valid classes if 'all'), ignoring Admission etc.
         const hadPriorPayments = payments.some(p => {
-          if (p.pcaid?.trim().toUpperCase() !== cleanPca) return false;
-          if (!p.paid_date) return false;
-          return p.paid_date < (targetPaidMap.get(cleanPca)?.paid_date || '9999');
+          if ((p.pcaid || '').trim().toUpperCase() !== cleanPca) return false;
+          if (p.id === targetPay.id) return false;
+          if (isExcludedPaymentType(p)) return false;
+
+          // Must match class filter
+          if (continuityClassFilter !== 'all') {
+            if (!checkPaymentMatchesClassMonthYear(p, continuityClassFilter, 'all', 'all')) {
+              return false;
+            }
+          } else {
+            if (!checkPaymentMatchesClassMonthYear(p, 'all', 'all', 'all')) {
+              return false;
+            }
+          }
+
+          // Evaluate billing cycle of payment p
+          const pCycle = getPaymentBillingCycle(p);
+          if (!pCycle) return false;
+
+          const pCycleScore = pCycle.year * 12 + pCycle.monthIndex;
+          // Prior payment MUST belong to an earlier billing cycle than target month!
+          return pCycleScore < targetCycleScore;
         });
 
         if (hadPriorPayments) {
           reactivated.push({
-            student: s,
-            targetPay: targetPaidMap.get(cleanPca)!
+            student: studentObj,
+            targetPay
           });
         } else {
           newJoinees.push({
-            student: s,
-            targetPay: targetPaidMap.get(cleanPca)!
+            student: studentObj,
+            targetPay
           });
         }
       }
@@ -728,9 +923,9 @@ export default function AnalysisManagement() {
       churned,
       newJoinees,
       reactivated,
-      totalTracked: targetStudents.length
+      totalTracked: candidatePcaids.size
     };
-  }, [students, payments, baselineMonth, targetMonth, continuityYear, continuityClassFilter]);
+  }, [students, payments, baselineMonth, targetMonth, continuityYear, continuityClassFilter, studentMap]);
 
   // Filtered list for Continuity Tab based on selected segment
   const continuityDisplayList = useMemo(() => {
@@ -741,6 +936,7 @@ export default function AnalysisManagement() {
       proper_batch: string;
       status: 'Continuous' | 'Dropped Out' | 'New Joinee' | 'Reactivated';
       details: string;
+      date: string;
     }> = [];
 
     if (continuitySegment === 'all' || continuitySegment === 'continuous') {
@@ -751,7 +947,8 @@ export default function AnalysisManagement() {
           phone: item.student.phone || '-',
           proper_batch: item.student.proper_batch || '-',
           status: 'Continuous',
-          details: `Paid Rs. ${item.targetPay.payment} on ${item.targetPay.paid_date}`
+          details: `Paid ${item.targetPay.class_type || 'Class'} (Rs. ${Number(item.targetPay.payment).toLocaleString()}) on ${item.targetPay.paid_date}`,
+          date: item.targetPay.paid_date || ''
         });
       });
     }
@@ -764,7 +961,8 @@ export default function AnalysisManagement() {
           phone: item.student.phone || '-',
           proper_batch: item.student.proper_batch || '-',
           status: 'Dropped Out',
-          details: `Last paid on ${item.baselinePay.paid_date} (Missing in ${targetMonth})`
+          details: `Last paid ${item.baselinePay.class_type || 'Class'} on ${item.baselinePay.paid_date} (Missing in ${targetMonth})`,
+          date: item.baselinePay.paid_date || ''
         });
       });
     }
@@ -777,7 +975,8 @@ export default function AnalysisManagement() {
           phone: item.student.phone || '-',
           proper_batch: item.student.proper_batch || '-',
           status: 'New Joinee',
-          details: `First payment Rs. ${item.targetPay.payment} on ${item.targetPay.paid_date}`
+          details: `First payment: ${item.targetPay.class_type || 'Class'} (Rs. ${Number(item.targetPay.payment).toLocaleString()}) on ${item.targetPay.paid_date}`,
+          date: item.targetPay.paid_date || ''
         });
       });
     }
@@ -790,7 +989,8 @@ export default function AnalysisManagement() {
           phone: item.student.phone || '-',
           proper_batch: item.student.proper_batch || '-',
           status: 'Reactivated',
-          details: `Returned with payment on ${item.targetPay.paid_date}`
+          details: `Returned: ${item.targetPay.class_type || 'Class'} (Rs. ${Number(item.targetPay.payment).toLocaleString()}) on ${item.targetPay.paid_date}`,
+          date: item.targetPay.paid_date || ''
         });
       });
     }
@@ -805,8 +1005,25 @@ export default function AnalysisManagement() {
       );
     }
 
+    list.sort((a, b) => {
+      let cmp = 0;
+      if (continuitySortField === 'pcaid') {
+        cmp = a.pcaid.localeCompare(b.pcaid);
+      } else if (continuitySortField === 'name') {
+        cmp = a.name.localeCompare(b.name);
+      } else if (continuitySortField === 'status') {
+        cmp = a.status.localeCompare(b.status);
+      } else if (continuitySortField === 'date') {
+        cmp = a.date.localeCompare(b.date);
+      }
+      if (cmp === 0) {
+        cmp = a.pcaid.localeCompare(b.pcaid);
+      }
+      return continuitySortOrder === 'asc' ? cmp : -cmp;
+    });
+
     return list;
-  }, [continuityAnalysis, continuitySegment, continuitySearchQuery, targetMonth]);
+  }, [continuityAnalysis, continuitySegment, continuitySearchQuery, targetMonth, continuitySortField, continuitySortOrder]);
 
   // ---------------------------------------------------------------------------
   // MULTI-MONTH CONTINUITY TIMELINE & DATA PROCESSING (USER SKETCH)
@@ -1203,11 +1420,43 @@ export default function AnalysisManagement() {
                   <table className="w-full text-left text-xs">
                     <thead className="sticky top-0 z-10 bg-gray-50 dark:bg-gray-800 text-gray-500 dark:text-gray-400 font-bold border-b border-gray-200 dark:border-gray-700 text-[10px] uppercase tracking-wider">
                       <tr>
-                        <th className="py-2.5 px-3">PCA ID</th>
-                        <th className="py-2.5 px-3">Student Name</th>
+                        <th 
+                          onClick={() => handlePaySort('pcaid')} 
+                          className="py-2.5 px-3 cursor-pointer hover:text-emerald-600 dark:hover:text-emerald-400 select-none transition-colors"
+                        >
+                          <div className="flex items-center gap-1">
+                            <span>PCA ID</span>
+                            {paySortField === 'pcaid' ? (paySortOrder === 'asc' ? <ArrowUp size={11} /> : <ArrowDown size={11} />) : <ArrowUpDown size={11} className="opacity-30" />}
+                          </div>
+                        </th>
+                        <th 
+                          onClick={() => handlePaySort('name')} 
+                          className="py-2.5 px-3 cursor-pointer hover:text-emerald-600 dark:hover:text-emerald-400 select-none transition-colors"
+                        >
+                          <div className="flex items-center gap-1">
+                            <span>Student Name</span>
+                            {paySortField === 'name' ? (paySortOrder === 'asc' ? <ArrowUp size={11} /> : <ArrowDown size={11} />) : <ArrowUpDown size={11} className="opacity-30" />}
+                          </div>
+                        </th>
                         <th className="py-2.5 px-2">Class / Type</th>
-                        <th className="py-2.5 px-2 text-right">Amount</th>
-                        <th className="py-2.5 px-3 text-right">Paid Date</th>
+                        <th 
+                          onClick={() => handlePaySort('payment')} 
+                          className="py-2.5 px-2 text-right cursor-pointer hover:text-emerald-600 dark:hover:text-emerald-400 select-none transition-colors"
+                        >
+                          <div className="flex items-center justify-end gap-1">
+                            <span>Amount</span>
+                            {paySortField === 'payment' ? (paySortOrder === 'asc' ? <ArrowUp size={11} /> : <ArrowDown size={11} />) : <ArrowUpDown size={11} className="opacity-30" />}
+                          </div>
+                        </th>
+                        <th 
+                          onClick={() => handlePaySort('paid_date')} 
+                          className="py-2.5 px-3 text-right cursor-pointer hover:text-emerald-600 dark:hover:text-emerald-400 select-none transition-colors"
+                        >
+                          <div className="flex items-center justify-end gap-1">
+                            <span>Paid Date</span>
+                            {paySortField === 'paid_date' ? (paySortOrder === 'asc' ? <ArrowUp size={11} /> : <ArrowDown size={11} />) : <ArrowUpDown size={11} className="opacity-30" />}
+                          </div>
+                        </th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
@@ -2527,12 +2776,44 @@ export default function AnalysisManagement() {
                   <table className="w-full text-left text-xs">
                     <thead className="sticky top-0 bg-gray-50 dark:bg-gray-800 text-gray-500 font-bold border-b border-gray-200 dark:border-gray-700 text-[10px] uppercase tracking-wider">
                       <tr>
-                        <th className="py-2.5 px-3">PCA ID</th>
-                        <th className="py-2.5 px-3">Student Name</th>
+                        <th 
+                          onClick={() => handleContinuitySort('pcaid')}
+                          className="py-2.5 px-3 cursor-pointer hover:text-teal-600 dark:hover:text-teal-400 select-none transition-colors"
+                        >
+                          <div className="flex items-center gap-1">
+                            <span>PCA ID</span>
+                            {continuitySortField === 'pcaid' ? (continuitySortOrder === 'asc' ? <ArrowUp size={11} /> : <ArrowDown size={11} />) : <ArrowUpDown size={11} className="opacity-30" />}
+                          </div>
+                        </th>
+                        <th 
+                          onClick={() => handleContinuitySort('name')}
+                          className="py-2.5 px-3 cursor-pointer hover:text-teal-600 dark:hover:text-teal-400 select-none transition-colors"
+                        >
+                          <div className="flex items-center gap-1">
+                            <span>Student Name</span>
+                            {continuitySortField === 'name' ? (continuitySortOrder === 'asc' ? <ArrowUp size={11} /> : <ArrowDown size={11} />) : <ArrowUpDown size={11} className="opacity-30" />}
+                          </div>
+                        </th>
                         <th className="py-2.5 px-2">Phone</th>
                         <th className="py-2.5 px-2">Batch</th>
-                        <th className="py-2.5 px-2">Status</th>
-                        <th className="py-2.5 px-3">Monthly Transition</th>
+                        <th 
+                          onClick={() => handleContinuitySort('status')}
+                          className="py-2.5 px-2 cursor-pointer hover:text-teal-600 dark:hover:text-teal-400 select-none transition-colors"
+                        >
+                          <div className="flex items-center gap-1">
+                            <span>Status</span>
+                            {continuitySortField === 'status' ? (continuitySortOrder === 'asc' ? <ArrowUp size={11} /> : <ArrowDown size={11} />) : <ArrowUpDown size={11} className="opacity-30" />}
+                          </div>
+                        </th>
+                        <th 
+                          onClick={() => handleContinuitySort('date')}
+                          className="py-2.5 px-3 cursor-pointer hover:text-teal-600 dark:hover:text-teal-400 select-none transition-colors"
+                        >
+                          <div className="flex items-center gap-1">
+                            <span>Monthly Transition</span>
+                            {continuitySortField === 'date' ? (continuitySortOrder === 'asc' ? <ArrowUp size={11} /> : <ArrowDown size={11} />) : <ArrowUpDown size={11} className="opacity-30" />}
+                          </div>
+                        </th>
                         <th className="py-2.5 px-3 text-right">Quick Contact</th>
                       </tr>
                     </thead>
