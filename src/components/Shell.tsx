@@ -23,7 +23,8 @@ import {
   Smartphone,
   UserCheck,
   CreditCard,
-  BarChart3
+  BarChart3,
+  Clock
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { logTransaction } from '../lib/transactions';
@@ -105,6 +106,17 @@ const navSections: NavSection[] = [
         label: 'Analysis', 
         path: '/admin/analysis', 
         icon: <BarChart3 size={18} />, 
+        roles: ['admin', 'super_admin'] 
+      },
+    ]
+  },
+  {
+    title: 'MaxouT Project',
+    items: [
+      { 
+        label: 'MaxouT Slots', 
+        path: '/admin/maxout-slots', 
+        icon: <Clock size={18} />, 
         roles: ['admin', 'super_admin'] 
       },
     ]

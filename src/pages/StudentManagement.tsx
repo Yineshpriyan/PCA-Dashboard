@@ -43,8 +43,10 @@ import {
   Share2,
   Layers,
   ArrowUpDown,
-  ChevronUp
+  ChevronUp,
+  CalendarCheck2
 } from 'lucide-react';
+import { StudentMaxoutTab } from '../components/StudentMaxoutTab';
 import { 
   Student, 
   Payment, 
@@ -249,7 +251,7 @@ export function StudentForm({ isModal = false, modalStudent = null, modalLead = 
   const [editModalStudent, setEditModalStudent] = useState<Student | null>(null);
 
   // Tabbed Layout State inside Student Form
-  const [formActiveTab, setFormActiveTab] = useState<'personal' | 'zoom' | 'activation'>('personal');
+  const [formActiveTab, setFormActiveTab] = useState<'personal' | 'zoom' | 'activation' | 'maxout'>('personal');
 
   // Zoom Multi-Webinar Registration State
   const [showZoomReg, setShowZoomReg] = useState(false);
@@ -2282,6 +2284,20 @@ export function StudentForm({ isModal = false, modalStudent = null, modalLead = 
           <Smartphone size={16} />
           <span>3. App Activation</span>
         </button>
+
+        <button
+          type="button"
+          onClick={() => setFormActiveTab('maxout')}
+          className={cn(
+            "flex-1 flex items-center justify-center gap-2 px-5 py-3 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer whitespace-nowrap",
+            formActiveTab === 'maxout'
+              ? "bg-teal-600 text-white shadow-md shadow-teal-600/20"
+              : "bg-gray-50 dark:bg-gray-800/60 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
+          )}
+        >
+          <CalendarCheck2 size={16} />
+          <span>4. F to A MaxouT</span>
+        </button>
       </div>
 
       {/* TAB 1: PERSONAL DETAILS & PAYMENT */}
@@ -4103,11 +4119,31 @@ export function StudentForm({ isModal = false, modalStudent = null, modalLead = 
                     {savingAppAccess ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
                     <span>{savingAppAccess ? 'Saving Access...' : 'Save Access Changes'}</span>
                   </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setFormActiveTab('maxout')}
+                    className="flex items-center gap-2 px-5 py-2.5 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-teal-700 dark:text-teal-400 font-bold text-xs rounded-xl transition-all cursor-pointer border border-teal-200 dark:border-teal-800 shrink-0"
+                  >
+                    <span>Next: MaxouT Project</span>
+                    <ArrowRight size={15} />
+                  </button>
                 </div>
               </div>
             </div>
           )}
         </div>
+      )}
+
+      {/* TAB 4: F TO A MAXOUT PROJECT WEEKLY TIME SLOTS */}
+      {formActiveTab === 'maxout' && (
+        <StudentMaxoutTab
+          pcaid={studentData.pcaid}
+          studentName={studentData.name ? `${studentData.name} ${studentData.last_name || ''}`.trim() : ''}
+          stream={studentData.stream}
+          properBatch={studentData.proper_batch}
+          onBackToPersonal={() => setFormActiveTab('personal')}
+        />
       )}
 
       {/* Duplicate Alert Modal */}

@@ -4,6 +4,7 @@ import { useStudentAuth } from '../hooks/useStudentAuth';
 import { supabase } from '../lib/supabase';
 import { Payment, StudentFolderAccess, AppFolder } from '../types';
 import AcademyLogo from '../components/AcademyLogo';
+import StudentMaxoutSlotTracker from '../components/StudentMaxoutSlotTracker';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -69,7 +70,7 @@ export default function StudentPortal() {
     setTheme(prev => (prev === 'dark' ? 'light' : 'dark'));
   };
 
-  const [activeTab, setActiveTab] = useState<'profile' | 'courses' | 'payments'>('profile');
+  const [activeTab, setActiveTab] = useState<'profile' | 'courses' | 'payments' | 'slots'>('profile');
 
   // Editable personal info state
   const [personalForm, setPersonalForm] = useState({
@@ -407,6 +408,21 @@ export default function StudentPortal() {
               >
                 <CreditCard className="w-4 h-4" />
                 <span>Payment History ({payments.length})</span>
+              </button>
+
+              <button
+                onClick={() => setActiveTab('slots')}
+                className={`flex items-center gap-2 px-4 py-2 text-xs rounded-xl transition-all cursor-pointer whitespace-nowrap ${
+                  activeTab === 'slots'
+                    ? 'bg-white dark:bg-gray-900 text-teal-700 dark:text-teal-300 shadow-xs border border-teal-100 dark:border-teal-900/40 font-extrabold'
+                    : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 font-medium'
+                }`}
+              >
+                <Clock className="w-4 h-4" />
+                <span>F to A MaxouT Slots</span>
+                <span className="px-1.5 py-0.5 bg-teal-100 dark:bg-teal-950/80 text-teal-700 dark:text-teal-300 rounded-md text-[9px] font-black uppercase tracking-wider">
+                  Daily Batches
+                </span>
               </button>
             </div>
           </div>
@@ -826,6 +842,22 @@ export default function StudentPortal() {
                   </div>
                 )}
               </div>
+            </motion.div>
+          )}
+
+          {/* TAB 4: F TO A MAXOUT PROJECT TIME SLOTS */}
+          {activeTab === 'slots' && student && (
+            <motion.div
+              key="tab-slots"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ duration: 0.2 }}
+            >
+              <StudentMaxoutSlotTracker 
+                student={student} 
+                onRefreshProfile={refreshStudentProfile} 
+              />
             </motion.div>
           )}
         </AnimatePresence>

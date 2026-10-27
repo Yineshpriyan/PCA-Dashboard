@@ -269,4 +269,23 @@ export interface ZoomRegistrationRecord {
   deleted_at?: string | null;
 }
 
+export type MaxoutDayOfWeek = 'Monday' | 'Tuesday' | 'Wednesday' | 'Thursday' | 'Friday' | 'Saturday';
 
+export type MaxoutTimeSlot = 
+  | 'Batch 1: 4.30 PM - 6.00 PM'
+  | 'Batch 2: 8.00 PM - 9.30 PM'
+  | 'Batch 3: 9.30 PM - 11.00 PM';
+
+export type MaxoutSlotStatus = 'attending' | 'cannot_attend';
+
+export interface StudentMaxoutSlot {
+  id?: string;
+  pcaid: string;
+  student_name?: string | null;
+  day_of_week: MaxoutDayOfWeek;
+  status: MaxoutSlotStatus;
+  slot: MaxoutTimeSlot | string | null;
+  reason?: string | null;
+  created_at?: string;
+  updated_at?: string;
+}
