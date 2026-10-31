@@ -74,8 +74,13 @@ const navSections: NavSection[] = [
       { 
         label: 'Leads', 
         path: '/admin/call-task/display', 
-        matchPaths: ['/admin/call-task/display', '/admin/call-task/new'],
         icon: <LayoutDashboard size={18} />, 
+        roles: ['admin', 'super_admin'] 
+      },
+      { 
+        label: 'New Lead', 
+        path: '/admin/call-task/new', 
+        icon: <UserPlus size={18} />, 
         roles: ['admin', 'super_admin'] 
       },
     ]
@@ -147,7 +152,7 @@ const navSections: NavSection[] = [
         path: '/admin/transactions', 
         matchPaths: ['/admin/transactions', '/admin/recycle-bin'],
         icon: <History size={18} />, 
-        roles: ['admin', 'super_admin'] 
+        roles: ['super_admin'] 
       },
     ]
   },
@@ -189,12 +194,6 @@ export function Sidebar({
       ...section,
       items: section.items
         .filter(item => user && item.roles.includes(user.admin_type))
-        .map(item => {
-          if (item.label === 'System Audit' && user?.admin_type === 'admin') {
-            return { ...item, path: '/admin/recycle-bin' };
-          }
-          return item;
-        })
     }))
     .filter(section => section.items.length > 0);
 

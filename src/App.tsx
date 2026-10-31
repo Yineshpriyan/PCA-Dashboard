@@ -134,7 +134,7 @@ function Root() {
         </ProtectedRoute>
       } />
       <Route path="/admin/free-class-form" element={
-        <ProtectedRoute allowedRoles={['admin', 'super_admin']}>
+        <ProtectedRoute allowedRoles={['super_admin']}>
           <Shell>
             <FreeClassForm />
           </Shell>
@@ -176,7 +176,7 @@ function Root() {
         </ProtectedRoute>
       } />
       <Route path="/admin/recycle-bin" element={
-        <ProtectedRoute allowedRoles={['admin', 'super_admin']}>
+        <ProtectedRoute allowedRoles={['super_admin']}>
           <Shell>
             <RecycleBin />
           </Shell>
