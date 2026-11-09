@@ -145,6 +145,18 @@ const navSections: NavSection[] = [
     ]
   },
   {
+    title: 'Attendance',
+    items: [
+      { 
+        label: 'Attendance', 
+        path: '/admin/attendance', 
+        matchPaths: ['/admin/attendance', '/admin/zoom-attendance'],
+        icon: <UserCheck size={18} />, 
+        roles: ['admin', 'super_admin'] 
+      },
+    ]
+  },
+  {
     title: 'System Audit',
     items: [
       { 
@@ -356,6 +368,8 @@ export function Topbar({
       activeLabel = 'Payment & Registration BULK';
     } else if (location.pathname === '/admin/analysis') {
       activeLabel = 'Analysis';
+    } else if (location.pathname === '/admin/attendance' || location.pathname === '/admin/zoom-attendance') {
+      activeLabel = 'Attendance';
     }
   }
 

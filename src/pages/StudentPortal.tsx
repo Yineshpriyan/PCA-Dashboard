@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase';
 import { Payment, StudentFolderAccess, AppFolder } from '../types';
 import AcademyLogo from '../components/AcademyLogo';
 import StudentMaxoutSlotTracker from '../components/StudentMaxoutSlotTracker';
+import StudentAttendanceViewer from '../components/StudentAttendanceViewer';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -24,7 +25,8 @@ import {
   CheckCircle2,
   Sun,
   Moon,
-  GraduationCap
+  GraduationCap,
+  UserCheck
 } from 'lucide-react';
 
 export default function StudentPortal() {
@@ -70,7 +72,7 @@ export default function StudentPortal() {
     setTheme(prev => (prev === 'dark' ? 'light' : 'dark'));
   };
 
-  const [activeTab, setActiveTab] = useState<'profile' | 'courses' | 'payments' | 'slots'>('profile');
+  const [activeTab, setActiveTab] = useState<'profile' | 'courses' | 'payments' | 'slots' | 'attendance'>('profile');
 
   // Editable personal info state
   const [personalForm, setPersonalForm] = useState({
@@ -408,6 +410,21 @@ export default function StudentPortal() {
               >
                 <CreditCard className="w-4 h-4" />
                 <span>Payment History ({payments.length})</span>
+              </button>
+
+              <button
+                onClick={() => setActiveTab('attendance')}
+                className={`flex items-center gap-2 px-4 py-2 text-xs rounded-xl transition-all cursor-pointer whitespace-nowrap ${
+                  activeTab === 'attendance'
+                    ? 'bg-white dark:bg-gray-900 text-teal-700 dark:text-teal-300 shadow-xs border border-teal-100 dark:border-teal-900/40 font-extrabold'
+                    : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 font-medium'
+                }`}
+              >
+                <UserCheck className="w-4 h-4" />
+                <span>Attendance Tracking</span>
+                <span className="px-1.5 py-0.5 bg-teal-100 dark:bg-teal-950/80 text-teal-700 dark:text-teal-300 rounded-md text-[9px] font-black uppercase tracking-wider">
+                  Live
+                </span>
               </button>
 
               <button
@@ -858,6 +875,19 @@ export default function StudentPortal() {
                 student={student} 
                 onRefreshProfile={refreshStudentProfile} 
               />
+            </motion.div>
+          )}
+
+          {/* TAB 5: ATTENDANCE TRACKING & CALENDAR */}
+          {activeTab === 'attendance' && student && (
+            <motion.div
+              key="tab-attendance"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ duration: 0.2 }}
+            >
+              <StudentAttendanceViewer pcaid={student.pcaid} />
             </motion.div>
           )}
         </AnimatePresence>

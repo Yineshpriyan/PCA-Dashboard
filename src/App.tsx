@@ -23,6 +23,7 @@ import MaxoutSlotManagement from './pages/MaxoutSlotManagement';
 import { FreeClassForm } from './pages/FreeClassManagement';
 import RegisterStudents from './pages/RegisterStudents';
 import RegisterIndividualStudent from './pages/RegisterIndividualStudent';
+import ZoomAttendance from './pages/ZoomAttendance';
 import AppActivation from './pages/AppActivation';
 import Home from './pages/Home';
 import { FixingView, ItemsView, SignupView, AdminsView } from './pages/SuperAdminDashboard';
@@ -153,6 +154,16 @@ function Root() {
             <AppActivation />
           </Shell>
         </ProtectedRoute>
+      } />
+      <Route path="/admin/attendance" element={
+        <ProtectedRoute allowedRoles={['admin', 'super_admin']}>
+          <Shell>
+            <ZoomAttendance />
+          </Shell>
+        </ProtectedRoute>
+      } />
+      <Route path="/admin/zoom-attendance" element={
+        <Navigate to="/admin/attendance" replace />
       } />
       <Route path="/admin/zoom-register" element={
         <ProtectedRoute allowedRoles={['admin', 'super_admin']}>

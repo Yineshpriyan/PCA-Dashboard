@@ -21,7 +21,8 @@ import {
   RotateCcw,
   Search,
   FileDown,
-  Sliders
+  Sliders,
+  Info
 } from 'lucide-react';
 import { Issue, IssueType, User, AdminType, IssueStatus, ClassItem, PackageItem } from '../types';
 import { cn, copyToClipboard, formatDate, exportToExcel } from '../lib/utils';
@@ -831,7 +832,7 @@ export function ItemsView() {
                 </label>
                 <input
                   type="text"
-                  placeholder="e.g., Biology Revision Batch A"
+                  placeholder="e.g., MaxouT November 2026"
                   value={editingWebinar ? editingWebinar.webinar_name : newWebinar.webinar_name}
                   onChange={(e) => {
                     if (editingWebinar) {
@@ -980,6 +981,50 @@ export function ItemsView() {
                     )}
                   </tbody>
                 </table>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Webinar Naming Format Guide */}
+        <div className="mt-6 p-4 md:p-5 bg-teal-50/60 dark:bg-teal-950/20 border border-teal-200 dark:border-teal-800/50 rounded-2xl space-y-3">
+          <div className="flex items-center gap-2">
+            <Info size={16} className="text-teal-600 dark:text-teal-400 shrink-0" />
+            <h4 className="text-xs font-black uppercase tracking-wider text-teal-900 dark:text-teal-200">
+              Webinar Naming Format
+            </h4>
+          </div>
+
+          <p className="text-xs text-gray-600 dark:text-gray-300">
+            Use this standard format so Zoom registrations automatically connect with Live Attendance:
+          </p>
+
+          <div>
+            <span className="inline-block px-3.5 py-1.5 bg-white dark:bg-gray-800 border-2 border-teal-500/50 dark:border-teal-500/40 rounded-xl font-mono text-xs font-black text-teal-800 dark:text-teal-300 shadow-2xs">
+              [Class Type] [Month] [Year]
+            </span>
+          </div>
+
+          <div className="pt-1">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              <div className="p-3 bg-white dark:bg-gray-850 border-2 border-teal-500/30 hover:border-teal-500/60 dark:border-teal-500/20 dark:hover:border-teal-500/50 rounded-xl shadow-xs transition-colors">
+                <span className="text-[10px] font-black text-teal-600 dark:text-teal-400 uppercase tracking-wider block mb-1">MaxouT</span>
+                <p className="text-xs font-bold font-mono text-gray-900 dark:text-white">MaxouT November 2026</p>
+              </div>
+
+              <div className="p-3 bg-white dark:bg-gray-850 border-2 border-teal-500/30 hover:border-teal-500/60 dark:border-teal-500/20 dark:hover:border-teal-500/50 rounded-xl shadow-xs transition-colors">
+                <span className="text-[10px] font-black text-teal-600 dark:text-teal-400 uppercase tracking-wider block mb-1">GRC</span>
+                <p className="text-xs font-bold font-mono text-gray-900 dark:text-white">GRC November 2026</p>
+              </div>
+
+              <div className="p-3 bg-white dark:bg-gray-850 border-2 border-teal-500/30 hover:border-teal-500/60 dark:border-teal-500/20 dark:hover:border-teal-500/50 rounded-xl shadow-xs transition-colors">
+                <span className="text-[10px] font-black text-teal-600 dark:text-teal-400 uppercase tracking-wider block mb-1">Model Paper Class</span>
+                <p className="text-xs font-bold font-mono text-gray-900 dark:text-white">Model Paper Class November 2026</p>
+              </div>
+
+              <div className="p-3 bg-white dark:bg-gray-850 border-2 border-teal-500/30 hover:border-teal-500/60 dark:border-teal-500/20 dark:hover:border-teal-500/50 rounded-xl shadow-xs transition-colors">
+                <span className="text-[10px] font-black text-teal-600 dark:text-teal-400 uppercase tracking-wider block mb-1">Theory with Paper Class</span>
+                <p className="text-xs font-bold font-mono text-gray-900 dark:text-white">Theory with Paper Class November 2026</p>
               </div>
             </div>
           </div>

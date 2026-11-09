@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, useLocation, useSearchParams } from 'react-router-dom';
-import { Video, UserPlus, History, Trash2, Users, ClipboardList, PlusCircle, LayoutDashboard, Folder, Key, Layers, Bell, CreditCard } from 'lucide-react';
+import { Video, UserPlus, History, Trash2, Users, ClipboardList, PlusCircle, LayoutDashboard, Folder, Key, Layers, Bell, CreditCard, UserCheck } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useAuth } from '../hooks/useAuth';
 

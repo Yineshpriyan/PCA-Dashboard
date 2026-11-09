@@ -289,3 +289,34 @@ export interface StudentMaxoutSlot {
   created_at?: string;
   updated_at?: string;
 }
+
+export type AttendanceStatus = 'present' | 'partial' | 'absent' | 'excused';
+
+export interface StudentAttendance {
+  id: string;
+  pcaid: string;
+  webinar_id: string;
+  session_title: string;
+  session_date: string;
+  class_type: string;
+  target_batch: string;
+  batch_slot: string | null;
+  session_duration_minutes: number;
+  attended_minutes: number;
+  attendance_percentage: number;
+  status: AttendanceStatus;
+  reconnect_count: number;
+  first_join_time: string | null;
+  last_leave_time: string | null;
+  excuse_reason: string | null;
+  synced_at: string;
+  updated_at: string;
+  student?: {
+    name: string;
+    mail?: string;
+    phone?: string;
+    proper_batch?: string;
+    district?: string;
+  };
+}
+

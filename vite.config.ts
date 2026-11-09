@@ -17,31 +17,46 @@ export default defineConfig(({mode}) => {
         name: 'vercel-api-dev-server',
         configureServer(server) {
           server.middlewares.use(async (req, res, next) => {
-            if (req.url && req.url.startsWith('/api/register-batch')) {
+            if (req.url && req.url.startsWith('/api/')) {
               try {
-                // Parse request body for POST requests
-                let body = {};
-                if (req.method === 'POST') {
+                const urlObj = new URL(req.url, 'http://localhost:3000');
+                const pathname = urlObj.pathname;
+                const endpoint = pathname.replace(/^\/api\//, '').replace(/\/$/, '');
+                const filePath = `/api/${endpoint}.ts`;
+
+                // Parse query parameters
+                const query: Record<string, string> = {};
+                urlObj.searchParams.forEach((val, key) => {
+                  query[key] = val;
+                });
+
+                // Parse request body for POST/PUT requests
+                let body: any = {};
+                if (req.method === 'POST' || req.method === 'PUT' || req.method === 'PATCH') {
                   const buffers = [];
                   for await (const chunk of req) {
                     buffers.push(chunk);
                   }
                   const dataStr = Buffer.concat(buffers).toString();
                   if (dataStr) {
-                    body = JSON.parse(dataStr);
+                    try {
+                      body = JSON.parse(dataStr);
+                    } catch {
+                      body = dataStr;
+                    }
                   }
                 }
 
                 // Dynamically load the serverless function using Vite's internal SSR loader
-                const apiModule = await server.ssrLoadModule('/api/register-batch.ts');
+                const apiModule = await server.ssrLoadModule(filePath);
                 const handler = apiModule.default;
 
                 if (typeof handler !== 'function') {
-                  throw new Error('/api/register-batch.ts does not export a default handler function');
+                  throw new Error(`${filePath} does not export a default handler function`);
                 }
 
                 // Construct mock VercelRequest and VercelResponse objects
-                const vercelReq = Object.assign(req, { body, query: {} });
+                const vercelReq = Object.assign(req, { body, query });
                 const vercelRes = {
                   status(statusCode: number) {
                     res.statusCode = statusCode;
