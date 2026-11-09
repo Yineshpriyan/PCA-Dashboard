@@ -153,6 +153,44 @@ export default function StudentAttendanceViewer({ pcaid }: StudentAttendanceView
     });
   }, [records, filterClassType, filterStatus]);
 
+  const getStatusColorConfig = (status: AttendanceStatus) => {
+    switch (status) {
+      case 'present':
+        return {
+          dotBg: 'bg-emerald-500',
+          textColor: 'text-emerald-700 dark:text-emerald-400',
+          pillBg: 'bg-emerald-50/90 dark:bg-emerald-950/40',
+          borderColor: 'border-emerald-200/90 dark:border-emerald-800/60',
+          label: 'Present',
+        };
+      case 'partial':
+        return {
+          dotBg: 'bg-amber-500',
+          textColor: 'text-amber-700 dark:text-amber-400',
+          pillBg: 'bg-amber-50/90 dark:bg-amber-950/40',
+          borderColor: 'border-amber-200/90 dark:border-amber-800/60',
+          label: 'Partial',
+        };
+      case 'excused':
+        return {
+          dotBg: 'bg-indigo-500',
+          textColor: 'text-indigo-700 dark:text-indigo-400',
+          pillBg: 'bg-indigo-50/90 dark:bg-indigo-950/40',
+          borderColor: 'border-indigo-200/90 dark:border-indigo-800/60',
+          label: 'Excused',
+        };
+      case 'absent':
+      default:
+        return {
+          dotBg: 'bg-rose-500',
+          textColor: 'text-rose-700 dark:text-rose-400',
+          pillBg: 'bg-rose-50/90 dark:bg-rose-950/40',
+          borderColor: 'border-rose-200/90 dark:border-rose-800/60',
+          label: 'Absent',
+        };
+    }
+  };
+
   const getStatusBadge = (status: AttendanceStatus, excuseReason?: string | null) => {
     switch (status) {
       case 'present':
@@ -352,60 +390,84 @@ export default function StudentAttendanceViewer({ pcaid }: StudentAttendanceView
 
           {calendarDays.map((cell, idx) => {
             if (!cell.dayNumber) {
-              return <div key={`empty-${idx}`} className="h-16 sm:h-20 bg-gray-50/50 dark:bg-gray-800/20 rounded-xl" />;
+              return (
+                <div 
+                  key={`empty-${idx}`} 
+                  className="min-h-[82px] sm:min-h-[96px] bg-gray-50/40 dark:bg-gray-800/20 rounded-xl border border-transparent" 
+                />
+              );
             }
 
             const hasRecords = cell.records.length > 0;
-            const primaryRecord = cell.records[0];
+            const todayStr = new Date().toISOString().split('T')[0];
+            const isToday = cell.dateStr === todayStr;
 
             return (
               <div
                 key={cell.dateStr}
-                onClick={() => {
-                  if (hasRecords) {
-                    setSelectedRecord(primaryRecord);
-                  }
-                }}
-                className={`h-16 sm:h-20 p-1.5 rounded-xl border text-left flex flex-col justify-between transition-all ${
+                className={`min-h-[82px] sm:min-h-[96px] p-1.5 rounded-xl border text-left flex flex-col justify-between transition-all ${
                   hasRecords 
-                    ? 'cursor-pointer hover:border-teal-500 hover:shadow-xs' 
-                    : 'opacity-80'
-                } ${
-                  primaryRecord?.status === 'present'
-                    ? 'bg-emerald-50/40 dark:bg-emerald-950/20 border-emerald-200/60 dark:border-emerald-900/40'
-                    : primaryRecord?.status === 'partial'
-                    ? 'bg-amber-50/40 dark:bg-amber-950/20 border-amber-200/60 dark:border-amber-900/40'
-                    : primaryRecord?.status === 'excused'
-                    ? 'bg-indigo-50/40 dark:bg-indigo-950/20 border-indigo-200/60 dark:border-indigo-900/40'
-                    : primaryRecord?.status === 'absent'
-                    ? 'bg-rose-50/40 dark:bg-rose-950/20 border-rose-200/60 dark:border-rose-900/40'
-                    : 'bg-white dark:bg-gray-900 border-gray-100 dark:border-gray-800'
-                }`}
+                    ? 'bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 shadow-2xs hover:border-teal-500/50' 
+                    : 'bg-white/60 dark:bg-gray-900/40 border-gray-100 dark:border-gray-800/60 opacity-80'
+                } ${isToday ? 'ring-2 ring-teal-500/50 dark:ring-teal-400/50' : ''}`}
               >
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-gray-700 dark:text-gray-300">
+                {/* Header: Date number & class count */}
+                <div className="flex items-center justify-between pb-1">
+                  <span className={`text-xs font-bold leading-none ${
+                    isToday 
+                      ? 'w-5 h-5 flex items-center justify-center rounded-full bg-teal-600 text-white text-[10px]' 
+                      : 'text-gray-700 dark:text-gray-300'
+                  }`}>
                     {cell.dayNumber}
                   </span>
-                  {primaryRecord && (
-                    <span className="w-2 h-2 rounded-full shrink-0"
-                      style={{
-                        backgroundColor: 
-                          primaryRecord.status === 'present' ? '#10b981' :
-                          primaryRecord.status === 'partial' ? '#f59e0b' :
-                          primaryRecord.status === 'excused' ? '#6366f1' : '#f43f5e'
-                      }}
-                    />
+                  {cell.records.length > 1 && (
+                    <span className="text-[9px] font-bold text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 px-1.5 py-0.2 rounded-md">
+                      {cell.records.length}
+                    </span>
                   )}
                 </div>
 
+                {/* Class details inside date box */}
                 {hasRecords && (
-                  <div className="space-y-0.5">
-                    <div className="text-[9px] font-bold text-gray-800 dark:text-gray-200 truncate">
-                      {primaryRecord.class_type}
-                    </div>
-                    <div className="text-[9px] font-mono font-semibold text-gray-500">
-                      {primaryRecord.attended_minutes}m ({primaryRecord.attendance_percentage}%)
-                    </div>
+                  <div className="space-y-1 mt-auto">
+                    {cell.records.slice(0, 2).map((rec, rIdx) => {
+                      const cfg = getStatusColorConfig(rec.status);
+                      return (
+                        <div
+                          key={rec.id || `${cell.dateStr}-${rIdx}`}
+                          onClick={() => setSelectedRecord(rec)}
+                          className={`p-1 sm:p-1.5 rounded-lg border ${cfg.pillBg} ${cfg.borderColor} cursor-pointer hover:scale-[1.02] active:scale-[0.98] transition-all`}
+                          title={`Click for session details: ${rec.class_type || rec.session_title} - ${cfg.label}`}
+                        >
+                          {/* Class Name + Status Color Dot */}
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <span className={`w-2 h-2 rounded-full shrink-0 ${cfg.dotBg} shadow-xs`} />
+                            <span className="text-[10px] sm:text-[10.5px] font-bold text-gray-900 dark:text-gray-100 truncate leading-tight">
+                              {rec.class_type || rec.session_title || 'Class'}
+                            </span>
+                          </div>
+
+                          {/* Attendance Status Label + Duration */}
+                          <div className="flex items-center justify-between text-[8.5px] sm:text-[9px] mt-0.5 pl-3.5 gap-1">
+                            <span className={`font-bold uppercase tracking-wider text-[8px] sm:text-[8.5px] truncate ${cfg.textColor}`}>
+                              {cfg.label}
+                            </span>
+                            <span className="font-mono text-gray-500 dark:text-gray-400 shrink-0 text-[8px] sm:text-[8.5px]">
+                              {rec.attended_minutes}m ({Math.round(rec.attendance_percentage)}%)
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+
+                    {cell.records.length > 2 && (
+                      <button
+                        onClick={() => setSelectedRecord(cell.records[0])}
+                        className="w-full text-center text-[8.5px] font-bold text-teal-600 dark:text-teal-400 hover:underline cursor-pointer"
+                      >
+                        +{cell.records.length - 2} more
+                      </button>
+                    )}
                   </div>
                 )}
               </div>
