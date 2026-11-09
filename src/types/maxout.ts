@@ -54,11 +54,12 @@ export interface StudentMaxoutDaySchedule {
 export interface StudentMaxoutSlotRecord {
   id?: string;
   pcaid: string;
+  student_name?: string | null;
   day_of_week: MaxoutDayOfWeek;
   status: MaxoutDayStatus;
   slot: string | null;
   reason: string | null;
-  notes: string | null;
+  notes?: string | null;
   created_at?: string;
   updated_at?: string;
 }

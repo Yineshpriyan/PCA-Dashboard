@@ -26,8 +26,7 @@ import {
   RotateCcw,
   Info,
   CalendarCheck2,
-  HelpCircle,
-  FileCode
+  HelpCircle
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 
@@ -73,8 +72,6 @@ export const StudentMaxoutTab: React.FC<StudentMaxoutTabProps> = ({
   const [loading, setLoading] = useState<boolean>(false);
   const [saving, setSaving] = useState<boolean>(false);
   const [isCopiedSummary, setIsCopiedSummary] = useState<boolean>(false);
-  const [showSqlModal, setShowSqlModal] = useState<boolean>(false);
-  const [copiedSql, setCopiedSql] = useState<boolean>(false);
   const [tableMissingWarning, setTableMissingWarning] = useState<boolean>(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState<boolean>(false);
 
@@ -237,16 +234,16 @@ export const StudentMaxoutTab: React.FC<StudentMaxoutTabProps> = ({
       // Always store locally first as a reliable fallback
       localStorage.setItem(`maxout_schedule_${pcaid}`, JSON.stringify(schedule));
 
-      // Prepare records for Supabase upsert
-      const recordsToUpsert: StudentMaxoutSlotRecord[] = MAXOUT_DAYS.map(day => {
+      // Prepare records for Supabase upsert matching student_maxout_slots table schema
+      const recordsToUpsert = MAXOUT_DAYS.map(day => {
         const item = schedule[day];
         return {
-          pcaid: pcaid.trim(),
+          pcaid: pcaid.trim().toUpperCase(),
+          student_name: studentName ? studentName.trim() : null,
           day_of_week: day,
           status: item.status,
           slot: item.status === 'attending' ? item.slot || null : null,
           reason: item.status === 'cannot_attend' ? item.reason?.trim() || null : null,
-          notes: item.notes?.trim() || null,
           updated_at: new Date().toISOString()
         };
       });
@@ -310,36 +307,6 @@ export const StudentMaxoutTab: React.FC<StudentMaxoutTabProps> = ({
     }
   };
 
-  const sqlCode = `-- SQL to create student_maxout_slots in Supabase
-create table if not exists public.student_maxout_slots (
-  id uuid not null default gen_random_uuid(),
-  pcaid text not null references public.student(pcaid) on update cascade on delete cascade,
-  day_of_week text not null check (day_of_week in ('Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday')),
-  status text not null default 'attending' check (status in ('attending', 'cannot_attend')),
-  slot text null,
-  reason text null,
-  notes text null,
-  created_at timestamp with time zone not null default timezone('utc'::text, now()),
-  updated_at timestamp with time zone not null default timezone('utc'::text, now()),
-  constraint student_maxout_slots_pkey primary key (id),
-  constraint uq_student_maxout_pcaid_day unique (pcaid, day_of_week)
-);
-
-create index if not exists idx_student_maxout_pcaid on public.student_maxout_slots using btree (pcaid);
-alter table public.student_maxout_slots enable row level security;
-create policy "Allow all access to student_maxout_slots" on public.student_maxout_slots for all using (true) with check (true);`;
-
-  const copySqlCode = async () => {
-    try {
-      await navigator.clipboard.writeText(sqlCode);
-      setCopiedSql(true);
-      toast.success('SQL migration script copied to clipboard!');
-      setTimeout(() => setCopiedSql(false), 2500);
-    } catch {
-      toast.error('Failed to copy SQL script');
-    }
-  };
-
   // Stats calculation
   const attendingCount = MAXOUT_DAYS.filter(d => schedule[d].status === 'attending').length;
   const cannotAttendCount = MAXOUT_DAYS.filter(d => schedule[d].status === 'cannot_attend').length;
@@ -385,14 +352,6 @@ create policy "Allow all access to student_maxout_slots" on public.student_maxou
               </p>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={() => setShowSqlModal(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-bold transition-colors shadow-xs shrink-0 cursor-pointer"
-          >
-            <FileCode size={14} />
-            <span>View SQL Migration</span>
-          </button>
         </div>
       )}
 
@@ -434,16 +393,6 @@ create policy "Allow all access to student_maxout_slots" on public.student_maxou
             >
               {isCopiedSummary ? <Check size={14} className="text-green-600" /> : <Share2 size={14} />}
               <span>{isCopiedSummary ? 'Copied Schedule!' : 'Copy Summary'}</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setShowSqlModal(true)}
-              className="flex items-center gap-1.5 px-3 py-2 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-xl text-xs font-bold transition-all cursor-pointer border border-gray-200 dark:border-gray-700"
-              title="View SQL table definition"
-            >
-              <Database size={14} />
-              <span className="hidden sm:inline">SQL Schema</span>
             </button>
 
             <button
@@ -791,62 +740,6 @@ create policy "Allow all access to student_maxout_slots" on public.student_maxou
           </button>
         </div>
       </div>
-
-      {/* SQL Migration Modal */}
-      {showSqlModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in">
-          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl max-w-2xl w-full p-6 shadow-2xl space-y-4 max-h-[90vh] flex flex-col">
-            <div className="flex items-center justify-between pb-3 border-b border-gray-150 dark:border-gray-800">
-              <div className="flex items-center gap-2">
-                <Database size={20} className="text-teal-600" />
-                <h3 className="text-base font-bold text-gray-900 dark:text-white">
-                  Supabase Table Migration Schema
-                </h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowSqlModal(false)}
-                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 p-1 rounded-lg"
-              >
-                ✕
-              </button>
-            </div>
-
-            <p className="text-xs text-gray-600 dark:text-gray-300 leading-relaxed">
-              To store student slots in Supabase permanently, run this SQL script in your{' '}
-              <strong>Supabase Dashboard &gt; SQL Editor</strong>. It links directly to the student table via{' '}
-              <code className="font-mono bg-gray-100 dark:bg-gray-800 px-1 py-0.5 rounded">pcaid</code>.
-            </p>
-
-            <div className="flex-1 overflow-auto bg-gray-950 text-gray-200 p-4 rounded-xl font-mono text-[11px] leading-relaxed relative border border-gray-800">
-              <pre>{sqlCode}</pre>
-            </div>
-
-            <div className="flex items-center justify-between pt-2">
-              <span className="text-[11px] text-gray-500">
-                File also saved at: <code className="font-mono text-teal-600">/supabase_maxout_table.sql</code>
-              </span>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={copySqlCode}
-                  className="flex items-center gap-1.5 px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-bold transition-colors cursor-pointer shadow-sm"
-                >
-                  {copiedSql ? <Check size={14} /> : <Copy size={14} />}
-                  <span>{copiedSql ? 'Copied to Clipboard!' : 'Copy SQL Script'}</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowSqlModal(false)}
-                  className="px-4 py-2 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-xl text-xs font-bold transition-colors"
-                >
-                  Close
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };
