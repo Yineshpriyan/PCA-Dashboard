@@ -80,6 +80,15 @@ export interface AggregatedStudentRecord {
   raw_records: StudentAttendance[];
 }
 
+interface SyncErrorDetails {
+  type: 'date_mismatch' | 'not_found' | 'generic';
+  title: string;
+  message: string;
+  webinarId?: string;
+  requestedDate?: string;
+  suggestedDates?: string[];
+}
+
 export default function ZoomAttendance() {
   const [activeTab, setActiveTab] = useState<'api' | 'csv'>('api');
   const [webinarId, setWebinarId] = useState('');
@@ -100,6 +109,7 @@ export default function ZoomAttendance() {
   // Syncing state
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSyncSummary, setLastSyncSummary] = useState<any | null>(null);
+  const [syncErrorDetails, setSyncErrorDetails] = useState<SyncErrorDetails | null>(null);
 
   // Attendance Records State
   const [records, setRecords] = useState<StudentAttendance[]>([]);
@@ -387,6 +397,7 @@ export default function ZoomAttendance() {
 
     setIsSyncing(true);
     setLastSyncSummary(null);
+    setSyncErrorDetails(null);
 
     try {
       const payload: any = {
@@ -430,6 +441,30 @@ export default function ZoomAttendance() {
       const result = await response.json();
 
       if (!response.ok || !result.success) {
+        if (result.errorType === 'date_mismatch') {
+          setSyncErrorDetails({
+            type: 'date_mismatch',
+            title: `No Class Session on ${result.requestedDate || sessionDate}`,
+            message: result.message || `Zoom has no session records for this webinar on ${result.requestedDate || sessionDate}.`,
+            webinarId: cleanId,
+            requestedDate: result.requestedDate || sessionDate,
+            suggestedDates: result.suggestedDates || [],
+          });
+          toast.error(`No Zoom session found on ${result.requestedDate || sessionDate}. Choose a date below.`);
+          return;
+        }
+
+        if (result.errorType === 'not_found') {
+          setSyncErrorDetails({
+            type: 'not_found',
+            title: `Webinar ID Not Found (${cleanId})`,
+            message: result.message || `Zoom could not find any meeting or webinar with ID ${cleanId}. Please check the ID.`,
+            webinarId: cleanId,
+          });
+          toast.error(`Webinar ID ${cleanId} not found in Zoom.`);
+          return;
+        }
+
         throw new Error(result.error || 'Attendance synchronization failed.');
       }
 
@@ -459,7 +494,9 @@ export default function ZoomAttendance() {
       ) {
         setShowRlsModal(true);
       }
-      toast.error(errMsg);
+      
+      const cleanDisplayMsg = errMsg.length > 90 ? errMsg.slice(0, 90) + '...' : errMsg;
+      toast.error(cleanDisplayMsg);
     } finally {
       setIsSyncing(false);
     }
@@ -909,6 +946,100 @@ export default function ZoomAttendance() {
             </button>
           </div>
         </div>
+
+        {/* Cool, Interactive & Actionable Sync Error Alert */}
+        <AnimatePresence>
+          {syncErrorDetails && (
+            <motion.div
+              initial={{ opacity: 0, y: -6, scale: 0.99 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -6, scale: 0.99 }}
+              transition={{ duration: 0.15 }}
+              className={`p-4 sm:p-5 rounded-2xl border ${
+                syncErrorDetails.type === 'not_found'
+                  ? 'bg-rose-50/90 dark:bg-rose-950/40 border-rose-200 dark:border-rose-800/80'
+                  : 'bg-amber-50/90 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800/80'
+              } shadow-2xs space-y-3 transition-colors`}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-start gap-3">
+                  <div
+                    className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 mt-0.5 ${
+                      syncErrorDetails.type === 'not_found'
+                        ? 'bg-rose-100 dark:bg-rose-900/60 text-rose-600 dark:text-rose-300'
+                        : 'bg-amber-100 dark:bg-amber-900/60 text-amber-700 dark:text-amber-300'
+                    }`}
+                  >
+                    <AlertCircle size={22} />
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h4
+                        className={`text-sm font-bold ${
+                          syncErrorDetails.type === 'not_found'
+                            ? 'text-rose-900 dark:text-rose-200'
+                            : 'text-amber-900 dark:text-amber-200'
+                        }`}
+                      >
+                        {syncErrorDetails.title}
+                      </h4>
+                      {syncErrorDetails.requestedDate && (
+                        <span className="font-mono text-xs px-2 py-0.5 rounded-md bg-amber-100 dark:bg-amber-900/60 text-amber-800 dark:text-amber-200 font-bold">
+                          {syncErrorDetails.requestedDate}
+                        </span>
+                      )}
+                    </div>
+                    <p
+                      className={`text-xs ${
+                        syncErrorDetails.type === 'not_found'
+                          ? 'text-rose-700 dark:text-rose-300/90'
+                          : 'text-amber-800 dark:text-amber-300/90'
+                      } leading-relaxed`}
+                    >
+                      {syncErrorDetails.message}
+                    </p>
+
+                    {/* Clickable Suggested Dates from Zoom */}
+                    {syncErrorDetails.suggestedDates && syncErrorDetails.suggestedDates.length > 0 && (
+                      <div className="pt-2.5 mt-2 border-t border-amber-200/60 dark:border-amber-800/60">
+                        <span className="text-[11px] font-bold text-amber-900 dark:text-amber-200 block mb-2">
+                          Recent sessions found in Zoom for this webinar (click a date to autofill):
+                        </span>
+                        <div className="flex flex-wrap items-center gap-2">
+                          {syncErrorDetails.suggestedDates.map(dateStr => (
+                            <button
+                              key={dateStr}
+                              type="button"
+                              onClick={() => {
+                                setSessionDate(dateStr);
+                                setSyncErrorDetails(null);
+                                toast.success(`Selected ${dateStr}! Click "Sync Attendance" to proceed.`);
+                              }}
+                              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white dark:bg-gray-900 border border-amber-300 dark:border-amber-700/80 hover:border-amber-500 text-xs font-mono font-bold text-amber-950 dark:text-amber-100 hover:bg-amber-100/60 dark:hover:bg-amber-900/50 transition-all shadow-2xs hover:scale-105 active:scale-95 cursor-pointer"
+                            >
+                              <Calendar size={13} className="text-amber-600 dark:text-amber-400" />
+                              <span>{dateStr}</span>
+                              <span className="text-[10px] text-teal-600 dark:text-teal-400 font-sans font-bold ml-1">Use Date</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setSyncErrorDetails(null)}
+                  className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 p-1 rounded-lg cursor-pointer transition-colors"
+                  title="Dismiss"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Sync Form Grid */}
         {activeTab === 'csv' ? (

@@ -464,8 +464,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     markAbsentForUnjoined = true,
   } = (req.body || {}) as SyncRequest;
 
+  let cleanWebinarId = (rawWebinarId || '').replace(/\D/g, '');
+
   try {
-    let cleanWebinarId = (rawWebinarId || '').replace(/\D/g, '');
     let sessionTitle = '';
     let sessionDate = overrideDate ? safeToDateOnly(overrideDate) : new Date().toISOString().split('T')[0];
     const detectedDurationMinutes = overrideDuration || 90;
@@ -571,6 +572,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         uuid: string;
         start_time: string;
       }
+      let allZoomInstances: ZoomInstanceItem[] = [];
       let matchingInstances: ZoomInstanceItem[] = [];
 
       try {
@@ -591,16 +593,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         if (instRes.ok) {
           const instData = await instRes.json();
-          const allInstances: ZoomInstanceItem[] = instData.webinars || instData.meetings || [];
+          allZoomInstances = instData.webinars || instData.meetings || [];
           
           if (overrideDate) {
             const targetDateStr = safeToDateOnly(overrideDate);
-            matchingInstances = allInstances.filter(inst => {
+            matchingInstances = allZoomInstances.filter(inst => {
               const instDateStr = safeToDateOnly(inst.start_time);
               return instDateStr === targetDateStr;
             });
           } else {
-            matchingInstances = allInstances;
+            matchingInstances = allZoomInstances;
           }
         }
       } catch (instErr) {
@@ -754,9 +756,41 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             absentRegistrants: [],
           });
         }
+      } else if (allZoomInstances.length > 0 && overrideDate) {
+        const targetDateStr = safeToDateOnly(overrideDate);
+        const availableDates = Array.from(new Set(allZoomInstances.map(i => safeToDateOnly(i.start_time)))).sort();
+        const recentDates = availableDates.slice(-5).reverse();
+        return res.status(404).json({
+          success: false,
+          errorType: 'date_mismatch',
+          error: `No Zoom session found on ${targetDateStr}.`,
+          webinarId: cleanWebinarId,
+          requestedDate: targetDateStr,
+          suggestedDates: recentDates,
+          allDatesCount: availableDates.length,
+          message: `Zoom found ${availableDates.length} past sessions for Webinar ${cleanWebinarId}, but none on ${targetDateStr}.`
+        });
       } else {
         // Fallback: Fetch directly with cleanWebinarId if no specific instances list was found
         const participants = await fetchParticipantsForTarget(cleanWebinarId, isMeeting);
+        
+        if (overrideDate && apiStartTime) {
+          const targetDateStr = safeToDateOnly(overrideDate);
+          const actualDateStr = safeToDateOnly(apiStartTime);
+          if (targetDateStr !== actualDateStr) {
+            return res.status(404).json({
+              success: false,
+              errorType: 'date_mismatch',
+              error: `Session date mismatch.`,
+              webinarId: cleanWebinarId,
+              requestedDate: targetDateStr,
+              suggestedDates: [actualDateStr],
+              allDatesCount: 1,
+              message: `You entered ${targetDateStr}, but this Zoom session took place on ${actualDateStr}.`
+            });
+          }
+        }
+
         let instanceDuration = apiDuration;
         if (participants.length > 0) {
           const maxSeconds = Math.max(...participants.map(p => p.durationSeconds || 0));
@@ -1252,8 +1286,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
   } catch (err: any) {
     console.error("Zoom Attendance Sync Error:", err);
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes('Meeting does not exist') || msg.includes('Webinar does not exist') || msg.includes('3001')) {
+      return res.status(404).json({
+        success: false,
+        errorType: 'not_found',
+        error: `Webinar ID not found in Zoom.`,
+        message: `Zoom could not find any meeting or webinar matching ID "${cleanWebinarId || 'provided'}". Please check the 11-digit Webinar ID.`
+      });
+    }
     return res.status(500).json({
-      error: err instanceof Error ? err.message : "Internal server error syncing Zoom attendance"
+      error: msg || "Internal server error syncing Zoom attendance"
     });
   }
 }
