@@ -17,25 +17,19 @@ export const MAXOUT_DAYS: MaxoutDayOfWeek[] = [
 
 export type MaxoutSlot = 
   | 'Batch 1: 4.30 PM - 6.00 PM'
-  | 'Batch 2: 8.00 PM - 9.30 PM'
-  | 'Batch 3: 9.30 PM - 11.00 PM';
+  | 'Batch 2: 9.30 PM - 11.00 PM'
+  | string;
 
 export const MAXOUT_SLOTS: { id: MaxoutSlot; label: string; badge: string; time: string }[] = [
   {
     id: 'Batch 1: 4.30 PM - 6.00 PM',
-    label: 'Batch 1',
+    label: 'Batch 01',
     badge: '4.30 PM - 6.00 PM',
     time: '4.30 PM - 6.00 PM'
   },
   {
-    id: 'Batch 2: 8.00 PM - 9.30 PM',
-    label: 'Batch 2',
-    badge: '8.00 PM - 9.30 PM',
-    time: '8.00 PM - 9.30 PM'
-  },
-  {
-    id: 'Batch 3: 9.30 PM - 11.00 PM',
-    label: 'Batch 3',
+    id: 'Batch 2: 9.30 PM - 11.00 PM',
+    label: 'Batch 02',
     badge: '9.30 PM - 11.00 PM',
     time: '9.30 PM - 11.00 PM'
   }

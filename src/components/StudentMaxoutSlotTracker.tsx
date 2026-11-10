@@ -32,20 +32,29 @@ export const MAXOUT_DAYS: MaxoutDayOfWeek[] = [
 export const MAXOUT_SLOTS: { id: MaxoutTimeSlot; label: string; period: string }[] = [
   {
     id: 'Batch 1: 4.30 PM - 6.00 PM',
-    label: 'Batch 1',
+    label: 'Batch 01',
     period: '4.30 PM – 6.00 PM'
   },
   {
-    id: 'Batch 2: 8.00 PM - 9.30 PM',
-    label: 'Batch 2',
-    period: '8.00 PM – 9.30 PM'
-  },
-  {
-    id: 'Batch 3: 9.30 PM - 11.00 PM',
-    label: 'Batch 3',
+    id: 'Batch 2: 9.30 PM - 11.00 PM',
+    label: 'Batch 02',
     period: '9.30 PM – 11.00 PM'
   }
 ];
+
+export const normalizeSlot = (rawSlot?: string | null): MaxoutTimeSlot => {
+  if (!rawSlot) return 'Batch 1: 4.30 PM - 6.00 PM';
+  if (
+    rawSlot.includes('9.30') || 
+    rawSlot.includes('11.00') || 
+    rawSlot.includes('Batch 3') || 
+    rawSlot.includes('Batch 02') ||
+    (rawSlot.includes('Batch 2') && !rawSlot.includes('8.00'))
+  ) {
+    return 'Batch 2: 9.30 PM - 11.00 PM';
+  }
+  return 'Batch 1: 4.30 PM - 6.00 PM';
+};
 
 export const QUICK_REASONS = [
   'Chemistry Class',
@@ -68,12 +77,12 @@ interface DayScheduleState {
 type WeeklySchedule = Record<MaxoutDayOfWeek, DayScheduleState>;
 
 const DEFAULT_SCHEDULE: WeeklySchedule = {
-  Monday: { status: 'attending', slot: 'Batch 2: 8.00 PM - 9.30 PM', reason: '' },
-  Tuesday: { status: 'attending', slot: 'Batch 2: 8.00 PM - 9.30 PM', reason: '' },
-  Wednesday: { status: 'attending', slot: 'Batch 2: 8.00 PM - 9.30 PM', reason: '' },
-  Thursday: { status: 'attending', slot: 'Batch 2: 8.00 PM - 9.30 PM', reason: '' },
-  Friday: { status: 'attending', slot: 'Batch 2: 8.00 PM - 9.30 PM', reason: '' },
-  Saturday: { status: 'attending', slot: 'Batch 2: 8.00 PM - 9.30 PM', reason: '' }
+  Monday: { status: 'attending', slot: 'Batch 1: 4.30 PM - 6.00 PM', reason: '' },
+  Tuesday: { status: 'attending', slot: 'Batch 1: 4.30 PM - 6.00 PM', reason: '' },
+  Wednesday: { status: 'attending', slot: 'Batch 1: 4.30 PM - 6.00 PM', reason: '' },
+  Thursday: { status: 'attending', slot: 'Batch 1: 4.30 PM - 6.00 PM', reason: '' },
+  Friday: { status: 'attending', slot: 'Batch 1: 4.30 PM - 6.00 PM', reason: '' },
+  Saturday: { status: 'attending', slot: 'Batch 1: 4.30 PM - 6.00 PM', reason: '' }
 };
 
 interface StudentMaxoutSlotTrackerProps {
@@ -125,7 +134,7 @@ export default function StudentMaxoutSlotTracker({ student }: StudentMaxoutSlotT
             if (row.day_of_week && MAXOUT_DAYS.includes(row.day_of_week)) {
               loaded[row.day_of_week] = {
                 status: row.status === 'cannot_attend' ? 'cannot_attend' : 'attending',
-                slot: (row.slot as MaxoutTimeSlot) || 'Batch 2: 8.00 PM - 9.30 PM',
+                slot: normalizeSlot(row.slot),
                 reason: row.reason || ''
               };
               if (row.updated_at && (!latestUpdate || row.updated_at > latestUpdate)) {
@@ -401,8 +410,8 @@ export default function StudentMaxoutSlotTracker({ student }: StudentMaxoutSlotT
 
             <div className="p-3 bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700 rounded-xl">
               <div className="text-[10px] uppercase font-bold text-gray-500 dark:text-gray-400">Daily Slots</div>
-              <div className="text-base sm:text-lg font-black text-gray-900 dark:text-white mt-0.5">3 Batches</div>
-              <div className="text-[10px] text-gray-400 truncate">4.30PM / 8.00PM / 9.30PM</div>
+              <div className="text-base sm:text-lg font-black text-gray-900 dark:text-white mt-0.5">2 Batches</div>
+              <div className="text-[10px] text-gray-400 truncate">4.30 PM / 9.30 PM</div>
             </div>
           </div>
 
@@ -529,12 +538,12 @@ export default function StudentMaxoutSlotTracker({ student }: StudentMaxoutSlotT
                 {/* Day Body Content */}
                 <div className="pt-3.5 sm:pt-4">
                   {isAttending ? (
-                    /* Slot Selection: 3 Daily Batches */
+                    /* Slot Selection: 2 Daily Batches */
                     <div className="space-y-2">
                       <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
                         Choose your time slot for {day}:
                       </label>
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3">
                         {MAXOUT_SLOTS.map(slotObj => {
                           const isSelected = currentDayState.slot === slotObj.id;
 

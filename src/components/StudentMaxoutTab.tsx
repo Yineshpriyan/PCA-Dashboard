@@ -47,6 +47,20 @@ const DEFAULT_SCHEDULE: Record<MaxoutDayOfWeek, StudentMaxoutDaySchedule> = {
   Saturday: { day_of_week: 'Saturday', status: 'attending', slot: 'Batch 1: 4.30 PM - 6.00 PM', reason: '', notes: '' },
 };
 
+const normalizeMaxoutSlot = (slot?: string | null): MaxoutSlot => {
+  if (!slot) return 'Batch 1: 4.30 PM - 6.00 PM';
+  if (
+    slot.includes('9.30') || 
+    slot.includes('11.00') || 
+    slot.includes('Batch 3') || 
+    slot.includes('Batch 02') || 
+    (slot.includes('Batch 2') && !slot.includes('8.00'))
+  ) {
+    return 'Batch 2: 9.30 PM - 11.00 PM';
+  }
+  return 'Batch 1: 4.30 PM - 6.00 PM';
+};
+
 export const StudentMaxoutTab: React.FC<StudentMaxoutTabProps> = ({
   pcaid,
   studentName = '',
@@ -60,7 +74,17 @@ export const StudentMaxoutTab: React.FC<StudentMaxoutTabProps> = ({
       try {
         const stored = localStorage.getItem(`maxout_schedule_${pcaid}`);
         if (stored) {
-          return JSON.parse(stored);
+          const parsed = JSON.parse(stored);
+          const sanitized: Record<MaxoutDayOfWeek, StudentMaxoutDaySchedule> = { ...DEFAULT_SCHEDULE };
+          MAXOUT_DAYS.forEach(day => {
+            if (parsed[day]) {
+              sanitized[day] = {
+                ...parsed[day],
+                slot: parsed[day].status === 'attending' ? normalizeMaxoutSlot(parsed[day].slot) : ''
+              };
+            }
+          });
+          return sanitized;
         }
       } catch (e) {
         console.warn('Error reading local maxout schedule draft:', e);
@@ -100,7 +124,21 @@ export const StudentMaxoutTab: React.FC<StudentMaxoutTabProps> = ({
         // Fall back to local storage
         const local = localStorage.getItem(`maxout_schedule_${pcaid}`);
         if (local) {
-          setSchedule(JSON.parse(local));
+          try {
+            const parsed = JSON.parse(local);
+            const sanitized: Record<MaxoutDayOfWeek, StudentMaxoutDaySchedule> = { ...DEFAULT_SCHEDULE };
+            MAXOUT_DAYS.forEach(day => {
+              if (parsed[day]) {
+                sanitized[day] = {
+                  ...parsed[day],
+                  slot: parsed[day].status === 'attending' ? normalizeMaxoutSlot(parsed[day].slot) : ''
+                };
+              }
+            });
+            setSchedule(sanitized);
+          } catch (e) {
+            // ignore
+          }
         }
         return;
       }
@@ -112,7 +150,7 @@ export const StudentMaxoutTab: React.FC<StudentMaxoutTabProps> = ({
             updated[row.day_of_week] = {
               day_of_week: row.day_of_week,
               status: row.status || 'attending',
-              slot: (row.slot as MaxoutSlot) || '',
+              slot: row.status === 'attending' ? normalizeMaxoutSlot(row.slot) : '',
               reason: row.reason || '',
               notes: row.notes || ''
             };
@@ -125,7 +163,21 @@ export const StudentMaxoutTab: React.FC<StudentMaxoutTabProps> = ({
         // Try local storage draft
         const local = localStorage.getItem(`maxout_schedule_${pcaid}`);
         if (local) {
-          setSchedule(JSON.parse(local));
+          try {
+            const parsed = JSON.parse(local);
+            const sanitized: Record<MaxoutDayOfWeek, StudentMaxoutDaySchedule> = { ...DEFAULT_SCHEDULE };
+            MAXOUT_DAYS.forEach(day => {
+              if (parsed[day]) {
+                sanitized[day] = {
+                  ...parsed[day],
+                  slot: parsed[day].status === 'attending' ? normalizeMaxoutSlot(parsed[day].slot) : ''
+                };
+              }
+            });
+            setSchedule(sanitized);
+          } catch (e) {
+            // ignore
+          }
         }
       }
     } catch (err: any) {
@@ -310,9 +362,8 @@ export const StudentMaxoutTab: React.FC<StudentMaxoutTabProps> = ({
   // Stats calculation
   const attendingCount = MAXOUT_DAYS.filter(d => schedule[d].status === 'attending').length;
   const cannotAttendCount = MAXOUT_DAYS.filter(d => schedule[d].status === 'cannot_attend').length;
-  const batch1Count = MAXOUT_DAYS.filter(d => schedule[d].status === 'attending' && schedule[d].slot.includes('Batch 1')).length;
-  const batch2Count = MAXOUT_DAYS.filter(d => schedule[d].status === 'attending' && schedule[d].slot.includes('Batch 2')).length;
-  const batch3Count = MAXOUT_DAYS.filter(d => schedule[d].status === 'attending' && schedule[d].slot.includes('Batch 3')).length;
+  const batch1Count = MAXOUT_DAYS.filter(d => schedule[d].status === 'attending' && (schedule[d].slot.includes('Batch 1') || schedule[d].slot.includes('4.30'))).length;
+  const batch2Count = MAXOUT_DAYS.filter(d => schedule[d].status === 'attending' && (schedule[d].slot.includes('Batch 2') || schedule[d].slot.includes('9.30') || schedule[d].slot.includes('Batch 3') || schedule[d].slot.includes('Batch 02'))).length;
 
   if (!pcaid) {
     return (
@@ -378,7 +429,7 @@ export const StudentMaxoutTab: React.FC<StudentMaxoutTabProps> = ({
                 Student: <strong className="text-gray-800 dark:text-gray-200">{studentName || 'Unnamed'}</strong> 
                 {stream && ` | Stream: ${stream}`}
                 {properBatch && ` | Batch: ${properBatch}`}
-                {' — Sessions run Monday to Saturday with 3 daily batches (Sunday off).'}
+                {' — Sessions run Monday to Saturday with 2 daily batches (Sunday off).'}
               </p>
             </div>
           </div>
@@ -436,18 +487,14 @@ export const StudentMaxoutTab: React.FC<StudentMaxoutTabProps> = ({
               <span>Slot Distribution</span>
               <Clock size={13} />
             </div>
-            <div className="mt-1 text-xs font-semibold text-gray-800 dark:text-gray-200 space-y-0.5">
+            <div className="mt-1 text-xs font-semibold text-gray-800 dark:text-gray-200 space-y-1">
               <div className="flex justify-between text-[11px]">
                 <span className="text-teal-600 font-bold">B1 (4.30 PM):</span>
                 <span className="font-mono">{batch1Count} d</span>
               </div>
               <div className="flex justify-between text-[11px]">
-                <span className="text-blue-600 font-bold">B2 (8.00 PM):</span>
+                <span className="text-purple-600 font-bold">B2 (9.30 PM):</span>
                 <span className="font-mono">{batch2Count} d</span>
-              </div>
-              <div className="flex justify-between text-[11px]">
-                <span className="text-purple-600 font-bold">B3 (9.30 PM):</span>
-                <span className="font-mono">{batch3Count} d</span>
               </div>
             </div>
           </div>
@@ -484,18 +531,10 @@ export const StudentMaxoutTab: React.FC<StudentMaxoutTabProps> = ({
 
             <button
               type="button"
-              onClick={() => applyBatchToAll('Batch 2: 8.00 PM - 9.30 PM')}
-              className="px-3 py-1.5 text-xs font-bold rounded-lg bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/60 border border-blue-200 dark:border-blue-800 transition-all cursor-pointer"
-            >
-              Batch 2 (8.00 PM - 9.30 PM)
-            </button>
-
-            <button
-              type="button"
-              onClick={() => applyBatchToAll('Batch 3: 9.30 PM - 11.00 PM')}
+              onClick={() => applyBatchToAll('Batch 2: 9.30 PM - 11.00 PM')}
               className="px-3 py-1.5 text-xs font-bold rounded-lg bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-900/60 border border-purple-200 dark:border-purple-800 transition-all cursor-pointer"
             >
-              Batch 3 (9.30 PM - 11.00 PM)
+              Batch 2 (9.30 PM - 11.00 PM)
             </button>
 
             <button
@@ -593,7 +632,7 @@ export const StudentMaxoutTab: React.FC<StudentMaxoutTabProps> = ({
                       <label className="text-xs font-bold text-gray-700 dark:text-gray-300 block mb-2">
                         Select Daily Time Slot:
                       </label>
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
                         {MAXOUT_SLOTS.map((slotOpt) => {
                           const isSelected = current.slot === slotOpt.id;
                           return (

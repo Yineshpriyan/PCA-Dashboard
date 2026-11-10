@@ -48,7 +48,7 @@ export default function MaxoutSlotManagement() {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'configured' | 'full-attending' | 'has-absence' | 'not-configured'>('all');
   const [selectedDayFilter, setSelectedDayFilter] = useState<'all' | MaxoutDayOfWeek>('all');
-  const [selectedBatchFilter, setSelectedBatchFilter] = useState<'all' | 'Batch 1' | 'Batch 2' | 'Batch 3' | 'cannot_attend'>('all');
+  const [selectedBatchFilter, setSelectedBatchFilter] = useState<'all' | 'Batch 1' | 'Batch 2' | 'cannot_attend'>('all');
   const [batchYearFilter, setBatchYearFilter] = useState<string>('all');
 
   // View Mode: Table vs Mobile Cards
@@ -187,9 +187,18 @@ export default function MaxoutSlotManagement() {
             };
             cannotAttendDaysCount++;
           } else {
+            const rawSlot = record.slot;
+            let resolvedSlot = 'Batch 1: 4.30 PM - 6.00 PM';
+            if (rawSlot) {
+              if (rawSlot.includes('9.30') || rawSlot.includes('11.00') || rawSlot.includes('Batch 3') || rawSlot.includes('Batch 02') || (rawSlot.includes('Batch 2') && !rawSlot.includes('8.00'))) {
+                resolvedSlot = 'Batch 2: 9.30 PM - 11.00 PM';
+              } else {
+                resolvedSlot = 'Batch 1: 4.30 PM - 6.00 PM';
+              }
+            }
             schedule[day] = {
               status: 'attending',
-              slot: record.slot || 'Batch 2: 8.00 PM - 9.30 PM',
+              slot: resolvedSlot,
               reason: null
             };
             attendingDaysCount++;
@@ -274,13 +283,13 @@ export default function MaxoutSlotManagement() {
     const hasAbsenceCount = studentSchedules.filter(s => s.hasConfigured && s.cannotAttendDaysCount > 0).length;
 
     // Per day breakdown
-    const dayStats: Record<MaxoutDayOfWeek, { batch1: number; batch2: number; batch3: number; unable: number }> = {
-      Monday: { batch1: 0, batch2: 0, batch3: 0, unable: 0 },
-      Tuesday: { batch1: 0, batch2: 0, batch3: 0, unable: 0 },
-      Wednesday: { batch1: 0, batch2: 0, batch3: 0, unable: 0 },
-      Thursday: { batch1: 0, batch2: 0, batch3: 0, unable: 0 },
-      Friday: { batch1: 0, batch2: 0, batch3: 0, unable: 0 },
-      Saturday: { batch1: 0, batch2: 0, batch3: 0, unable: 0 }
+    const dayStats: Record<MaxoutDayOfWeek, { batch1: number; batch2: number; unable: number }> = {
+      Monday: { batch1: 0, batch2: 0, unable: 0 },
+      Tuesday: { batch1: 0, batch2: 0, unable: 0 },
+      Wednesday: { batch1: 0, batch2: 0, unable: 0 },
+      Thursday: { batch1: 0, batch2: 0, unable: 0 },
+      Friday: { batch1: 0, batch2: 0, unable: 0 },
+      Saturday: { batch1: 0, batch2: 0, unable: 0 }
     };
 
     studentSchedules.forEach(item => {
@@ -290,8 +299,7 @@ export default function MaxoutSlotManagement() {
         if (st.status === 'cannot_attend') {
           dayStats[d].unable++;
         } else if (st.status === 'attending') {
-          if ((st.slot || '').includes('Batch 1')) dayStats[d].batch1++;
-          else if ((st.slot || '').includes('Batch 3')) dayStats[d].batch3++;
+          if ((st.slot || '').includes('Batch 1') || (st.slot || '').includes('4.30')) dayStats[d].batch1++;
           else dayStats[d].batch2++;
         }
       });
@@ -408,7 +416,7 @@ export default function MaxoutSlotManagement() {
         student_name: studentFullName,
         day_of_week: day,
         status: st.status === 'cannot_attend' ? 'cannot_attend' : 'attending',
-        slot: st.status === 'attending' ? (st.slot || 'Batch 2: 8.00 PM - 9.30 PM') : null,
+        slot: st.status === 'attending' ? (st.slot || 'Batch 1: 4.30 PM - 6.00 PM') : null,
         reason: st.status === 'cannot_attend' ? (st.reason || 'Unable to join') : null,
         updated_at: nowIso
       };
@@ -437,8 +445,8 @@ export default function MaxoutSlotManagement() {
   // Helper to render cell display for a day
   const renderDayCell = (dayState: { status: string; slot: string | null; reason: string | null }) => {
     if (dayState.status === 'attending') {
-      const slotText = dayState.slot || 'Batch 2: 8.00 PM - 9.30 PM';
-      const isBatch2 = slotText.includes('Batch 2');
+      const slotText = dayState.slot || 'Batch 1: 4.30 PM - 6.00 PM';
+      const isBatch2 = slotText.includes('Batch 2') || slotText.includes('9.30');
 
       const badgeStyle = isBatch2
         ? 'bg-teal-100/70 dark:bg-teal-950/60 text-teal-800 dark:text-teal-200 border-teal-300/80 dark:border-teal-700/60 font-black'
@@ -643,9 +651,8 @@ export default function MaxoutSlotManagement() {
               className="w-full h-9 px-2.5 text-xs bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl font-semibold text-gray-800 dark:text-gray-200 outline-none focus:ring-2 focus:ring-teal-500"
             >
               <option value="all">All Batches</option>
-              <option value="Batch 1">Batch 1 (4.30 PM - 6.00 PM)</option>
-              <option value="Batch 2">Batch 2 (8.00 PM - 9.30 PM)</option>
-              <option value="Batch 3">Batch 3 (9.30 PM - 11.00 PM)</option>
+              <option value="Batch 1">Batch 01 (4.30 PM - 6.00 PM)</option>
+              <option value="Batch 2">Batch 02 (9.30 PM - 11.00 PM)</option>
               <option value="cannot_attend">Unable to Join</option>
             </select>
           </div>
@@ -949,7 +956,7 @@ export default function MaxoutSlotManagement() {
                                   ...prev.schedule,
                                   [day]: {
                                     status: 'attending',
-                                    slot: prev.schedule[day].slot || 'Batch 2: 8.00 PM - 9.30 PM',
+                                    slot: prev.schedule[day].slot || 'Batch 1: 4.30 PM - 6.00 PM',
                                     reason: null
                                   }
                                 }
@@ -995,7 +1002,7 @@ export default function MaxoutSlotManagement() {
 
                     {isAttending ? (
                       <select
-                        value={dayState.slot || 'Batch 2: 8.00 PM - 9.30 PM'}
+                        value={dayState.slot || 'Batch 1: 4.30 PM - 6.00 PM'}
                         onChange={(e) => {
                           const val = e.target.value;
                           setEditingStudentSchedule(prev => {

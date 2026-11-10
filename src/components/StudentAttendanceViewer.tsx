@@ -617,7 +617,7 @@ export default function StudentAttendanceViewer({ pcaid }: StudentAttendanceView
                   <div>
                     <span className="text-[10px] text-gray-400 block">Batch Slot</span>
                     <span className="font-medium text-gray-800 dark:text-gray-200">
-                      {selectedRecord.batch_slot || 'General Batch'}
+                      {selectedRecord.batch_slot || 'Single Session'}
                     </span>
                   </div>
                   <div>

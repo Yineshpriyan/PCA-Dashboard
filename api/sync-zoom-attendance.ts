@@ -994,10 +994,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     for (let batchIdx = 0; batchIdx < parsedBatches.length; batchIdx++) {
       const batch = parsedBatches[batchIdx];
       const isMaxoutClass = classType === 'MaxouT' || classType === 'F to A MaxouT Project' || (classType || '').toLowerCase().includes('maxout');
-      // MaxouT has 3 batches; other class types have no batches unless multiple instances exist
+      // MaxouT has 3 distinct daily batches (Batch 1, 2, 3); all other class types happen once a day and have batch_slot = null
       const slot = isMaxoutClass
         ? (batch.detectedSlot || (parsedBatches.length > 1 ? `Batch ${batchIdx + 1}` : overrideBatchSlot || 'Batch 1'))
-        : (batch.detectedSlot || (parsedBatches.length > 1 ? `Session ${batchIdx + 1}` : overrideBatchSlot || null));
+        : null;
       
       // Clean pure Webinar ID without any slot suffix
       const sessionWebinarId = cleanWebinarId;

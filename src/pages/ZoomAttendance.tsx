@@ -1801,10 +1801,12 @@ export default function ZoomAttendance() {
                               </React.Fragment>
                             ))
                           ) : (
-                            <>
-                              <span>•</span>
-                              <span className="text-[10px] text-gray-400 dark:text-gray-500 font-mono italic">No Slot (Absent)</span>
-                            </>
+                            s.class_types.some(ct => (ct || '').toLowerCase().includes('maxout')) ? (
+                              <>
+                                <span>•</span>
+                                <span className="text-[10px] text-gray-400 dark:text-gray-500 font-mono italic">No Slot (Absent)</span>
+                              </>
+                            ) : null
                           )}
                         </div>
                       </td>

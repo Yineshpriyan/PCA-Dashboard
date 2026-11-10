@@ -273,8 +273,8 @@ export type MaxoutDayOfWeek = 'Monday' | 'Tuesday' | 'Wednesday' | 'Thursday' | 
 
 export type MaxoutTimeSlot = 
   | 'Batch 1: 4.30 PM - 6.00 PM'
-  | 'Batch 2: 8.00 PM - 9.30 PM'
-  | 'Batch 3: 9.30 PM - 11.00 PM';
+  | 'Batch 2: 9.30 PM - 11.00 PM'
+  | string;
 
 export type MaxoutSlotStatus = 'attending' | 'cannot_attend';
 
