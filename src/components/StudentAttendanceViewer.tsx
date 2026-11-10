@@ -153,6 +153,15 @@ export default function StudentAttendanceViewer({ pcaid }: StudentAttendanceView
     });
   }, [records, filterClassType, filterStatus]);
 
+  // Unique class types present in student's records for filter dropdown
+  const availableClassTypes = useMemo(() => {
+    const types = new Set<string>();
+    records.forEach(r => {
+      if (r.class_type) types.add(r.class_type);
+    });
+    return Array.from(types).sort();
+  }, [records]);
+
   const getStatusColorConfig = (status: AttendanceStatus) => {
     switch (status) {
       case 'present':
@@ -506,9 +515,9 @@ export default function StudentAttendanceViewer({ pcaid }: StudentAttendanceView
               className="px-2.5 py-1.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-xs text-gray-800 dark:text-gray-200"
             >
               <option value="all">All Class Types</option>
-              <option value="MaxouT Project">MaxouT Project</option>
-              <option value="Theory Class">Theory Class</option>
-              <option value="Paper Class">Paper Class</option>
+              {availableClassTypes.map(ct => (
+                <option key={ct} value={ct}>{ct}</option>
+              ))}
             </select>
 
             <select
@@ -535,42 +544,42 @@ export default function StudentAttendanceViewer({ pcaid }: StudentAttendanceView
               <div
                 key={record.id}
                 onClick={() => setSelectedRecord(record)}
-                className="py-3 px-2 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 hover:bg-gray-50 dark:hover:bg-gray-800/50 rounded-xl transition-colors cursor-pointer"
+                className="py-3 px-3 flex items-center justify-between gap-3 hover:bg-gray-50 dark:hover:bg-gray-800/50 rounded-xl transition-colors cursor-pointer"
               >
-                <div className="space-y-0.5">
+                <div className="space-y-1 min-w-0">
+                  {/* Class Type + Optional Batch Slot + Status Badge (NO webinar ID) */}
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-bold text-xs text-gray-900 dark:text-white">
-                      {record.session_title}
+                    <span className="font-bold text-xs sm:text-sm text-gray-900 dark:text-white">
+                      {record.class_type || 'Class'}
                     </span>
+                    {record.batch_slot && (
+                      <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">
+                        • {record.batch_slot}
+                      </span>
+                    )}
                     {getStatusBadge(record.status, record.excuse_reason)}
                   </div>
-                  <div className="flex items-center gap-2 text-[11px] text-gray-400 flex-wrap">
-                    <span className="font-mono text-gray-500">{record.session_date}</span>
-                    <span>•</span>
-                    <span className="text-teal-700 dark:text-teal-400 font-medium">{record.class_type}</span>
-                    {record.batch_slot && (
-                      <>
-                        <span>•</span>
-                        <span>{record.batch_slot}</span>
-                      </>
-                    )}
+
+                  {/* Date */}
+                  <div className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
+                    <CalendarIcon size={12} className="text-gray-400 shrink-0" />
+                    <span className="font-mono">{record.session_date}</span>
                     {record.reconnect_count > 0 && (
                       <>
                         <span>•</span>
-                        <span className="text-gray-500">{record.reconnect_count} re-connections</span>
+                        <span className="text-[11px] text-gray-400">{record.reconnect_count} re-joins</span>
                       </>
                     )}
                   </div>
                 </div>
 
-                <div className="flex items-center gap-4">
-                  <div className="text-right">
-                    <div className="text-xs font-mono font-bold text-gray-900 dark:text-white">
-                      {record.attended_minutes} / {record.session_duration_minutes} min
-                    </div>
-                    <div className="text-[10px] text-gray-400 font-mono">
-                      {record.attendance_percentage}% duration
-                    </div>
+                {/* Attendance Percentage */}
+                <div className="text-right shrink-0">
+                  <div className="text-sm sm:text-base font-mono font-black text-gray-900 dark:text-white">
+                    {record.attendance_percentage}%
+                  </div>
+                  <div className="text-[10px] text-gray-400 font-mono">
+                    {record.attended_minutes} / {record.session_duration_minutes} min
                   </div>
                 </div>
               </div>
@@ -604,9 +613,11 @@ export default function StudentAttendanceViewer({ pcaid }: StudentAttendanceView
 
               <div className="space-y-3 text-xs">
                 <div>
-                  <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Session Topic</div>
+                  <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Class Topic / Type</div>
                   <div className="text-sm font-bold text-gray-900 dark:text-white mt-0.5">
-                    {selectedRecord.session_title}
+                    {selectedRecord.session_title?.startsWith('Zoom Webinar')
+                      ? selectedRecord.class_type
+                      : selectedRecord.session_title}
                   </div>
                 </div>
 
