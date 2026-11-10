@@ -191,6 +191,33 @@ export default function StudentAttendanceViewer({ pcaid }: StudentAttendanceView
     }
   };
 
+  // Helper to format class name concisely for date boxes
+  const getShortClassName = (classType?: string | null, sessionTitle?: string | null): string => {
+    const raw = (classType || '').trim();
+    if (raw) {
+      if (/maxout|max-out/i.test(raw)) return 'MaxouT';
+      if (/theory with paper|theory & paper/i.test(raw)) return 'Theory with Paper';
+      if (/model paper/i.test(raw)) return 'Model Paper';
+      if (/^grc$/i.test(raw)) return 'GRC';
+      if (/^theory/i.test(raw)) return 'Theory';
+      if (/^paper/i.test(raw)) return 'Paper';
+      return raw.replace(/\s+Class$/i, '').replace(/\s+Project$/i, '').trim();
+    }
+
+    const title = (sessionTitle || '').trim();
+    if (title) {
+      if (/maxout|max-out/i.test(title)) return 'MaxouT';
+      if (/theory with paper|theory & paper/i.test(title)) return 'Theory with Paper';
+      if (/model paper/i.test(title)) return 'Model Paper';
+      if (/grc/i.test(title)) return 'GRC';
+      if (/theory/i.test(title)) return 'Theory';
+      if (/paper/i.test(title)) return 'Paper';
+      return title.split('|')[0].trim().slice(0, 18);
+    }
+
+    return 'Class';
+  };
+
   const getStatusBadge = (status: AttendanceStatus, excuseReason?: string | null) => {
     switch (status) {
       case 'present':
@@ -405,7 +432,7 @@ export default function StudentAttendanceViewer({ pcaid }: StudentAttendanceView
             return (
               <div
                 key={cell.dateStr}
-                className={`min-h-[82px] sm:min-h-[96px] p-1.5 rounded-xl border text-left flex flex-col justify-between transition-all ${
+                className={`min-h-[86px] sm:min-h-[102px] p-1.5 rounded-xl border text-left flex flex-col justify-start transition-all ${
                   hasRecords 
                     ? 'bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 shadow-2xs hover:border-teal-500/50' 
                     : 'bg-white/60 dark:bg-gray-900/40 border-gray-100 dark:border-gray-800/60 opacity-80'
@@ -427,47 +454,29 @@ export default function StudentAttendanceViewer({ pcaid }: StudentAttendanceView
                   )}
                 </div>
 
-                {/* Class details inside date box */}
+                {/* All joined and absent classes inside date box: color dot + short class name only */}
                 {hasRecords && (
-                  <div className="space-y-1 mt-auto">
-                    {cell.records.slice(0, 2).map((rec, rIdx) => {
+                  <div className="space-y-1 mt-0.5 overflow-y-auto max-h-[130px] sm:max-h-[155px] scrollbar-thin pr-0.5">
+                    {cell.records.map((rec, rIdx) => {
                       const cfg = getStatusColorConfig(rec.status);
+                      const shortName = getShortClassName(rec.class_type, rec.session_title);
                       return (
                         <div
                           key={rec.id || `${cell.dateStr}-${rIdx}`}
                           onClick={() => setSelectedRecord(rec)}
-                          className={`p-1 sm:p-1.5 rounded-lg border ${cfg.pillBg} ${cfg.borderColor} cursor-pointer hover:scale-[1.02] active:scale-[0.98] transition-all`}
-                          title={`Click for session details: ${rec.class_type || rec.session_title} - ${cfg.label}`}
+                          className={`px-1.5 py-1 rounded-md border ${cfg.pillBg} ${cfg.borderColor} cursor-pointer hover:opacity-90 active:scale-[0.98] transition-all flex items-center gap-1.5 min-w-0`}
+                          title={`Click for session details: ${rec.class_type || rec.session_title} - ${cfg.label} (${rec.attended_minutes}m, ${Math.round(rec.attendance_percentage)}%)`}
                         >
-                          {/* Class Name + Status Color Dot */}
-                          <div className="flex items-center gap-1.5 min-w-0">
-                            <span className={`w-2 h-2 rounded-full shrink-0 ${cfg.dotBg} shadow-xs`} />
-                            <span className="text-[10px] sm:text-[10.5px] font-bold text-gray-900 dark:text-gray-100 truncate leading-tight">
-                              {rec.class_type || rec.session_title || 'Class'}
-                            </span>
-                          </div>
+                          {/* Attendance Status Color Dot */}
+                          <span className={`w-2 h-2 rounded-full shrink-0 ${cfg.dotBg} shadow-2xs`} />
 
-                          {/* Attendance Status Label + Duration */}
-                          <div className="flex items-center justify-between text-[8.5px] sm:text-[9px] mt-0.5 pl-3.5 gap-1">
-                            <span className={`font-bold uppercase tracking-wider text-[8px] sm:text-[8.5px] truncate ${cfg.textColor}`}>
-                              {cfg.label}
-                            </span>
-                            <span className="font-mono text-gray-500 dark:text-gray-400 shrink-0 text-[8px] sm:text-[8.5px]">
-                              {rec.attended_minutes}m ({Math.round(rec.attendance_percentage)}%)
-                            </span>
-                          </div>
+                          {/* Class Name in Short Only */}
+                          <span className="text-[10px] sm:text-[10.5px] font-bold text-gray-900 dark:text-gray-100 truncate leading-none">
+                            {shortName}
+                          </span>
                         </div>
                       );
                     })}
-
-                    {cell.records.length > 2 && (
-                      <button
-                        onClick={() => setSelectedRecord(cell.records[0])}
-                        className="w-full text-center text-[8.5px] font-bold text-teal-600 dark:text-teal-400 hover:underline cursor-pointer"
-                      >
-                        +{cell.records.length - 2} more
-                      </button>
-                    )}
                   </div>
                 )}
               </div>
