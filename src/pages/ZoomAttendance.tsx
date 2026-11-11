@@ -916,7 +916,7 @@ export default function ZoomAttendance() {
               <span>Multi-Batch Zoom Attendance Synchronizer</span>
             </h2>
             <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-              Upload multiple Zoom Excel/CSV reports for the same webinar date (e.g. 3 daily batches). All attendee records are preserved separately and combined in one unified view.
+              Sync directly from Zoom or upload CSV attendance reports for any session date. All attendee records are combined in one unified view.
             </p>
           </div>
 
@@ -931,7 +931,7 @@ export default function ZoomAttendance() {
               }`}
             >
               <Video size={13} />
-              <span>Live Zoom API (Default)</span>
+              <span>Sync Zoom</span>
             </button>
             <button
               onClick={() => setActiveTab('csv')}
@@ -942,7 +942,7 @@ export default function ZoomAttendance() {
               }`}
             >
               <FileSpreadsheet size={13} />
-              <span>Multi-File CSV Upload</span>
+              <span>Upload CSV</span>
             </button>
           </div>
         </div>
